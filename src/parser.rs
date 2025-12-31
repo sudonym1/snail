@@ -1,5 +1,5 @@
-use pest::iterators::Pair;
 use pest::Parser;
+use pest::iterators::Pair;
 use pest_derive::Parser;
 
 use crate::ast::*;
@@ -93,9 +93,9 @@ fn parse_if(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
             Rule::expr => {
                 let elif_cond = parse_expr_pair(next, source)?;
                 let elif_block = parse_block(
-                    inner
-                        .next()
-                        .ok_or_else(|| error_with_span("missing elif block", span.clone(), source))?,
+                    inner.next().ok_or_else(|| {
+                        error_with_span("missing elif block", span.clone(), source)
+                    })?,
                     source,
                 )?;
                 elifs.push((elif_cond, elif_block));
@@ -265,7 +265,9 @@ fn parse_import_item(pair: Pair<'_, Rule>, source: &str) -> Result<ImportItem, P
 }
 
 fn parse_dotted_name(pair: Pair<'_, Rule>) -> Vec<String> {
-    pair.into_inner().map(|part| part.as_str().to_string()).collect()
+    pair.into_inner()
+        .map(|part| part.as_str().to_string())
+        .collect()
 }
 
 fn parse_assign(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
@@ -327,15 +329,24 @@ fn parse_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseErro
 }
 
 fn parse_parameters(pair: Pair<'_, Rule>) -> Vec<String> {
-    pair.into_inner().map(|part| part.as_str().to_string()).collect()
+    pair.into_inner()
+        .map(|part| part.as_str().to_string())
+        .collect()
 }
 
 fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match pair.as_rule() {
-        Rule::expr | Rule::or_expr | Rule::and_expr | Rule::not_expr | Rule::comparison | Rule::sum
-        | Rule::product | Rule::unary | Rule::power | Rule::primary | Rule::atom => {
-            parse_expr_rule(pair, source)
-        }
+        Rule::expr
+        | Rule::or_expr
+        | Rule::and_expr
+        | Rule::not_expr
+        | Rule::comparison
+        | Rule::sum
+        | Rule::product
+        | Rule::unary
+        | Rule::power
+        | Rule::primary
+        | Rule::atom => parse_expr_rule(pair, source),
         Rule::literal => parse_literal(pair, source),
         Rule::identifier => Ok(Expr::Name {
             name: pair.as_str().to_string(),
@@ -370,11 +381,7 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
     }
 }
 
-fn fold_left_binary(
-    pair: Pair<'_, Rule>,
-    source: &str,
-    op: BinaryOp,
-) -> Result<Expr, ParseError> {
+fn fold_left_binary(pair: Pair<'_, Rule>, source: &str, op: BinaryOp) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
     let first = inner
@@ -400,9 +407,13 @@ fn parse_not_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError
     if let Some(next) = inner.peek() {
         if next.as_rule() == Rule::not_op {
             let op_pair = inner.next().unwrap();
-            let operand_pair = inner
-                .next()
-                .ok_or_else(|| error_with_span("missing operand for not", span_from_pair(&op_pair, source), source))?;
+            let operand_pair = inner.next().ok_or_else(|| {
+                error_with_span(
+                    "missing operand for not",
+                    span_from_pair(&op_pair, source),
+                    source,
+                )
+            })?;
             let expr = parse_expr_pair(operand_pair, source)?;
             let span = merge_span(&span_from_pair(&op_pair, source), expr_span(&expr));
             return Ok(Expr::Unary {
@@ -444,12 +455,16 @@ fn parse_comparison(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
                     format!("unknown comparison operator: {}", op_pair.as_str()),
                     span_from_pair(&op_pair, source),
                     source,
-                ))
+                ));
             }
         };
-        let rhs_pair = inner
-            .next()
-            .ok_or_else(|| error_with_span("missing comparison rhs", span_from_pair(&op_pair, source), source))?;
+        let rhs_pair = inner.next().ok_or_else(|| {
+            error_with_span(
+                "missing comparison rhs",
+                span_from_pair(&op_pair, source),
+                source,
+            )
+        })?;
         ops.push(op);
         comparators.push(parse_expr_pair(rhs_pair, source)?);
     }
@@ -483,13 +498,13 @@ fn parse_sum(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
                     format!("unknown add op: {}", op_pair.as_str()),
                     span_from_pair(&op_pair, source),
                     source,
-                ))
+                ));
             }
         };
         let rhs = parse_expr_pair(
-            inner
-                .next()
-                .ok_or_else(|| error_with_span("missing sum rhs", span_from_pair(&op_pair, source), source))?,
+            inner.next().ok_or_else(|| {
+                error_with_span("missing sum rhs", span_from_pair(&op_pair, source), source)
+            })?,
             source,
         )?;
         let span = merge_span(expr_span(&expr), expr_span(&rhs));
@@ -523,13 +538,17 @@ fn parse_product(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                     format!("unknown mul op: {}", op_pair.as_str()),
                     span_from_pair(&op_pair, source),
                     source,
-                ))
+                ));
             }
         };
         let rhs = parse_expr_pair(
-            inner
-                .next()
-                .ok_or_else(|| error_with_span("missing product rhs", span_from_pair(&op_pair, source), source))?,
+            inner.next().ok_or_else(|| {
+                error_with_span(
+                    "missing product rhs",
+                    span_from_pair(&op_pair, source),
+                    source,
+                )
+            })?,
             source,
         )?;
         let span = merge_span(expr_span(&expr), expr_span(&rhs));
@@ -566,7 +585,7 @@ fn parse_unary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
                     format!("unknown unary op: {}", op_pair.as_str()),
                     span_from_pair(&op_pair, source),
                     source,
-                ))
+                ));
             }
         };
         let span = merge_span(&span_from_pair(&op_pair, source), expr_span(&expr));
@@ -593,9 +612,13 @@ fn parse_power(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
             continue;
         }
         let rhs = parse_expr_pair(
-            inner
-                .next()
-                .ok_or_else(|| error_with_span("missing power rhs", span_from_pair(&op_pair, source), source))?,
+            inner.next().ok_or_else(|| {
+                error_with_span(
+                    "missing power rhs",
+                    span_from_pair(&op_pair, source),
+                    source,
+                )
+            })?,
             source,
         )?;
         let span = merge_span(expr_span(&expr), expr_span(&rhs));
@@ -632,7 +655,9 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                 let attr = suffix
                     .into_inner()
                     .next()
-                    .ok_or_else(|| error_with_span("missing attribute name", suffix_span.clone(), source))?
+                    .ok_or_else(|| {
+                        error_with_span("missing attribute name", suffix_span.clone(), source)
+                    })?
                     .as_str()
                     .to_string();
                 let span = merge_span(expr_span(&expr), &suffix_span);
@@ -645,9 +670,9 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
             Rule::index => {
                 let mut idx_inner = suffix.into_inner();
                 let index_expr = parse_expr_pair(
-                    idx_inner
-                        .next()
-                        .ok_or_else(|| error_with_span("missing index expr", suffix_span.clone(), source))?,
+                    idx_inner.next().ok_or_else(|| {
+                        error_with_span("missing index expr", suffix_span.clone(), source)
+                    })?,
                     source,
                 )?;
                 let span = merge_span(expr_span(&expr), expr_span(&index_expr));
