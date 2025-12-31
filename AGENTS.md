@@ -10,7 +10,7 @@
 - `cargo build`: build the project in debug mode.
 - `cargo test`: run unit/integration tests (Rust’s built-in test harness).
 - `cargo fmt --check`: verify formatting matches `rustfmt`. Run `cargo fmt` locally before committing so CI formatting checks always pass.
-- `cargo clippy -- -D warnings`: lint and treat warnings as errors.
+- `cargo clippy -- -D warnings`: lint and treat warnings as errors. CI runs this command, so ensure it passes locally before committing.
 
 ## Coding Style & Naming Conventions
 - Use `rustfmt` defaults; 4-space indentation from formatter output.

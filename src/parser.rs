@@ -404,24 +404,25 @@ fn fold_left_binary(pair: Pair<'_, Rule>, source: &str, op: BinaryOp) -> Result<
 fn parse_not_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner().peekable();
-    if let Some(next) = inner.peek() {
-        if next.as_rule() == Rule::not_op {
-            let op_pair = inner.next().unwrap();
-            let operand_pair = inner.next().ok_or_else(|| {
-                error_with_span(
-                    "missing operand for not",
-                    span_from_pair(&op_pair, source),
-                    source,
-                )
-            })?;
-            let expr = parse_expr_pair(operand_pair, source)?;
-            let span = merge_span(&span_from_pair(&op_pair, source), expr_span(&expr));
-            return Ok(Expr::Unary {
-                op: UnaryOp::Not,
-                expr: Box::new(expr),
-                span,
-            });
-        }
+    if inner
+        .peek()
+        .is_some_and(|next| next.as_rule() == Rule::not_op)
+    {
+        let op_pair = inner.next().unwrap();
+        let operand_pair = inner.next().ok_or_else(|| {
+            error_with_span(
+                "missing operand for not",
+                span_from_pair(&op_pair, source),
+                source,
+            )
+        })?;
+        let expr = parse_expr_pair(operand_pair, source)?;
+        let span = merge_span(&span_from_pair(&op_pair, source), expr_span(&expr));
+        return Ok(Expr::Unary {
+            op: UnaryOp::Not,
+            expr: Box::new(expr),
+            span,
+        });
     }
     parse_expr_pair(
         inner
