@@ -51,13 +51,26 @@ Phase 4: CLI and tooling
 - [x] Add error formatting suitable for terminal output.
 - [ ] Provide a formatter or linter (optional, if syntax stabilizes).
 
-Phase 5: Interop and runtime features
+Phase 5: Add all major python semantics
+- [x] support for basic expressions
+- [x] Support for basic flow control, classes, functions, etc.
+- [x] Support for comprehensions
+- [x] advanced support for strings
+- [x] support for exceptions
+- [ ] Add `with` statements and context manager support.
+- [ ] Add `assert` and `del` statements.
+- [ ] Add tuple and set literals plus slicing (`a[b:c]`, `a[:c]`, `a[b:]`).
+- [ ] Add default parameters, `*args`, and `**kwargs`.
+- [ ] Add `for`/`while` `else` blocks and `break`/`continue` in `try`.
+- [ ] Add pattern matching (`match`/`case`) if keeping parity with Python 3.10+.
+
+Phase 6: Interop and runtime features
 - [ ] Ensure Snail functions/classes are normal Python callables.
 - [ ] Handle globals/locals and module namespaces correctly.
 - [ ] Define the standard library boundary and any Snail-specific helpers.
 - [ ] Add integration tests that mix Snail and Python modules.
 
-Phase 6: Performance and polish
+Phase 7: Performance and polish
 - [ ] Cache compiled modules and improve incremental import speed.
 - [ ] Optimize hot paths in parsing/lowering.
 - [ ] Expand documentation, examples, and language reference.
