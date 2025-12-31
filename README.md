@@ -31,8 +31,8 @@ Phase 1: Parser and AST
 Phase 2: Lowering to Python AST
 - [x] Map Snail AST nodes to Python AST nodes.
 - [x] Preserve source locations for accurate tracebacks.
-- [ ] Validate round-trips for small programs (Snail -> Python AST -> exec).
-- [ ] Add golden tests for Python AST output.
+- [x] Validate round-trips for small programs (Snail -> Python AST -> exec).
+- [x] Add golden tests for Python AST output.
 - [x] Defer new syntax features until core pipeline is working.
 
 Phase 3: CPython integration

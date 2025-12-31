@@ -1,4 +1,7 @@
-use snail::{PyBinaryOp, PyCompareOp, PyStmt, lower_program, parse_program};
+use std::io::Write;
+use std::process::{Command, Stdio};
+
+use snail::{PyBinaryOp, PyCompareOp, PyStmt, lower_program, parse_program, python_source};
 
 #[test]
 fn lowers_if_chain_into_nested_orelse() {
@@ -107,6 +110,55 @@ fn lowers_comparisons_and_calls() {
     } else {
         panic!("expected comparison expression, got {value:?}");
     }
+}
+
+#[test]
+fn renders_python_golden_output() {
+    let source = r"
+import os as os_mod
+from sys import path
+class Greeter { def greet(name) { print('hi') } }
+if x { y = 1 }
+elif y { return y }
+else { pass }
+";
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "import os as os_mod\nfrom sys import path\nclass Greeter:\n    def greet(name):\n        print('hi')\nif x:\n    y = 1\nelif y:\n    return y\nelse:\n    pass\n";
+    assert_eq!(rendered, expected);
+}
+
+#[test]
+fn round_trip_executes_small_program() {
+    let source = "def fact(n) {\n    if n <= 1 { return 1 }\n    return n * fact(n - 1)\n}\nresult = fact(5)";
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let python = python_source(&module);
+    let code = format!("{}\nprint(result)", python);
+
+    let output = Command::new("python3")
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .and_then(|mut child| {
+            child
+                .stdin
+                .as_mut()
+                .expect("child stdin")
+                .write_all(code.as_bytes())?;
+            child.wait_with_output()
+        })
+        .expect("python should run");
+
+    if !output.status.success() {
+        panic!("python failed: {}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "120");
 }
 
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {

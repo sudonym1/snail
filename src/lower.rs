@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt;
+use std::fmt::Write as _;
 
 use crate::ast::*;
 
@@ -517,4 +518,258 @@ fn lower_compare_op(op: CompareOp) -> PyCompareOp {
         CompareOp::In => PyCompareOp::In,
         CompareOp::Is => PyCompareOp::Is,
     }
+}
+
+pub fn python_source(module: &PyModule) -> String {
+    let mut writer = PythonWriter::new();
+    writer.write_module(module);
+    writer.finish()
+}
+
+struct PythonWriter {
+    output: String,
+    indent: usize,
+}
+
+impl PythonWriter {
+    fn new() -> Self {
+        Self {
+            output: String::new(),
+            indent: 0,
+        }
+    }
+
+    fn finish(self) -> String {
+        self.output
+    }
+
+    fn write_module(&mut self, module: &PyModule) {
+        for stmt in &module.body {
+            self.write_stmt(stmt);
+        }
+    }
+
+    fn write_stmt(&mut self, stmt: &PyStmt) {
+        match stmt {
+            PyStmt::If {
+                test, body, orelse, ..
+            } => self.write_if_chain(test, body, orelse),
+            PyStmt::While {
+                test, body, orelse, ..
+            } => {
+                self.write_line(&format!("while {}:", expr_source(test)));
+                self.write_suite(body);
+                self.write_else_block(orelse);
+            }
+            PyStmt::For {
+                target,
+                iter,
+                body,
+                orelse,
+                ..
+            } => {
+                self.write_line(&format!(
+                    "for {} in {}:",
+                    expr_source(target),
+                    expr_source(iter)
+                ));
+                self.write_suite(body);
+                self.write_else_block(orelse);
+            }
+            PyStmt::FunctionDef {
+                name, args, body, ..
+            } => {
+                let args = args.join(", ");
+                self.write_line(&format!("def {}({}):", name, args));
+                self.write_suite(body);
+            }
+            PyStmt::ClassDef { name, body, .. } => {
+                self.write_line(&format!("class {}:", name));
+                self.write_suite(body);
+            }
+            PyStmt::Return { value, .. } => match value {
+                Some(expr) => self.write_line(&format!("return {}", expr_source(expr))),
+                None => self.write_line("return"),
+            },
+            PyStmt::Break { .. } => self.write_line("break"),
+            PyStmt::Continue { .. } => self.write_line("continue"),
+            PyStmt::Pass { .. } => self.write_line("pass"),
+            PyStmt::Import { names, .. } => {
+                let items = names.iter().map(import_name).collect::<Vec<_>>().join(", ");
+                self.write_line(&format!("import {}", items));
+            }
+            PyStmt::ImportFrom { module, names, .. } => {
+                let module = module.join(".");
+                let items = names.iter().map(import_name).collect::<Vec<_>>().join(", ");
+                self.write_line(&format!("from {} import {}", module, items));
+            }
+            PyStmt::Assign { targets, value, .. } => {
+                let mut line = targets
+                    .iter()
+                    .map(expr_source)
+                    .collect::<Vec<_>>()
+                    .join(" = ");
+                line.push_str(" = ");
+                line.push_str(&expr_source(value));
+                self.write_line(&line);
+            }
+            PyStmt::Expr { value, .. } => self.write_line(&expr_source(value)),
+        }
+    }
+
+    fn write_if_chain(&mut self, test: &PyExpr, body: &[PyStmt], orelse: &[PyStmt]) {
+        self.write_line(&format!("if {}:", expr_source(test)));
+        self.write_suite(body);
+        self.write_elif_or_else(orelse);
+    }
+
+    fn write_elif_or_else(&mut self, orelse: &[PyStmt]) {
+        if orelse.is_empty() {
+            return;
+        }
+        if orelse.len() == 1 {
+            if let PyStmt::If {
+                test,
+                body,
+                orelse: nested_orelse,
+                ..
+            } = &orelse[0]
+            {
+                self.write_line(&format!("elif {}:", expr_source(test)));
+                self.write_suite(body);
+                self.write_elif_or_else(nested_orelse);
+                return;
+            }
+        }
+        self.write_line("else:");
+        self.write_suite(orelse);
+    }
+
+    fn write_else_block(&mut self, orelse: &[PyStmt]) {
+        if !orelse.is_empty() {
+            self.write_line("else:");
+            self.write_suite(orelse);
+        }
+    }
+
+    fn write_suite(&mut self, suite: &[PyStmt]) {
+        self.indent += 1;
+        if suite.is_empty() {
+            self.write_line("pass");
+        } else {
+            for stmt in suite {
+                self.write_stmt(stmt);
+            }
+        }
+        self.indent -= 1;
+    }
+
+    fn write_line(&mut self, line: &str) {
+        for _ in 0..self.indent {
+            self.output.push_str("    ");
+        }
+        let _ = writeln!(self.output, "{}", line);
+    }
+}
+
+fn expr_source(expr: &PyExpr) -> String {
+    match expr {
+        PyExpr::Name { id, .. } => id.clone(),
+        PyExpr::Number { value, .. } => value.clone(),
+        PyExpr::String { value, .. } => quote_string(value),
+        PyExpr::Bool { value, .. } => {
+            if *value {
+                "True".to_string()
+            } else {
+                "False".to_string()
+            }
+        }
+        PyExpr::None { .. } => "None".to_string(),
+        PyExpr::Unary { op, operand, .. } => match op {
+            PyUnaryOp::Plus => format!("+{}", expr_source(operand)),
+            PyUnaryOp::Minus => format!("-{}", expr_source(operand)),
+            PyUnaryOp::Not => format!("not {}", expr_source(operand)),
+        },
+        PyExpr::Binary {
+            left, op, right, ..
+        } => format!(
+            "({} {} {})",
+            expr_source(left),
+            binary_op(*op),
+            expr_source(right)
+        ),
+        PyExpr::Compare {
+            left,
+            ops,
+            comparators,
+            ..
+        } => {
+            let mut parts = Vec::new();
+            parts.push(expr_source(left));
+            for (op, comparator) in ops.iter().zip(comparators) {
+                parts.push(compare_op(*op).to_string());
+                parts.push(expr_source(comparator));
+            }
+            format!("({})", parts.join(" "))
+        }
+        PyExpr::Call { func, args, .. } => {
+            let args = args
+                .iter()
+                .map(|arg| match &arg.name {
+                    Some(name) => format!("{}={}", name, expr_source(&arg.value)),
+                    None => expr_source(&arg.value),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}({})", expr_source(func), args)
+        }
+        PyExpr::Attribute { value, attr, .. } => format!("{}.{}", expr_source(value), attr),
+        PyExpr::Index { value, index, .. } => {
+            format!("{}[{}]", expr_source(value), expr_source(index))
+        }
+        PyExpr::Paren { expr, .. } => format!("({})", expr_source(expr)),
+    }
+}
+
+fn import_name(name: &PyImportName) -> String {
+    let mut item = name.name.join(".");
+    if let Some(alias) = &name.asname {
+        item.push_str(&format!(" as {}", alias));
+    }
+    item
+}
+
+fn binary_op(op: PyBinaryOp) -> &'static str {
+    match op {
+        PyBinaryOp::Or => "or",
+        PyBinaryOp::And => "and",
+        PyBinaryOp::Add => "+",
+        PyBinaryOp::Sub => "-",
+        PyBinaryOp::Mul => "*",
+        PyBinaryOp::Div => "/",
+        PyBinaryOp::FloorDiv => "//",
+        PyBinaryOp::Mod => "%",
+        PyBinaryOp::Pow => "**",
+    }
+}
+
+fn compare_op(op: PyCompareOp) -> &'static str {
+    match op {
+        PyCompareOp::Eq => "==",
+        PyCompareOp::NotEq => "!=",
+        PyCompareOp::Lt => "<",
+        PyCompareOp::LtEq => "<=",
+        PyCompareOp::Gt => ">",
+        PyCompareOp::GtEq => ">=",
+        PyCompareOp::In => "in",
+        PyCompareOp::Is => "is",
+    }
+}
+
+fn quote_string(value: &str) -> String {
+    let escaped = value
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("\n", "\\n");
+    format!("'{}'", escaped)
 }
