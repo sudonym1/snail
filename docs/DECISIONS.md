@@ -17,6 +17,8 @@ Non-goals (initially)
 - Not a Python syntax replacement.
 - No static type system in v0.
 - No custom VM; execution stays inside CPython.
+- No new syntax features until the core pipeline (parse -> Python AST -> exec)
+  works end-to-end.
 
 Examples (conceptual, not finalized)
 - Assignment without strict whitespace: `x = 1; y = x + 2`.

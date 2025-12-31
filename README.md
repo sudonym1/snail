@@ -23,7 +23,7 @@ Phase 0: Project scaffold and decisions
 - Set up CI for linting, tests, and minimal integration checks.
 
 Phase 1: Parser and AST
-- Define a Snail grammar and tokenizer.
+- Use the initial "Python with curly braces" grammar as-is.
 - Build a Snail AST with source spans (line/column).
 - Add error reporting with friendly messages and snippets.
 - Create fixture tests for parsing and error cases.
@@ -33,6 +33,7 @@ Phase 2: Lowering to Python AST
 - Preserve source locations for accurate tracebacks.
 - Validate round-trips for small programs (Snail -> Python AST -> exec).
 - Add golden tests for Python AST output.
+ - Defer new syntax features until core pipeline is working.
 
 Phase 3: CPython integration
 - Implement a Python extension module (Rust + pyo3).
