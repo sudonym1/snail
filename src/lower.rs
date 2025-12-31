@@ -408,7 +408,7 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
             func: Box::new(lower_expr(func)?),
             args: args
                 .iter()
-                .map(|arg| lower_argument(arg))
+                .map(lower_argument)
                 .collect::<Result<Vec<_>, _>>()?,
             span: span.clone(),
         }),
@@ -627,19 +627,18 @@ impl PythonWriter {
         if orelse.is_empty() {
             return;
         }
-        if orelse.len() == 1 {
-            if let PyStmt::If {
+        if orelse.len() == 1
+            && let PyStmt::If {
                 test,
                 body,
                 orelse: nested_orelse,
                 ..
             } = &orelse[0]
-            {
-                self.write_line(&format!("elif {}:", expr_source(test)));
-                self.write_suite(body);
-                self.write_elif_or_else(nested_orelse);
-                return;
-            }
+        {
+            self.write_line(&format!("elif {}:", expr_source(test)));
+            self.write_suite(body);
+            self.write_elif_or_else(nested_orelse);
+            return;
         }
         self.write_line("else:");
         self.write_suite(orelse);
