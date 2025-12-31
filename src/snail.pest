@@ -53,7 +53,7 @@ comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | "in" | "is" }
 sum = { product ~ (add_op ~ product)* }
 add_op = { "+" | "-" }
 product = { unary ~ (mul_op ~ unary)* }
-mul_op = { "*" | "/" | "%" | "//" }
+mul_op = { "//" | "*" | "/" | "%" }
 unary = { unary_op* ~ power }
 unary_op = { "+" | "-" }
 power = { primary ~ (pow_op ~ primary)* }

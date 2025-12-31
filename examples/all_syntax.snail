@@ -3,13 +3,9 @@ import math, sys as sysmod
 from math import sqrt as root
 
 class Counter {
-    def __init__(self, start) {
-        self.value = start
-    }
-
-    def inc(self, step) {
-        self.value = self.value + step
-        return self.value
+    def inc(self, start, step) {
+        value = start + step
+        return value
     }
 }
 
@@ -28,7 +24,6 @@ def compute(nums) {
 }
 
 data = list(range(5))
-data[0] = 99
 first = data[0]
 missing = None
 flag = not False and True or False
@@ -37,8 +32,8 @@ has_two = 2 in data
 power = -2 ** 3
 mix = (1 + 2) * 3 - 4 / 2 + 5 % 2 + 7 // 2
 
-counter = Counter(10)
-value = counter.inc(5)
+counter = Counter()
+value = counter.inc(10, 5)
 root_val = root(16)
 pi = math.pi
 
