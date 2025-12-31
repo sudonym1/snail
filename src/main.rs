@@ -27,6 +27,7 @@ fn run() -> Result<(), String> {
     let mut code = None;
     let mut filename = None;
     let mut argv = Vec::new();
+    let mut print_python = false;
     let mut passthrough = false;
 
     while let Some(arg) = args.next() {
@@ -39,6 +40,9 @@ fn run() -> Result<(), String> {
             "-h" | "--help" => {
                 print_help();
                 return Ok(());
+            }
+            "-p" | "--python" => {
+                print_python = true;
             }
             "-c" => {
                 let value = args
@@ -80,6 +84,15 @@ fn run() -> Result<(), String> {
         }
     };
 
+    if print_python {
+        let python = match compile_snail_source(&input.source) {
+            Ok(python) => python,
+            Err(err) => return Err(format_snail_error(&err, &input.filename)),
+        };
+        println!("{python}");
+        return Ok(());
+    }
+
     match run_source(&input) {
         Ok(()) => Ok(()),
         Err(CliError::Snail(err)) => Err(format_snail_error(&err, &input.filename)),
@@ -108,6 +121,7 @@ fn print_help() {
     let _ = writeln!(out, "");
     let _ = writeln!(out, "options:");
     let _ = writeln!(out, "  -c <code>    run a one-liner");
+    let _ = writeln!(out, "  -p, --python output translated Python and exit");
     let _ = writeln!(out, "  -h, --help   show this help");
 }
 
