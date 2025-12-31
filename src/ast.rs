@@ -118,6 +118,8 @@ pub enum Expr {
     },
     String {
         value: String,
+        raw: bool,
+        delimiter: StringDelimiter,
         span: SourceSpan,
     },
     Bool {
@@ -186,6 +188,14 @@ pub enum Expr {
         ifs: Vec<Expr>,
         span: SourceSpan,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StringDelimiter {
+    Single,
+    Double,
+    TripleSingle,
+    TripleDouble,
 }
 
 #[derive(Debug, Clone, PartialEq)]

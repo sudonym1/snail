@@ -878,10 +878,15 @@ fn parse_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
             value: inner.as_str().to_string(),
             span,
         }),
-        Rule::string => Ok(Expr::String {
-            value: strip_quotes(inner.as_str()),
-            span,
-        }),
+        Rule::string => {
+            let (value, raw, delimiter) = parse_string_literal(inner.as_str());
+            Ok(Expr::String {
+                value,
+                raw,
+                delimiter,
+                span,
+            })
+        }
         Rule::boolean => Ok(Expr::Bool {
             value: inner.as_str() == "True",
             span,
@@ -895,12 +900,27 @@ fn parse_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
     }
 }
 
-fn strip_quotes(value: &str) -> String {
-    if value.len() >= 2 {
-        value[1..value.len() - 1].to_string()
+fn parse_string_literal(value: &str) -> (String, bool, StringDelimiter) {
+    let (raw, rest) = if value.starts_with('r') {
+        (true, &value[1..])
     } else {
-        value.to_string()
-    }
+        (false, value)
+    };
+    let (delimiter, open, close) = if rest.starts_with("\"\"\"") {
+        (StringDelimiter::TripleDouble, "\"\"\"", "\"\"\"")
+    } else if rest.starts_with("'''") {
+        (StringDelimiter::TripleSingle, "'''", "'''")
+    } else if rest.starts_with('"') {
+        (StringDelimiter::Double, "\"", "\"")
+    } else {
+        (StringDelimiter::Single, "'", "'")
+    };
+    let content = if rest.len() >= open.len() + close.len() {
+        &rest[open.len()..rest.len() - close.len()]
+    } else {
+        ""
+    };
+    (content.to_string(), raw, delimiter)
 }
 
 fn expr_span(expr: &Expr) -> &SourceSpan {

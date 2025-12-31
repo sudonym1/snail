@@ -125,7 +125,7 @@ else { pass }
     let program = parse_program(source).expect("program should parse");
     let module = lower_program(&program).expect("program should lower");
     let rendered = python_source(&module);
-    let expected = "import os as os_mod\nfrom sys import path\nclass Greeter:\n    def greet(name):\n        print('hi')\nif x:\n    y = 1\nelif y:\n    return y\nelse:\n    pass\n";
+    let expected = "import os as os_mod\nfrom sys import path\nclass Greeter:\n    def greet(name):\n        print(f'hi')\nif x:\n    y = 1\nelif y:\n    return y\nelse:\n    pass\n";
     assert_eq!(rendered, expected);
 }
 

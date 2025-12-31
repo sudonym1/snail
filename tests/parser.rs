@@ -70,3 +70,10 @@ lookup = {n: n * 2 for n in nums if n > 1}
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 4);
 }
+
+#[test]
+fn parses_raw_and_multiline_strings() {
+    let source = "text = r\"hello\\n\"\nblock = \"\"\"line1\nline2\"\"\"\nraw_block = r\"\"\"raw\\nline\"\"\"";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 3);
+}

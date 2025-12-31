@@ -115,6 +115,8 @@ pub enum PyExpr {
     },
     String {
         value: String,
+        raw: bool,
+        delimiter: StringDelimiter,
         span: SourceSpan,
     },
     Bool {
@@ -388,8 +390,15 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
             value: value.clone(),
             span: span.clone(),
         }),
-        Expr::String { value, span } => Ok(PyExpr::String {
+        Expr::String {
+            value,
+            raw,
+            delimiter,
+            span,
+        } => Ok(PyExpr::String {
             value: value.clone(),
+            raw: *raw,
+            delimiter: *delimiter,
             span: span.clone(),
         }),
         Expr::Bool { value, span } => Ok(PyExpr::Bool {
@@ -762,7 +771,12 @@ fn expr_source(expr: &PyExpr) -> String {
     match expr {
         PyExpr::Name { id, .. } => id.clone(),
         PyExpr::Number { value, .. } => value.clone(),
-        PyExpr::String { value, .. } => quote_string(value),
+        PyExpr::String {
+            value,
+            raw,
+            delimiter,
+            ..
+        } => format_string_literal(value, *raw, *delimiter),
         PyExpr::Bool { value, .. } => {
             if *value {
                 "True".to_string()
@@ -871,6 +885,17 @@ fn import_name(name: &PyImportName) -> String {
     item
 }
 
+fn format_string_literal(value: &str, raw: bool, delimiter: StringDelimiter) -> String {
+    let (open, close) = match delimiter {
+        StringDelimiter::Single => ("'", "'"),
+        StringDelimiter::Double => ("\"", "\""),
+        StringDelimiter::TripleSingle => ("'''", "'''"),
+        StringDelimiter::TripleDouble => ("\"\"\"", "\"\"\""),
+    };
+    let prefix = if raw { "r" } else { "f" };
+    format!("{prefix}{open}{value}{close}")
+}
+
 fn binary_op(op: PyBinaryOp) -> &'static str {
     match op {
         PyBinaryOp::Or => "or",
@@ -896,12 +921,4 @@ fn compare_op(op: PyCompareOp) -> &'static str {
         PyCompareOp::In => "in",
         PyCompareOp::Is => "is",
     }
-}
-
-fn quote_string(value: &str) -> String {
-    let escaped = value
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace("\n", "\\n");
-    format!("'{}'", escaped)
 }

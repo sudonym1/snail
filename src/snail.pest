@@ -87,7 +87,12 @@ literal = { number | string | boolean | none }
 boolean = { "True" | "False" }
 none = { "None" }
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
-string = @{ "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'" | "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" }
+string = @{ raw_prefix? ~ (triple_double | triple_single | double_string | single_string) }
+raw_prefix = { "r" }
+triple_double = { "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" }
+triple_single = { "'''" ~ (!"'''" ~ ANY)* ~ "'''" }
+double_string = { "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" }
+single_string = { "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'" }
 
 identifier = @{ !keyword ~ ident_start ~ ident_continue* }
 ident_start = { ASCII_ALPHA | "_" }
