@@ -1,0 +1,60 @@
+use snail::parse_program;
+
+#[test]
+fn parses_basic_program() {
+    let source = r#"
+x = 1
+if x {
+  y = x + 2
+}
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 2);
+}
+
+#[test]
+fn reports_parse_error_with_location() {
+    let source = "if { }";
+    let err = parse_program(source).expect_err("program should fail");
+    let message = err.to_string();
+    assert!(message.contains("-->"));
+    assert!(message.contains("if"));
+}
+
+#[test]
+fn parses_if_elif_else_chain() {
+    let source = r#"
+if x { y = 1 }
+elif y { y = 2 }
+else { y = 3 }
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn parses_def_and_call() {
+    let source = r#"
+def add(a, b) { return a + b }
+result = add(1, 2)
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 2);
+}
+
+#[test]
+fn parses_imports() {
+    let source = r#"
+import sys, os as operating_system
+from collections import deque, defaultdict as dd
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 2);
+}
+
+#[test]
+fn rejects_attribute_assignment_targets_for_now() {
+    let source = "a.b = 1";
+    let err = parse_program(source).expect_err("attribute assignment should fail");
+    assert!(err.to_string().contains("assignment target must be a name"));
+}

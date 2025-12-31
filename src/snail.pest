@@ -1,4 +1,4 @@
-program = { SOI ~ stmt_list? ~ EOI }
+program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 
 stmt_list = { stmt ~ (stmt_sep ~ stmt)* ~ stmt_sep? }
 stmt_sep = _{ ";" | NEWLINE+ }
@@ -16,13 +16,15 @@ simple_stmt = _{
   | expr_stmt
 }
 
-block = { "{" ~ stmt_list? ~ "}" }
+block = { "{" ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ "}" }
 
-if_stmt = { "if" ~ expr ~ block ~ ("elif" ~ expr ~ block)* ~ ("else" ~ block)? }
+if_stmt = { "if" ~ expr ~ block ~ (stmt_sep* ~ "elif" ~ expr ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
 while_stmt = { "while" ~ expr ~ block }
 for_stmt = { "for" ~ identifier ~ "in" ~ expr ~ block }
 def_stmt = { "def" ~ identifier ~ parameters ~ block }
 class_stmt = { "class" ~ identifier ~ block }
+
+parameters = { "(" ~ (identifier ~ ("," ~ identifier)*)? ~ ")" }
 
 return_stmt = { "return" ~ expr? }
 break_stmt = { "break" }
@@ -36,21 +38,26 @@ import_items = { import_item ~ ("," ~ import_item)* }
 import_item = { dotted_name ~ ("as" ~ identifier)? }
 dotted_name = { identifier ~ ("." ~ identifier)* }
 
-assign_stmt = { assign_target ~ ("=" ~ assign_target)* ~ "=" ~ expr }
-assign_target = { identifier | attribute | index }
+assign_stmt = { assign_target ~ "=" ~ expr }
+assign_target = { identifier ~ (attribute | index)* }
 expr_stmt = { expr }
 
 expr = { or_expr }
 or_expr = { and_expr ~ ("or" ~ and_expr)* }
 and_expr = { not_expr ~ ("and" ~ not_expr)* }
-not_expr = { ("not" ~ not_expr) | comparison }
+not_expr = { (not_op ~ not_expr) | comparison }
+not_op = { "not" }
 comparison = { sum ~ (comp_op ~ sum)* }
 comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | "in" | "is" }
 
-sum = { product ~ (("+" | "-") ~ product)* }
-product = { unary ~ (("*" | "/" | "%" | "//") ~ unary)* }
-unary = { ( "+" | "-" )* ~ power }
-power = { primary ~ ("**" ~ primary)* }
+sum = { product ~ (add_op ~ product)* }
+add_op = { "+" | "-" }
+product = { unary ~ (mul_op ~ unary)* }
+mul_op = { "*" | "/" | "%" | "//" }
+unary = { unary_op* ~ power }
+unary_op = { "+" | "-" }
+power = { primary ~ (pow_op ~ primary)* }
+pow_op = { "**" }
 
 primary = { atom ~ (call | attribute | index)* }
 call = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ")" }
