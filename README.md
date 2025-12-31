@@ -46,16 +46,16 @@ Phase 3: CPython integration
 - [x] Add a Python import hook so `import foo.snail` works.
 - [x] Ensure Snail code can import Python modules directly.
 
-Phase 4: Interop and runtime features
+Phase 4: CLI and tooling
+- [x] Build a `snail` CLI for running files and one-liners.
+- [x] Add error formatting suitable for terminal output.
+- [ ] Provide a formatter or linter (optional, if syntax stabilizes).
+
+Phase 5: Interop and runtime features
 - [ ] Ensure Snail functions/classes are normal Python callables.
 - [ ] Handle globals/locals and module namespaces correctly.
 - [ ] Define the standard library boundary and any Snail-specific helpers.
 - [ ] Add integration tests that mix Snail and Python modules.
-
-Phase 5: CLI and tooling
-- [ ] Build a `snail` CLI for running files and one-liners.
-- [ ] Add error formatting suitable for terminal output.
-- [ ] Provide a formatter or linter (optional, if syntax stabilizes).
 
 Phase 6: Performance and polish
 - [ ] Cache compiled modules and improve incremental import speed.

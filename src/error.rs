@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt;
+use std::fmt::Write as _;
 
 use crate::ast::SourceSpan;
 use crate::lower::LowerError;
@@ -75,4 +76,33 @@ impl From<LowerError> for SnailError {
     fn from(value: LowerError) -> Self {
         SnailError::Lower(value)
     }
+}
+
+pub fn format_snail_error(err: &SnailError, filename: &str) -> String {
+    match err {
+        SnailError::Parse(parse) => format_parse_error(parse, filename),
+        SnailError::Lower(lower) => format!("error: {}", lower.message),
+    }
+}
+
+fn format_parse_error(err: &ParseError, filename: &str) -> String {
+    let mut out = String::new();
+    let _ = writeln!(&mut out, "error: {}", err.message);
+    if let Some(span) = &err.span {
+        let _ = writeln!(
+            &mut out,
+            "--> {}:{}:{}",
+            filename, span.start.line, span.start.column
+        );
+        if let Some(line) = &err.line_text {
+            let _ = writeln!(&mut out, " |");
+            let _ = writeln!(&mut out, "{:>4} | {}", span.start.line, line);
+            let mut caret = String::new();
+            let col = span.start.column.saturating_sub(1);
+            caret.push_str(&" ".repeat(col));
+            caret.push('^');
+            let _ = writeln!(&mut out, " | {}", caret);
+        }
+    }
+    out
 }
