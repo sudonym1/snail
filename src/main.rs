@@ -118,7 +118,7 @@ fn print_help() {
     let mut out = io::stderr();
     let _ = writeln!(out, "usage: snail [options] <file>");
     let _ = writeln!(out, "       snail -c <code>");
-    let _ = writeln!(out, "");
+    let _ = writeln!(out);
     let _ = writeln!(out, "options:");
     let _ = writeln!(out, "  -c <code>    run a one-liner");
     let _ = writeln!(out, "  -p, --python output translated Python and exit");

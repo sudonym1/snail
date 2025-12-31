@@ -247,7 +247,7 @@ fn parse_try(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let mut else_body = None;
     let mut finally_body = None;
 
-    while let Some(next) = inner.next() {
+    for next in inner {
         match next.as_rule() {
             Rule::except_clause => handlers.push(parse_except_clause(next, source)?),
             Rule::else_clause => {
@@ -291,15 +291,16 @@ fn parse_except_clause(pair: Pair<'_, Rule>, source: &str) -> Result<ExceptHandl
     let mut name = None;
     let mut body = None;
 
+    #[allow(clippy::while_let_on_iterator)]
     while let Some(next) = inner.next() {
         match next.as_rule() {
             Rule::expr => {
                 type_name = Some(parse_expr_pair(next, source)?);
-                if let Some(candidate) = inner.peek() {
-                    if candidate.as_rule() == Rule::identifier {
-                        let alias_pair = inner.next().unwrap();
-                        name = Some(alias_pair.as_str().to_string());
-                    }
+                if let Some(candidate) = inner.peek()
+                    && candidate.as_rule() == Rule::identifier
+                {
+                    let alias_pair = inner.next().unwrap();
+                    name = Some(alias_pair.as_str().to_string());
                 }
             }
             Rule::identifier => {
@@ -1015,8 +1016,8 @@ fn parse_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
 }
 
 fn parse_string_literal(value: &str) -> (String, bool, StringDelimiter) {
-    let (raw, rest) = if value.starts_with('r') {
-        (true, &value[1..])
+    let (raw, rest) = if let Some(stripped) = value.strip_prefix('r') {
+        (true, stripped)
     } else {
         (false, value)
     };
