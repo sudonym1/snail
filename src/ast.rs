@@ -48,8 +48,20 @@ pub enum Stmt {
         body: Vec<Stmt>,
         span: SourceSpan,
     },
+    Try {
+        body: Vec<Stmt>,
+        handlers: Vec<ExceptHandler>,
+        else_body: Option<Vec<Stmt>>,
+        finally_body: Option<Vec<Stmt>>,
+        span: SourceSpan,
+    },
     Return {
         value: Option<Expr>,
+        span: SourceSpan,
+    },
+    Raise {
+        value: Option<Expr>,
+        from: Option<Expr>,
         span: SourceSpan,
     },
     Break {
@@ -79,6 +91,14 @@ pub enum Stmt {
         value: Expr,
         span: SourceSpan,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExceptHandler {
+    pub type_name: Option<Expr>,
+    pub name: Option<String>,
+    pub body: Vec<Stmt>,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq)]

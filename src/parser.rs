@@ -40,7 +40,9 @@ fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
         Rule::for_stmt => parse_for(pair, source),
         Rule::def_stmt => parse_def(pair, source),
         Rule::class_stmt => parse_class(pair, source),
+        Rule::try_stmt => parse_try(pair, source),
         Rule::return_stmt => parse_return(pair, source),
+        Rule::raise_stmt => parse_raise(pair, source),
         Rule::break_stmt => Ok(Stmt::Break {
             span: span_from_pair(&pair, source),
         }),
@@ -213,6 +215,118 @@ fn parse_return(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> 
     Ok(Stmt::Return { value, span })
 }
 
+fn parse_raise(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let value = inner
+        .next()
+        .map(|value_pair| parse_expr_pair(value_pair, source))
+        .transpose()?;
+    let from = inner
+        .next()
+        .map(|value_pair| parse_expr_pair(value_pair, source))
+        .transpose()?;
+    if value.is_none() && from.is_some() {
+        return Err(error_with_span(
+            "raise from requires an exception value",
+            span,
+            source,
+        ));
+    }
+    Ok(Stmt::Raise { value, from, span })
+}
+
+fn parse_try(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner().peekable();
+    let body_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing try block", span.clone(), source))?;
+    let body = parse_block(body_pair, source)?;
+    let mut handlers = Vec::new();
+    let mut else_body = None;
+    let mut finally_body = None;
+
+    while let Some(next) = inner.next() {
+        match next.as_rule() {
+            Rule::except_clause => handlers.push(parse_except_clause(next, source)?),
+            Rule::else_clause => {
+                let block = next
+                    .into_inner()
+                    .next()
+                    .ok_or_else(|| error_with_span("missing else block", span.clone(), source))?;
+                else_body = Some(parse_block(block, source)?);
+            }
+            Rule::finally_clause => {
+                let block = next.into_inner().next().ok_or_else(|| {
+                    error_with_span("missing finally block", span.clone(), source)
+                })?;
+                finally_body = Some(parse_block(block, source)?);
+            }
+            _ => {}
+        }
+    }
+
+    if handlers.is_empty() && finally_body.is_none() {
+        return Err(error_with_span(
+            "try must have at least one except clause or a finally block",
+            span,
+            source,
+        ));
+    }
+
+    Ok(Stmt::Try {
+        body,
+        handlers,
+        else_body,
+        finally_body,
+        span,
+    })
+}
+
+fn parse_except_clause(pair: Pair<'_, Rule>, source: &str) -> Result<ExceptHandler, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner().peekable();
+    let mut type_name = None;
+    let mut name = None;
+    let mut body = None;
+
+    while let Some(next) = inner.next() {
+        match next.as_rule() {
+            Rule::expr => {
+                type_name = Some(parse_expr_pair(next, source)?);
+                if let Some(candidate) = inner.peek() {
+                    if candidate.as_rule() == Rule::identifier {
+                        let alias_pair = inner.next().unwrap();
+                        name = Some(alias_pair.as_str().to_string());
+                    }
+                }
+            }
+            Rule::identifier => {
+                name = Some(next.as_str().to_string());
+            }
+            Rule::block => {
+                body = Some(parse_block(next, source)?);
+            }
+            _ => {}
+        }
+    }
+
+    let body = body.ok_or_else(|| error_with_span("missing except block", span.clone(), source))?;
+    if type_name.is_none() && name.is_some() {
+        return Err(error_with_span(
+            "except alias requires an exception type",
+            span,
+            source,
+        ));
+    }
+    Ok(ExceptHandler {
+        type_name,
+        name,
+        body,
+        span,
+    })
+}
 fn parse_import_from(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();

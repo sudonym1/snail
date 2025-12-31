@@ -173,6 +173,37 @@ fn renders_list_and_dict_comprehensions() {
     assert_eq!(rendered, expected);
 }
 
+#[test]
+fn renders_try_except_finally() {
+    let source = r"
+try { risky() }
+except ValueError as err { raise err }
+except { raise }
+else { ok = True }
+finally { cleanup() }
+";
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "try:\n    risky()\nexcept ValueError as err:\n    raise err\nexcept:\n    raise\nelse:\n    ok = True\nfinally:\n    cleanup()\n";
+    assert_eq!(rendered, expected);
+}
+
+#[test]
+fn renders_try_finally_and_raise_from() {
+    let source = r"
+try { risky() }
+finally { cleanup() }
+raise ValueError('bad') from err
+";
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected =
+        "try:\n    risky()\nfinally:\n    cleanup()\nraise ValueError(f'bad') from err\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {

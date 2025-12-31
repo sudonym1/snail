@@ -5,12 +5,13 @@ stmt_sep = _{ ";" | NEWLINE+ }
 
 stmt = _{ compound_stmt | simple_stmt }
 
-compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt }
+compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt | try_stmt }
 simple_stmt = _{
   return_stmt
   | break_stmt
   | continue_stmt
   | pass_stmt
+  | raise_stmt
   | import_stmt
   | assign_stmt
   | expr_stmt
@@ -23,10 +24,17 @@ while_stmt = { "while" ~ expr ~ block }
 for_stmt = { "for" ~ identifier ~ "in" ~ expr ~ block }
 def_stmt = { "def" ~ identifier ~ parameters ~ block }
 class_stmt = { "class" ~ identifier ~ block }
+try_stmt = { "try" ~ block ~ (try_except_tail | try_finally_tail) }
+try_except_tail = _{ (stmt_sep* ~ except_clause)+ ~ (stmt_sep* ~ else_clause)? ~ (stmt_sep* ~ finally_clause)? }
+try_finally_tail = _{ stmt_sep* ~ finally_clause }
+except_clause = { "except" ~ (expr ~ ("as" ~ identifier)?)? ~ block }
+else_clause = { "else" ~ block }
+finally_clause = { "finally" ~ block }
 
 parameters = { "(" ~ (identifier ~ ("," ~ identifier)*)? ~ ")" }
 
 return_stmt = { "return" ~ expr? }
+raise_stmt = { "raise" ~ expr? ~ ("from" ~ expr)? }
 break_stmt = { "break" }
 continue_stmt = { "continue" }
 pass_stmt = { "pass" }
@@ -99,8 +107,9 @@ ident_start = { ASCII_ALPHA | "_" }
 ident_continue = { ASCII_ALPHANUMERIC | "_" }
 keyword = _{
   ("if" | "else" | "elif" | "while" | "for" | "in" | "def" | "class"
-  | "return" | "break" | "continue" | "pass" | "and" | "or" | "not"
-  | "import" | "from" | "as" | "True" | "False" | "None") ~ !ident_continue
+  | "return" | "break" | "continue" | "pass" | "raise" | "try" | "except"
+  | "finally" | "and" | "or" | "not" | "import" | "from" | "as"
+  | "True" | "False" | "None") ~ !ident_continue
 }
 
 WHITESPACE = _{ " " | "\t" }

@@ -63,8 +63,20 @@ pub enum PyStmt {
         body: Vec<PyStmt>,
         span: SourceSpan,
     },
+    Try {
+        body: Vec<PyStmt>,
+        handlers: Vec<PyExceptHandler>,
+        orelse: Vec<PyStmt>,
+        finalbody: Vec<PyStmt>,
+        span: SourceSpan,
+    },
     Return {
         value: Option<PyExpr>,
+        span: SourceSpan,
+    },
+    Raise {
+        value: Option<PyExpr>,
+        from: Option<PyExpr>,
         span: SourceSpan,
     },
     Break {
@@ -94,6 +106,14 @@ pub enum PyStmt {
         value: PyExpr,
         span: SourceSpan,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PyExceptHandler {
+    pub type_name: Option<PyExpr>,
+    pub name: Option<String>,
+    pub body: Vec<PyStmt>,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -280,8 +300,37 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
             body: lower_block(body)?,
             span: span.clone(),
         }),
+        Stmt::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            span,
+        } => Ok(PyStmt::Try {
+            body: lower_block(body)?,
+            handlers: handlers
+                .iter()
+                .map(lower_except_handler)
+                .collect::<Result<Vec<_>, _>>()?,
+            orelse: else_body
+                .as_ref()
+                .map(|items| lower_block(items))
+                .transpose()?
+                .unwrap_or_default(),
+            finalbody: finally_body
+                .as_ref()
+                .map(|items| lower_block(items))
+                .transpose()?
+                .unwrap_or_default(),
+            span: span.clone(),
+        }),
         Stmt::Return { value, span } => Ok(PyStmt::Return {
             value: value.as_ref().map(lower_expr).transpose()?,
+            span: span.clone(),
+        }),
+        Stmt::Raise { value, from, span } => Ok(PyStmt::Raise {
+            value: value.as_ref().map(lower_expr).transpose()?,
+            from: from.as_ref().map(lower_expr).transpose()?,
             span: span.clone(),
         }),
         Stmt::Break { span } => Ok(PyStmt::Break { span: span.clone() }),
@@ -358,6 +407,15 @@ fn lower_if(
 
 fn lower_block(block: &[Stmt]) -> Result<Vec<PyStmt>, LowerError> {
     block.iter().map(lower_stmt).collect()
+}
+
+fn lower_except_handler(handler: &ExceptHandler) -> Result<PyExceptHandler, LowerError> {
+    Ok(PyExceptHandler {
+        type_name: handler.type_name.as_ref().map(lower_expr).transpose()?,
+        name: handler.name.clone(),
+        body: lower_block(&handler.body)?,
+        span: handler.span.clone(),
+    })
 }
 
 fn lower_import_name(item: &ImportItem) -> PyImportName {
@@ -542,7 +600,9 @@ fn stmt_span(stmt: &PyStmt) -> &SourceSpan {
         | PyStmt::For { span, .. }
         | PyStmt::FunctionDef { span, .. }
         | PyStmt::ClassDef { span, .. }
+        | PyStmt::Try { span, .. }
         | PyStmt::Return { span, .. }
+        | PyStmt::Raise { span, .. }
         | PyStmt::Break { span, .. }
         | PyStmt::Continue { span, .. }
         | PyStmt::Pass { span, .. }
@@ -683,9 +743,39 @@ impl PythonWriter {
                 self.write_line(&format!("class {}:", name));
                 self.write_suite(body);
             }
+            PyStmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+                ..
+            } => {
+                self.write_line("try:");
+                self.write_suite(body);
+                for handler in handlers {
+                    self.write_except(handler);
+                }
+                if !orelse.is_empty() {
+                    self.write_line("else:");
+                    self.write_suite(orelse);
+                }
+                if !finalbody.is_empty() {
+                    self.write_line("finally:");
+                    self.write_suite(finalbody);
+                }
+            }
             PyStmt::Return { value, .. } => match value {
                 Some(expr) => self.write_line(&format!("return {}", expr_source(expr))),
                 None => self.write_line("return"),
+            },
+            PyStmt::Raise { value, from, .. } => match (value, from) {
+                (Some(expr), Some(from_expr)) => self.write_line(&format!(
+                    "raise {} from {}",
+                    expr_source(expr),
+                    expr_source(from_expr)
+                )),
+                (Some(expr), None) => self.write_line(&format!("raise {}", expr_source(expr))),
+                (None, _) => self.write_line("raise"),
             },
             PyStmt::Break { .. } => self.write_line("break"),
             PyStmt::Continue { .. } => self.write_line("continue"),
@@ -764,6 +854,18 @@ impl PythonWriter {
             self.output.push_str("    ");
         }
         let _ = writeln!(self.output, "{}", line);
+    }
+
+    fn write_except(&mut self, handler: &PyExceptHandler) {
+        let header = match (&handler.type_name, &handler.name) {
+            (Some(type_name), Some(name)) => {
+                format!("except {} as {}:", expr_source(type_name), name)
+            }
+            (Some(type_name), None) => format!("except {}:", expr_source(type_name)),
+            (None, _) => "except:".to_string(),
+        };
+        self.write_line(&header);
+        self.write_suite(&handler.body);
     }
 }
 

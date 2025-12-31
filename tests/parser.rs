@@ -77,3 +77,27 @@ fn parses_raw_and_multiline_strings() {
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 3);
 }
+
+#[test]
+fn parses_try_except_finally_and_raise() {
+    let source = r#"
+try { risky() }
+except ValueError as err { raise err }
+except { raise }
+else { ok = True }
+finally { cleanup() }
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn parses_raise_from_and_try_finally() {
+    let source = r#"
+try { risky() }
+finally { cleanup() }
+raise ValueError("bad") from err
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 2);
+}

@@ -23,6 +23,14 @@ def compute(nums) {
     return total
 }
 
+def risky() {
+    return 1
+}
+
+def cleanup() {
+    pass
+}
+
 data = list(range(5))
 nums = [1, 2, 3, 4]
 pairs = {"a": 1, "b": 2}
@@ -56,6 +64,21 @@ while i < 4 {
     } else {
         i = i + 1
     }
+}
+
+try { raise ValueError("boom") }
+except ValueError as err { handled = True }
+except { handled = False }
+else { ok = True }
+finally { cleanup() }
+
+try { risky() }
+finally { cleanup() }
+
+try { raise ValueError("bad") }
+except ValueError as err {
+    try { raise RuntimeError("wrapped") from err }
+    except { pass }
 }
 
 total = compute(data)
