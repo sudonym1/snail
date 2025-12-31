@@ -161,6 +161,18 @@ fn round_trip_executes_small_program() {
     assert_eq!(stdout.trim(), "120");
 }
 
+#[test]
+fn renders_list_and_dict_comprehensions() {
+    let source =
+        "nums = [1, 2]\nvals = {n: n * 2 for n in nums if n > 1}\nlisty = [n for n in nums]";
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected =
+        "nums = [1, 2]\nvals = {n: (n * 2) for n in nums if (n > 1)}\nlisty = [n for n in nums]\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {

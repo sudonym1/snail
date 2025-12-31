@@ -65,7 +65,24 @@ argument = { identifier ~ "=" ~ expr | expr }
 attribute = { "." ~ identifier }
 index = { "[" ~ expr ~ "]" }
 
-atom = _{ literal | identifier | "(" ~ expr ~ ")" }
+atom = _{
+  literal
+  | identifier
+  | list_comp
+  | list_literal
+  | dict_comp
+  | dict_literal
+  | "(" ~ expr ~ ")"
+}
+
+list_comp = { "[" ~ expr ~ comp_for ~ "]" }
+list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
+dict_comp = { "{" ~ expr ~ ":" ~ expr ~ comp_for ~ "}" }
+dict_literal = { "{" ~ (dict_entry ~ ("," ~ dict_entry)*)? ~ "}" }
+dict_entry = { expr ~ ":" ~ expr }
+
+comp_for = { "for" ~ identifier ~ "in" ~ expr ~ comp_if* }
+comp_if = { "if" ~ expr }
 literal = { number | string | boolean | none }
 boolean = { "True" | "False" }
 none = { "None" }

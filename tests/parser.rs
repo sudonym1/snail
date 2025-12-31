@@ -58,3 +58,15 @@ fn rejects_attribute_assignment_targets_for_now() {
     let err = parse_program(source).expect_err("attribute assignment should fail");
     assert!(err.to_string().contains("assignment target must be a name"));
 }
+
+#[test]
+fn parses_list_and_dict_literals_and_comprehensions() {
+    let source = r#"
+nums = [1, 2, 3]
+pairs = {"a": 1, "b": 2}
+evens = [n for n in nums if n % 2 == 0]
+lookup = {n: n * 2 for n in nums if n > 1}
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 4);
+}

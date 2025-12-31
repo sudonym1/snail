@@ -352,6 +352,10 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
         }),
+        Rule::list_literal => parse_list_literal(pair, source),
+        Rule::dict_literal => parse_dict_literal(pair, source),
+        Rule::list_comp => parse_list_comp(pair, source),
+        Rule::dict_comp => parse_dict_comp(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -735,6 +739,10 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
             name: inner_pair.as_str().to_string(),
             span: span_from_pair(&inner_pair, source),
         }),
+        Rule::list_literal => parse_list_literal(inner_pair, source),
+        Rule::dict_literal => parse_dict_literal(inner_pair, source),
+        Rule::list_comp => parse_list_comp(inner_pair, source),
+        Rule::dict_comp => parse_dict_comp(inner_pair, source),
         Rule::expr => {
             let expr = parse_expr_pair(inner_pair, source)?;
             Ok(Expr::Paren {
@@ -748,6 +756,114 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
             source,
         )),
     }
+}
+
+fn parse_list_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut elements = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::expr {
+            elements.push(parse_expr_pair(inner, source)?);
+        }
+    }
+    Ok(Expr::List { elements, span })
+}
+
+fn parse_dict_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut entries = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::dict_entry {
+            entries.push(parse_dict_entry(inner, source)?);
+        }
+    }
+    Ok(Expr::Dict { entries, span })
+}
+
+fn parse_dict_entry(pair: Pair<'_, Rule>, source: &str) -> Result<(Expr, Expr), ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let key_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing dict key", span.clone(), source))?;
+    let value_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing dict value", span.clone(), source))?;
+    let key = parse_expr_pair(key_pair, source)?;
+    let value = parse_expr_pair(value_pair, source)?;
+    Ok((key, value))
+}
+
+fn parse_list_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let element_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing list comp expr", span.clone(), source))?;
+    let comp_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing list comp for", span.clone(), source))?;
+    let element = parse_expr_pair(element_pair, source)?;
+    let (target, iter, ifs) = parse_comp_for(comp_pair, source)?;
+    Ok(Expr::ListComp {
+        element: Box::new(element),
+        target,
+        iter: Box::new(iter),
+        ifs,
+        span,
+    })
+}
+
+fn parse_dict_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let key_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing dict comp key", span.clone(), source))?;
+    let value_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing dict comp value", span.clone(), source))?;
+    let comp_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing dict comp for", span.clone(), source))?;
+    let key = parse_expr_pair(key_pair, source)?;
+    let value = parse_expr_pair(value_pair, source)?;
+    let (target, iter, ifs) = parse_comp_for(comp_pair, source)?;
+    Ok(Expr::DictComp {
+        key: Box::new(key),
+        value: Box::new(value),
+        target,
+        iter: Box::new(iter),
+        ifs,
+        span,
+    })
+}
+
+fn parse_comp_for(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<(String, Expr, Vec<Expr>), ParseError> {
+    let pair_span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let target_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing comp target", pair_span.clone(), source))?;
+    let iter_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing comp iter", pair_span.clone(), source))?;
+    let target = target_pair.as_str().to_string();
+    let iter = parse_expr_pair(iter_pair, source)?;
+    let mut ifs = Vec::new();
+    for next in inner {
+        if next.as_rule() == Rule::comp_if {
+            let mut if_inner = next.into_inner();
+            let cond = if_inner.next().ok_or_else(|| {
+                error_with_span("missing comp if condition", pair_span.clone(), source)
+            })?;
+            ifs.push(parse_expr_pair(cond, source)?);
+        }
+    }
+    Ok((target, iter, ifs))
 }
 
 fn parse_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -800,7 +916,11 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Call { span, .. }
         | Expr::Attribute { span, .. }
         | Expr::Index { span, .. }
-        | Expr::Paren { span, .. } => span,
+        | Expr::Paren { span, .. }
+        | Expr::List { span, .. }
+        | Expr::Dict { span, .. }
+        | Expr::ListComp { span, .. }
+        | Expr::DictComp { span, .. } => span,
     }
 }
 

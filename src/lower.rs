@@ -160,6 +160,29 @@ pub enum PyExpr {
         expr: Box<PyExpr>,
         span: SourceSpan,
     },
+    List {
+        elements: Vec<PyExpr>,
+        span: SourceSpan,
+    },
+    Dict {
+        entries: Vec<(PyExpr, PyExpr)>,
+        span: SourceSpan,
+    },
+    ListComp {
+        element: Box<PyExpr>,
+        target: String,
+        iter: Box<PyExpr>,
+        ifs: Vec<PyExpr>,
+        span: SourceSpan,
+    },
+    DictComp {
+        key: Box<PyExpr>,
+        value: Box<PyExpr>,
+        target: String,
+        iter: Box<PyExpr>,
+        ifs: Vec<PyExpr>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -426,6 +449,66 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
             expr: Box::new(lower_expr(expr)?),
             span: span.clone(),
         }),
+        Expr::List { elements, span } => {
+            let mut lowered = Vec::with_capacity(elements.len());
+            for element in elements {
+                lowered.push(lower_expr(element)?);
+            }
+            Ok(PyExpr::List {
+                elements: lowered,
+                span: span.clone(),
+            })
+        }
+        Expr::Dict { entries, span } => {
+            let mut lowered = Vec::with_capacity(entries.len());
+            for (key, value) in entries {
+                lowered.push((lower_expr(key)?, lower_expr(value)?));
+            }
+            Ok(PyExpr::Dict {
+                entries: lowered,
+                span: span.clone(),
+            })
+        }
+        Expr::ListComp {
+            element,
+            target,
+            iter,
+            ifs,
+            span,
+        } => {
+            let mut lowered_ifs = Vec::with_capacity(ifs.len());
+            for cond in ifs {
+                lowered_ifs.push(lower_expr(cond)?);
+            }
+            Ok(PyExpr::ListComp {
+                element: Box::new(lower_expr(element)?),
+                target: target.clone(),
+                iter: Box::new(lower_expr(iter)?),
+                ifs: lowered_ifs,
+                span: span.clone(),
+            })
+        }
+        Expr::DictComp {
+            key,
+            value,
+            target,
+            iter,
+            ifs,
+            span,
+        } => {
+            let mut lowered_ifs = Vec::with_capacity(ifs.len());
+            for cond in ifs {
+                lowered_ifs.push(lower_expr(cond)?);
+            }
+            Ok(PyExpr::DictComp {
+                key: Box::new(lower_expr(key)?),
+                value: Box::new(lower_expr(value)?),
+                target: target.clone(),
+                iter: Box::new(lower_expr(iter)?),
+                ifs: lowered_ifs,
+                span: span.clone(),
+            })
+        }
     }
 }
 
@@ -474,7 +557,11 @@ fn expr_span(expr: &PyExpr) -> &SourceSpan {
         | PyExpr::Call { span, .. }
         | PyExpr::Attribute { span, .. }
         | PyExpr::Index { span, .. }
-        | PyExpr::Paren { span, .. } => span,
+        | PyExpr::Paren { span, .. }
+        | PyExpr::List { span, .. }
+        | PyExpr::Dict { span, .. }
+        | PyExpr::ListComp { span, .. }
+        | PyExpr::DictComp { span, .. } => span,
     }
 }
 
@@ -727,7 +814,53 @@ fn expr_source(expr: &PyExpr) -> String {
             format!("{}[{}]", expr_source(value), expr_source(index))
         }
         PyExpr::Paren { expr, .. } => format!("({})", expr_source(expr)),
+        PyExpr::List { elements, .. } => {
+            let items = elements
+                .iter()
+                .map(expr_source)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("[{}]", items)
+        }
+        PyExpr::Dict { entries, .. } => {
+            let items = entries
+                .iter()
+                .map(|(key, value)| format!("{}: {}", expr_source(key), expr_source(value)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{}}}", items)
+        }
+        PyExpr::ListComp {
+            element,
+            target,
+            iter,
+            ifs,
+            ..
+        } => {
+            let tail = comp_for_source(target, iter, ifs);
+            format!("[{}{}]", expr_source(element), tail)
+        }
+        PyExpr::DictComp {
+            key,
+            value,
+            target,
+            iter,
+            ifs,
+            ..
+        } => {
+            let tail = comp_for_source(target, iter, ifs);
+            format!("{{{}: {}{}}}", expr_source(key), expr_source(value), tail)
+        }
     }
+}
+
+fn comp_for_source(target: &str, iter: &PyExpr, ifs: &[PyExpr]) -> String {
+    let mut out = format!(" for {} in {}", target, expr_source(iter));
+    for cond in ifs {
+        out.push_str(" if ");
+        out.push_str(&expr_source(cond));
+    }
+    out
 }
 
 fn import_name(name: &PyImportName) -> String {

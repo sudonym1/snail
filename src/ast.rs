@@ -163,6 +163,29 @@ pub enum Expr {
         expr: Box<Expr>,
         span: SourceSpan,
     },
+    List {
+        elements: Vec<Expr>,
+        span: SourceSpan,
+    },
+    Dict {
+        entries: Vec<(Expr, Expr)>,
+        span: SourceSpan,
+    },
+    ListComp {
+        element: Box<Expr>,
+        target: String,
+        iter: Box<Expr>,
+        ifs: Vec<Expr>,
+        span: SourceSpan,
+    },
+    DictComp {
+        key: Box<Expr>,
+        value: Box<Expr>,
+        target: String,
+        iter: Box<Expr>,
+        ifs: Vec<Expr>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
