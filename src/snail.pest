@@ -1,0 +1,79 @@
+program = { SOI ~ stmt_list? ~ EOI }
+
+stmt_list = { stmt ~ (stmt_sep ~ stmt)* ~ stmt_sep? }
+stmt_sep = _{ ";" | NEWLINE+ }
+
+stmt = _{ compound_stmt | simple_stmt }
+
+compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt }
+simple_stmt = _{
+  return_stmt
+  | break_stmt
+  | continue_stmt
+  | pass_stmt
+  | import_stmt
+  | assign_stmt
+  | expr_stmt
+}
+
+block = { "{" ~ stmt_list? ~ "}" }
+
+if_stmt = { "if" ~ expr ~ block ~ ("elif" ~ expr ~ block)* ~ ("else" ~ block)? }
+while_stmt = { "while" ~ expr ~ block }
+for_stmt = { "for" ~ identifier ~ "in" ~ expr ~ block }
+def_stmt = { "def" ~ identifier ~ parameters ~ block }
+class_stmt = { "class" ~ identifier ~ block }
+
+return_stmt = { "return" ~ expr? }
+break_stmt = { "break" }
+continue_stmt = { "continue" }
+pass_stmt = { "pass" }
+
+import_stmt = _{ import_from | import_names }
+import_from = { "from" ~ dotted_name ~ "import" ~ import_items }
+import_names = { "import" ~ import_items }
+import_items = { import_item ~ ("," ~ import_item)* }
+import_item = { dotted_name ~ ("as" ~ identifier)? }
+dotted_name = { identifier ~ ("." ~ identifier)* }
+
+assign_stmt = { assign_target ~ ("=" ~ assign_target)* ~ "=" ~ expr }
+assign_target = { identifier | attribute | index }
+expr_stmt = { expr }
+
+expr = { or_expr }
+or_expr = { and_expr ~ ("or" ~ and_expr)* }
+and_expr = { not_expr ~ ("and" ~ not_expr)* }
+not_expr = { ("not" ~ not_expr) | comparison }
+comparison = { sum ~ (comp_op ~ sum)* }
+comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | "in" | "is" }
+
+sum = { product ~ (("+" | "-") ~ product)* }
+product = { unary ~ (("*" | "/" | "%" | "//") ~ unary)* }
+unary = { ( "+" | "-" )* ~ power }
+power = { primary ~ ("**" ~ primary)* }
+
+primary = { atom ~ (call | attribute | index)* }
+call = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ")" }
+argument = { identifier ~ "=" ~ expr | expr }
+attribute = { "." ~ identifier }
+index = { "[" ~ expr ~ "]" }
+
+atom = _{ literal | identifier | "(" ~ expr ~ ")" }
+literal = { number | string | boolean | none }
+boolean = { "True" | "False" }
+none = { "None" }
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+string = @{ "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'" | "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" }
+
+identifier = @{ !keyword ~ ident_start ~ ident_continue* }
+ident_start = { ASCII_ALPHA | "_" }
+ident_continue = { ASCII_ALPHANUMERIC | "_" }
+keyword = _{
+  ("if" | "else" | "elif" | "while" | "for" | "in" | "def" | "class"
+  | "return" | "break" | "continue" | "pass" | "and" | "or" | "not"
+  | "import" | "from" | "as" | "True" | "False" | "None") ~ !ident_continue
+}
+
+WHITESPACE = _{ " " | "\t" }
+NEWLINE = _{ "\r\n" | "\n" }
+COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* }
