@@ -90,7 +90,10 @@ pub struct ImportItem {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssignTarget {
-    Name { name: String, span: SourceSpan },
+    Name {
+        name: String,
+        span: SourceSpan,
+    },
     Attribute {
         value: Box<Expr>,
         attr: String,
@@ -105,11 +108,25 @@ pub enum AssignTarget {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    Name { name: String, span: SourceSpan },
-    Number { value: String, span: SourceSpan },
-    String { value: String, span: SourceSpan },
-    Bool { value: bool, span: SourceSpan },
-    None { span: SourceSpan },
+    Name {
+        name: String,
+        span: SourceSpan,
+    },
+    Number {
+        value: String,
+        span: SourceSpan,
+    },
+    String {
+        value: String,
+        span: SourceSpan,
+    },
+    Bool {
+        value: bool,
+        span: SourceSpan,
+    },
+    None {
+        span: SourceSpan,
+    },
     Unary {
         op: UnaryOp,
         expr: Box<Expr>,

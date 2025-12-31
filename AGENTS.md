@@ -9,7 +9,7 @@
 ## Build, Test, and Development Commands
 - `cargo build`: build the project in debug mode.
 - `cargo test`: run unit/integration tests (Rust’s built-in test harness).
-- `cargo fmt --check`: verify formatting matches `rustfmt`.
+- `cargo fmt --check`: verify formatting matches `rustfmt`. Run `cargo fmt` locally before committing so CI formatting checks always pass.
 - `cargo clippy -- -D warnings`: lint and treat warnings as errors.
 
 ## Coding Style & Naming Conventions
