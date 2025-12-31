@@ -14,6 +14,11 @@ Python interpreter. The implementation language is still open and should be
 chosen based on parser ergonomics, ease of AST manipulation, and maintenance
 cost.
 
+Development notes
+
+- Python integration tests expect a usable CPython on `PATH`. Set `PYO3_PYTHON=
+  python3` (as CI does) if multiple Python versions are installed.
+
 Project plan
 
 Phase 0: Project scaffold and decisions
@@ -36,10 +41,10 @@ Phase 2: Lowering to Python AST
 - [x] Defer new syntax features until core pipeline is working.
 
 Phase 3: CPython integration
-- [ ] Implement a Python extension module (Rust + pyo3).
-- [ ] Provide a module API for compiling and executing Snail code.
-- [ ] Add a Python import hook so `import foo.snail` works.
-- [ ] Ensure Snail code can import Python modules directly.
+- [x] Implement a Python extension module (Rust + pyo3).
+- [x] Provide a module API for compiling and executing Snail code.
+- [x] Add a Python import hook so `import foo.snail` works.
+- [x] Ensure Snail code can import Python modules directly.
 
 Phase 4: Interop and runtime features
 - [ ] Ensure Snail functions/classes are normal Python callables.
