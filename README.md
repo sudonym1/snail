@@ -63,14 +63,32 @@ Phase 5: Add all major python semantics
 - [ ] Add default parameters, `*args`, and `**kwargs`.
 - [ ] Add `for`/`while` `else` blocks and `break`/`continue` in `try`.
 - [ ] Add pattern matching (`match`/`case`) if keeping parity with Python 3.10+.
+- [ ] Add support for if-expressions. e.g. `foo = x if y else z`
 
-Phase 6: Interop and runtime features
+Phase 6: Snail Specific semantics
+- [ ] Add first-class syntax for subprocess calls using `$(<command>)` and `@(<command>)`.
+  The `<command>` body is treated as an implicit f-string (no quotes required), so
+  `$(echo {name})` is valid. `$(<command>)` captures stdout and returns a string,
+  raising on non-zero exit. `@(<command>)` does not capure output, but still
+  raises an exception when the command fails. `@(<command>)` returns 0 on
+  success.
+  Both expand into expressions (not statements); complex cases should use Python's `subprocess`.
+- [ ] Add compact exception swallowing expression: `<expr>?` would result in
+  `None` in the case where `<expr>` raises an Exception. `<expr> ? <fallback
+  expr>` would result in the fallback expression getting evaluated in the case
+  the first expression fails.
+- [ ] Classes can define the `__fallback__(self, exc)` method which, if present, will be
+  invoked by the `?` operator in the casee where no explicit fallback
+  expression is defined. For example the class that implements `@(command)`
+  could implement `__fallback__` to return the CalledProcessError.returncode.
+
+Phase 7: Interop and runtime features
 - [ ] Ensure Snail functions/classes are normal Python callables.
 - [ ] Handle globals/locals and module namespaces correctly.
 - [ ] Define the standard library boundary and any Snail-specific helpers.
 - [ ] Add integration tests that mix Snail and Python modules.
 
-Phase 7: Performance and polish
+Phase 8: Performance and polish
 - [ ] Cache compiled modules and improve incremental import speed.
 - [ ] Optimize hot paths in parsing/lowering.
 - [ ] Expand documentation, examples, and language reference.
