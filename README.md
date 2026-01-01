@@ -28,6 +28,20 @@ Python interpreter. The implementation language is still open and should be
 chosen based on parser ergonomics, ease of AST manipulation, and maintenance
 cost.
 
+Editor and shell integration
+
+- Vim syntax highlighting lives in `extras/vim/syntax/snail.vim`. Copy it into
+  your Vim runtime (e.g., `~/.vim/syntax/`) and add a simple ftdetect rule such
+  as `au BufRead,BufNewFile *.snail setfiletype snail`.
+- Neovim uses the same syntax file; drop it into
+  `~/.config/nvim/syntax/snail.vim` and add either the same ftdetect autocommand
+  under `~/.config/nvim/ftdetect/snail.vim` or a Lua rule such as
+  `vim.filetype.add({ extension = { snail = "snail" } })` in your config.
+- Shell completions for Bash, Zsh, and Fish live in `extras/completions/`.
+  Source the Bash script in your shell startup, add the Zsh script to your
+  `$fpath`, or place the Fish script in
+  `~/.config/fish/completions/snail.fish`.
+
 Development notes
 
 - Python integration tests expect a usable CPython on `PATH`. Set `PYO3_PYTHON=
@@ -104,8 +118,8 @@ Phase 7: Snail Specific semantics
 Phase 8: Documentation and utilities
 - [x] Expand documentation, examples, and language reference.
 - [ ] Provide useful utilities to help users adopt Snail.
-  - [ ] Syntax highlighting for Vim.
-  - [ ] Autocompletion scripts for the `snail` CLI (bash, zsh, fish).
+  - [x] Syntax highlighting for Vim.
+  - [x] Autocompletion scripts for the `snail` CLI (bash, zsh, fish).
   - [ ] Easy installation path (PyPI package and/or Homebrew formula).
 
 Phase 9: Awk-style line processing
