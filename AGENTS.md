@@ -1,5 +1,9 @@
 # Repository Guidelines
 
+WHEN ASKED TO EXECUTE ON A PHASE DETERMINE WHAT THAT PHASE MEANS FROM THE
+README.md and always make sure that examples/all_syntax.snail is updated with
+any new syntax, and all CI tests pass.
+
 ## Project Structure & Module Organization
 - `src/`: Rust sources (currently `main.rs` plus the `src/snail.pest` grammar).
 - `docs/`: design notes and decisions (see `docs/DECISIONS.md`).

@@ -87,9 +87,7 @@ Phase 7: Snail Specific semantics
   exception forcing users to provide a fallback value.
   Both expand into expressions (not statements); complex cases should use Python's `subprocess` directly.
 
-Phase 8: Performance and polish
-- [ ] Cache compiled modules and improve incremental import speed.
-- [ ] Optimize hot paths in parsing/lowering.
+Phase 8: Documentation
 - [ ] Expand documentation, examples, and language reference.
 
 Phase 0 decisions (executed)
