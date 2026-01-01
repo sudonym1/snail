@@ -3,6 +3,7 @@ use std::fmt;
 use std::fmt::Write as _;
 
 use crate::ast::*;
+use crate::awk::{AwkProgram, AwkRule};
 
 const SNAIL_TRY_HELPER: &str = "__snail_compact_try";
 const SNAIL_EXCEPTION_VAR: &str = "__snail_compact_exc";
@@ -348,6 +349,66 @@ pub fn lower_program(program: &Program) -> Result<PyModule, LowerError> {
     })
 }
 
+pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
+    let span = program.span.clone();
+    let mut body = Vec::new();
+
+    body.push(PyStmt::Import {
+        names: vec![PyImportName {
+            name: vec!["sys".to_string()],
+            asname: None,
+            span: span.clone(),
+        }],
+        span: span.clone(),
+    });
+
+    let mut main_body = Vec::new();
+    for block in &program.begin_blocks {
+        main_body.extend(lower_block(block)?);
+    }
+
+    main_body.push(assign_name("__snail_nr", number_expr("0", &span), &span));
+
+    let files_expr = PyExpr::Binary {
+        left: Box::new(PyExpr::Index {
+            value: Box::new(PyExpr::Attribute {
+                value: Box::new(name_expr("sys", &span)),
+                attr: "argv".to_string(),
+                span: span.clone(),
+            }),
+            index: Box::new(PyExpr::Slice {
+                start: Some(Box::new(number_expr("1", &span))),
+                end: None,
+                span: span.clone(),
+            }),
+            span: span.clone(),
+        }),
+        op: PyBinaryOp::Or,
+        right: Box::new(PyExpr::List {
+            elements: vec![string_expr("-", &span)],
+            span: span.clone(),
+        }),
+        span: span.clone(),
+    };
+
+    let file_loop = lower_awk_file_loop(program, &span)?;
+    main_body.push(PyStmt::For {
+        target: name_expr("__snail_path", &span),
+        iter: files_expr,
+        body: file_loop,
+        orelse: Vec::new(),
+        span: span.clone(),
+    });
+
+    for block in &program.end_blocks {
+        main_body.extend(lower_block(block)?);
+    }
+
+    body.extend(main_body);
+
+    Ok(PyModule { body, span })
+}
+
 fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
     match stmt {
         Stmt::If {
@@ -497,6 +558,195 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
             value: lower_expr(value)?,
             span: span.clone(),
         }),
+    }
+}
+
+fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<PyStmt>, LowerError> {
+    let mut file_loop = Vec::new();
+    file_loop.push(assign_name("__snail_fnr", number_expr("0", span), span));
+
+    let stdin_body = vec![
+        assign_name(
+            "__snail_file",
+            PyExpr::Attribute {
+                value: Box::new(name_expr("sys", span)),
+                attr: "stdin".to_string(),
+                span: span.clone(),
+            },
+            span,
+        ),
+        lower_awk_line_loop(program, span, name_expr("__snail_file", span))?,
+    ];
+
+    let open_call = PyExpr::Call {
+        func: Box::new(name_expr("open", span)),
+        args: vec![pos_arg(name_expr("__snail_path", span), span)],
+        span: span.clone(),
+    };
+    let with_item = PyWithItem {
+        context: open_call,
+        target: Some(name_expr("__snail_file", span)),
+        span: span.clone(),
+    };
+    let with_stmt = PyStmt::With {
+        items: vec![with_item],
+        body: vec![lower_awk_line_loop(
+            program,
+            span,
+            name_expr("__snail_file", span),
+        )?],
+        span: span.clone(),
+    };
+
+    let test = PyExpr::Compare {
+        left: Box::new(name_expr("__snail_path", span)),
+        ops: vec![PyCompareOp::Eq],
+        comparators: vec![string_expr("-", span)],
+        span: span.clone(),
+    };
+
+    file_loop.push(PyStmt::If {
+        test,
+        body: stdin_body,
+        orelse: vec![with_stmt],
+        span: span.clone(),
+    });
+
+    Ok(file_loop)
+}
+
+fn lower_awk_line_loop(
+    program: &AwkProgram,
+    span: &SourceSpan,
+    iter: PyExpr,
+) -> Result<PyStmt, LowerError> {
+    let mut loop_body = Vec::new();
+    loop_body.push(assign_name(
+        "__snail_nr",
+        PyExpr::Binary {
+            left: Box::new(name_expr("__snail_nr", span)),
+            op: PyBinaryOp::Add,
+            right: Box::new(number_expr("1", span)),
+            span: span.clone(),
+        },
+        span,
+    ));
+    loop_body.push(assign_name(
+        "__snail_fnr",
+        PyExpr::Binary {
+            left: Box::new(name_expr("__snail_fnr", span)),
+            op: PyBinaryOp::Add,
+            right: Box::new(number_expr("1", span)),
+            span: span.clone(),
+        },
+        span,
+    ));
+
+    let rstrip_call = PyExpr::Call {
+        func: Box::new(PyExpr::Attribute {
+            value: Box::new(name_expr("__snail_raw", span)),
+            attr: "rstrip".to_string(),
+            span: span.clone(),
+        }),
+        args: vec![pos_arg(string_expr("\\n", span), span)],
+        span: span.clone(),
+    };
+    loop_body.push(assign_name("line", rstrip_call, span));
+
+    let split_call = PyExpr::Call {
+        func: Box::new(PyExpr::Attribute {
+            value: Box::new(name_expr("line", span)),
+            attr: "split".to_string(),
+            span: span.clone(),
+        }),
+        args: Vec::new(),
+        span: span.clone(),
+    };
+    loop_body.push(assign_name("fields", split_call, span));
+    loop_body.push(assign_name("nr", name_expr("__snail_nr", span), span));
+    loop_body.push(assign_name("fnr", name_expr("__snail_fnr", span), span));
+    loop_body.push(assign_name("path", name_expr("__snail_path", span), span));
+
+    loop_body.extend(lower_awk_rules(&program.rules)?);
+
+    Ok(PyStmt::For {
+        target: name_expr("__snail_raw", span),
+        iter,
+        body: loop_body,
+        orelse: Vec::new(),
+        span: span.clone(),
+    })
+}
+
+fn lower_awk_rules(rules: &[AwkRule]) -> Result<Vec<PyStmt>, LowerError> {
+    let mut stmts = Vec::new();
+    for rule in rules {
+        let mut action = if rule.has_action() {
+            lower_block(&rule.action)?
+        } else {
+            vec![awk_default_print(&rule.span)]
+        };
+
+        if let Some(pattern) = &rule.pattern {
+            stmts.push(PyStmt::If {
+                test: lower_expr(pattern)?,
+                body: action,
+                orelse: Vec::new(),
+                span: rule.span.clone(),
+            });
+        } else {
+            stmts.append(&mut action);
+        }
+    }
+    Ok(stmts)
+}
+
+fn awk_default_print(span: &SourceSpan) -> PyStmt {
+    PyStmt::Expr {
+        value: PyExpr::Call {
+            func: Box::new(name_expr("print", span)),
+            args: vec![pos_arg(name_expr("line", span), span)],
+            span: span.clone(),
+        },
+        span: span.clone(),
+    }
+}
+
+fn assign_name(name: &str, value: PyExpr, span: &SourceSpan) -> PyStmt {
+    PyStmt::Assign {
+        targets: vec![name_expr(name, span)],
+        value,
+        span: span.clone(),
+    }
+}
+
+fn name_expr(name: &str, span: &SourceSpan) -> PyExpr {
+    PyExpr::Name {
+        id: name.to_string(),
+        span: span.clone(),
+    }
+}
+
+fn string_expr(value: &str, span: &SourceSpan) -> PyExpr {
+    PyExpr::String {
+        value: value.to_string(),
+        raw: false,
+        delimiter: StringDelimiter::Double,
+        span: span.clone(),
+    }
+}
+
+fn number_expr(value: &str, span: &SourceSpan) -> PyExpr {
+    PyExpr::Number {
+        value: value.to_string(),
+        span: span.clone(),
+    }
+}
+
+fn pos_arg(value: PyExpr, span: &SourceSpan) -> PyArgument {
+    PyArgument::Positional {
+        value,
+        span: span.clone(),
     }
 }
 

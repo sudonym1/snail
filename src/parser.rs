@@ -3,6 +3,7 @@ use pest::iterators::Pair;
 use pest_derive::Parser;
 
 use crate::ast::*;
+use crate::awk::{AwkProgram, AwkRule};
 use crate::error::ParseError;
 
 #[derive(Parser)]
@@ -23,6 +24,55 @@ pub fn parse_program(source: &str) -> Result<Program, ParseError> {
         }
     }
     Ok(Program { stmts, span })
+}
+
+pub fn parse_awk_program(source: &str) -> Result<AwkProgram, ParseError> {
+    let mut pairs = SnailParser::parse(Rule::awk_program, source)
+        .map_err(|err| parse_error_from_pest(err, source))?;
+    let pair = pairs
+        .next()
+        .ok_or_else(|| ParseError::new("missing awk program root"))?;
+    let span = full_span(source);
+
+    let mut begin_blocks = Vec::new();
+    let mut rules = Vec::new();
+    let mut end_blocks = Vec::new();
+
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::awk_entry_list {
+            for entry in inner.into_inner() {
+                match entry.as_rule() {
+                    Rule::awk_begin => {
+                        let block = entry
+                            .into_inner()
+                            .find(|pair| pair.as_rule() == Rule::block)
+                            .ok_or_else(|| {
+                                error_with_span("missing BEGIN block", span.clone(), source)
+                            })?;
+                        begin_blocks.push(parse_block(block, source)?);
+                    }
+                    Rule::awk_end => {
+                        let block = entry
+                            .into_inner()
+                            .find(|pair| pair.as_rule() == Rule::block)
+                            .ok_or_else(|| {
+                                error_with_span("missing END block", span.clone(), source)
+                            })?;
+                        end_blocks.push(parse_block(block, source)?);
+                    }
+                    Rule::awk_rule => rules.push(parse_awk_rule(entry, source)?),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    Ok(AwkProgram {
+        begin_blocks,
+        rules,
+        end_blocks,
+        span,
+    })
 }
 
 fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {
@@ -65,6 +115,40 @@ fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
             source,
         )),
     }
+}
+
+fn parse_awk_rule(pair: Pair<'_, Rule>, source: &str) -> Result<AwkRule, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut pattern = None;
+    let mut action = None;
+
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::awk_pattern => {
+                let expr_pair = inner
+                    .into_inner()
+                    .next()
+                    .ok_or_else(|| error_with_span("missing awk pattern", span.clone(), source))?;
+                pattern = Some(parse_expr_pair(expr_pair, source)?);
+            }
+            Rule::block => action = Some(parse_block(inner, source)?),
+            _ => {}
+        }
+    }
+
+    if pattern.is_none() && action.is_none() {
+        return Err(error_with_span(
+            "awk rule requires a pattern or a block",
+            span,
+            source,
+        ));
+    }
+
+    Ok(AwkRule {
+        pattern,
+        action: action.unwrap_or_default(),
+        span,
+    })
 }
 
 fn parse_block(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {

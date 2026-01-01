@@ -198,6 +198,7 @@ print("prefer_lambda", prefer_lambda)
 print("dunder_only", dunder_only)
 temp_value = 42
 del temp_value
+
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
 print(sysmod.version)

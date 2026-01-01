@@ -9,10 +9,19 @@ Snail aims to:
 - Provide concise syntax for one-liners and pipelines, inspired by Perl and awk.
 - Favor terse, script-friendly syntax without introducing whitespace coupling.
 
-Documentation and examples live in `docs/REFERENCE.md` and
-`examples/all_syntax.snail`. The reference walks through the syntax surface and
-runtime behaviors, while the example file provides a runnable tour that mirrors
-the language features. Both stay current as phases are delivered.
+Documentation and examples live in `docs/REFERENCE.md`,
+`examples/all_syntax.snail`, and `examples/awk.snail`. The reference walks
+through the syntax surface and runtime behaviors, while the example files
+provide runnable tours that mirror the language features. Both stay current as
+phases are delivered.
+
+Awk mode is available for line-oriented scripts. Enable it with `snail --awk`
+or by starting a file with `#!snail awk`. Awk sources are written as
+pattern/action pairs evaluated for each input line. `BEGIN` and `END` blocks run
+before and after the line loop, a lone pattern defaults to printing matching
+lines, and a bare block runs for every line. Built-in variables mirror awk: the
+current line as `line`, whitespace-split fields as `fields`, and counters `nr`
+and `fnr` for global and per-file line numbers.
 
 The compiler/transpiler will generate Python source and execute it with the
 Python interpreter. The implementation language is still open and should be
@@ -100,9 +109,9 @@ Phase 8: Documentation and utilities
   - [ ] Easy installation path (PyPI package and/or Homebrew formula).
 
 Phase 9: Awk-style line processing
-- [ ] Add an awk mode that evaluates pattern/action pairs across input lines.
-- [ ] Provide syntactic sugar for common awk idioms (e.g., default actions, begin/end hooks).
-- [ ] Surface a clear entry point for enabling awk mode (CLI flag or file directive) and document usage.
+- [x] Add an awk mode that evaluates pattern/action pairs across input lines.
+- [x] Provide syntactic sugar for common awk idioms (e.g., default actions, begin/end hooks).
+- [x] Surface a clear entry point for enabling awk mode (CLI flag or file directive) and document usage.
 
 Phase 0 decisions (executed)
 - Implementation language: Rust (2024 edition).

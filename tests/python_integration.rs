@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyModule};
 use tempfile::TempDir;
 
 use snail::{exec_snail, register_in_python};
@@ -79,14 +79,22 @@ value = example.result
 }
 
 #[test]
-fn executes_examples_all_syntax() {
+fn executes_example_files() {
     pyo3::prepare_freethreaded_python();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/all_syntax.snail");
-    let source = fs::read_to_string(&path).expect("read example source");
+    let examples_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples");
+
+    let all_syntax_path = examples_dir.join("all_syntax.snail");
+    let all_syntax = fs::read_to_string(&all_syntax_path).expect("read example source");
 
     Python::with_gil(|py| {
-        let globals = exec_snail(py, &source, Some("examples/all_syntax.snail"), None, None)
-            .expect("example should execute");
+        let globals = exec_snail(
+            py,
+            &all_syntax,
+            Some("examples/all_syntax.snail"),
+            None,
+            None,
+        )
+        .expect("example should execute");
         let globals = globals
             .bind(py)
             .downcast::<PyDict>()
@@ -120,6 +128,42 @@ fn executes_examples_all_syntax() {
         assert_eq!(lookup.get(&2), Some(&4));
         assert_eq!(lookup.get(&3), Some(&6));
         assert_eq!(lookup.get(&4), Some(&8));
+    });
+
+    let awk_example_path = examples_dir.join("awk.snail");
+    let awk_example = fs::read_to_string(&awk_example_path).expect("read awk example");
+
+    Python::with_gil(|py| {
+        let sys = PyModule::import_bound(py, "sys").expect("import sys");
+        let io = PyModule::import_bound(py, "io").expect("import io");
+
+        let stdin = io
+            .getattr("StringIO")
+            .expect("lookup StringIO")
+            .call1(("alpha\nbeta\ndelta\n",))
+            .expect("build stdin");
+        let stdout = io
+            .getattr("StringIO")
+            .expect("lookup StringIO")
+            .call0()
+            .expect("build stdout");
+
+        sys.setattr("stdin", &stdin).expect("install stdin");
+        sys.setattr("stdout", &stdout).expect("install stdout");
+
+        exec_snail(py, &awk_example, Some("examples/awk.snail"), None, None)
+            .expect("awk example should execute");
+
+        let output: String = stdout
+            .call_method0("getvalue")
+            .expect("extract output")
+            .extract()
+            .expect("output should be string");
+
+        assert_eq!(
+            output,
+            "demo begin\n1\nalpha\n2\nbeta\nmatched: delta\n3\ndelta\ndemo end\n"
+        );
     });
 }
 
