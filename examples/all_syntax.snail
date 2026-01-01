@@ -33,6 +33,12 @@ def compute(nums) {
     return total
 }
 
+def named_args(head, tail) {
+    print("named args", head, tail)
+}
+
+named_args(head=1,  tail=2)
+
 def join_all(head, tail=0, * rest, **extras) {
     total = head + tail
     for n in rest {

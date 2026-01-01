@@ -157,6 +157,19 @@ fn run_source(input: &CliInput) -> Result<(), CliError> {
             .and_then(|exec| exec.call1((code, &globals, &globals)))
             .map_err(CliError::Python)?;
 
+        // Ensure buffered output is flushed for non-interactive runs.
+        flush_python_io(&sys);
+
         Ok(())
     })
+}
+
+fn flush_python_io(sys: &Bound<'_, PyModule>) {
+    for name in ["stdout", "stderr", "__stdout__", "__stderr__"] {
+        if let Ok(stream) = sys.getattr(name) {
+            let _ = stream.call_method0("flush");
+        }
+    }
+    let _ = io::stdout().flush();
+    let _ = io::stderr().flush();
 }

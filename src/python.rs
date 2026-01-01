@@ -44,6 +44,7 @@ pub fn exec_snail(py: Python<'_>, source: &str, filename: Option<&str>) -> PyRes
     PyModule::import_bound(py, "builtins")?
         .getattr("exec")?
         .call1((code, &globals, &globals))?;
+    flush_python_io(py)?;
     Ok(globals.into())
 }
 
@@ -121,4 +122,14 @@ pub fn register_in_python(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     let sys = PyModule::import_bound(py, "sys")?;
     sys.getattr("modules")?.set_item("snail", &module)?;
     Ok(module)
+}
+
+fn flush_python_io(py: Python<'_>) -> PyResult<()> {
+    let sys = PyModule::import_bound(py, "sys")?;
+    for name in ["stdout", "stderr", "__stdout__", "__stderr__"] {
+        if let Ok(stream) = sys.getattr(name) {
+            let _ = stream.call_method0("flush");
+        }
+    }
+    Ok(())
 }
