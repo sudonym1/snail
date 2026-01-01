@@ -92,8 +92,17 @@ Phase 7: Snail Specific semantics
   exception forcing users to provide a fallback value.
   Both expand into expressions (not statements); complex cases should use Python's `subprocess` directly.
 
-Phase 8: Documentation
+Phase 8: Documentation and utilities
 - [x] Expand documentation, examples, and language reference.
+- [ ] Provide useful utilities to help users adopt Snail.
+  - [ ] Syntax highlighting for Vim.
+  - [ ] Autocompletion scripts for the `snail` CLI (bash, zsh, fish).
+  - [ ] Easy installation path (PyPI package and/or Homebrew formula).
+
+Phase 9: Awk-style line processing
+- [ ] Add an awk mode that evaluates pattern/action pairs across input lines.
+- [ ] Provide syntactic sugar for common awk idioms (e.g., default actions, begin/end hooks).
+- [ ] Surface a clear entry point for enabling awk mode (CLI flag or file directive) and document usage.
 
 Phase 0 decisions (executed)
 - Implementation language: Rust (2024 edition).
