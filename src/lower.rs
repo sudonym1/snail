@@ -6,6 +6,8 @@ use crate::ast::*;
 
 const SNAIL_TRY_HELPER: &str = "__snail_compact_try";
 const SNAIL_EXCEPTION_VAR: &str = "__snail_compact_exc";
+const SNAIL_SUBPROCESS_CAPTURE: &str = "__snail_subprocess_capture";
+const SNAIL_SUBPROCESS_STATUS: &str = "__snail_subprocess_status";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LowerError {
@@ -163,6 +165,10 @@ pub enum PyExpr {
         delimiter: StringDelimiter,
         span: SourceSpan,
     },
+    FString {
+        parts: Vec<PyFStringPart>,
+        span: SourceSpan,
+    },
     Bool {
         value: bool,
         span: SourceSpan,
@@ -253,6 +259,12 @@ pub enum PyExpr {
         end: Option<Box<PyExpr>>,
         span: SourceSpan,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PyFStringPart {
+    Text(String),
+    Expr(PyExpr),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -697,6 +709,41 @@ fn lower_expr_with_exception(
                 span: span.clone(),
             })
         }
+        Expr::Subprocess { kind, parts, span } => {
+            let mut lowered_parts = Vec::with_capacity(parts.len());
+            for part in parts {
+                match part {
+                    SubprocessPart::Text(text) => {
+                        lowered_parts.push(PyFStringPart::Text(text.clone()));
+                    }
+                    SubprocessPart::Expr(expr) => {
+                        lowered_parts.push(PyFStringPart::Expr(lower_expr_with_exception(
+                            expr,
+                            exception_name,
+                        )?));
+                    }
+                }
+            }
+            let command = PyExpr::FString {
+                parts: lowered_parts,
+                span: span.clone(),
+            };
+            let helper = match kind {
+                SubprocessKind::Capture => SNAIL_SUBPROCESS_CAPTURE,
+                SubprocessKind::Status => SNAIL_SUBPROCESS_STATUS,
+            };
+            Ok(PyExpr::Call {
+                func: Box::new(PyExpr::Name {
+                    id: helper.to_string(),
+                    span: span.clone(),
+                }),
+                args: vec![PyArgument::Positional {
+                    value: command,
+                    span: span.clone(),
+                }],
+                span: span.clone(),
+            })
+        }
         Expr::Call { func, args, span } => Ok(PyExpr::Call {
             func: Box::new(lower_expr_with_exception(func, exception_name)?),
             args: args
@@ -896,6 +943,7 @@ fn expr_span(expr: &PyExpr) -> &SourceSpan {
         PyExpr::Name { span, .. }
         | PyExpr::Number { span, .. }
         | PyExpr::String { span, .. }
+        | PyExpr::FString { span, .. }
         | PyExpr::Bool { span, .. }
         | PyExpr::None { span }
         | PyExpr::Unary { span, .. }
@@ -961,11 +1009,19 @@ fn lower_compare_op(op: CompareOp) -> PyCompareOp {
 
 pub fn python_source(module: &PyModule) -> String {
     let mut writer = PythonWriter::new();
-    if module_uses_snail_try(module) {
+    let uses_try = module_uses_snail_try(module);
+    let uses_subprocess = module_uses_snail_subprocess(module);
+    if uses_try {
         writer.write_snail_try_helper();
-        if !module.body.is_empty() {
+    }
+    if uses_subprocess {
+        if uses_try {
             writer.write_line("");
         }
+        writer.write_snail_subprocess_helpers();
+    }
+    if (uses_try || uses_subprocess) && !module.body.is_empty() {
+        writer.write_line("");
     }
     writer.write_module(module);
     writer.finish()
@@ -973,6 +1029,10 @@ pub fn python_source(module: &PyModule) -> String {
 
 fn module_uses_snail_try(module: &PyModule) -> bool {
     module.body.iter().any(stmt_uses_snail_try)
+}
+
+fn module_uses_snail_subprocess(module: &PyModule) -> bool {
+    module.body.iter().any(stmt_uses_snail_subprocess)
 }
 
 fn stmt_uses_snail_try(stmt: &PyStmt) -> bool {
@@ -1038,6 +1098,172 @@ fn stmt_uses_snail_try(stmt: &PyStmt) -> bool {
     }
 }
 
+fn stmt_uses_snail_subprocess(stmt: &PyStmt) -> bool {
+    match stmt {
+        PyStmt::If {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_subprocess(test)
+                || block_uses_snail_subprocess(body)
+                || block_uses_snail_subprocess(orelse)
+        }
+        PyStmt::While {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_subprocess(test)
+                || block_uses_snail_subprocess(body)
+                || block_uses_snail_subprocess(orelse)
+        }
+        PyStmt::For {
+            target,
+            iter,
+            body,
+            orelse,
+            ..
+        } => {
+            expr_uses_snail_subprocess(target)
+                || expr_uses_snail_subprocess(iter)
+                || block_uses_snail_subprocess(body)
+                || block_uses_snail_subprocess(orelse)
+        }
+        PyStmt::FunctionDef { body, .. } | PyStmt::ClassDef { body, .. } => {
+            block_uses_snail_subprocess(body)
+        }
+        PyStmt::Try {
+            body,
+            handlers,
+            orelse,
+            finalbody,
+            ..
+        } => {
+            block_uses_snail_subprocess(body)
+                || handlers.iter().any(handler_uses_snail_subprocess)
+                || block_uses_snail_subprocess(orelse)
+                || block_uses_snail_subprocess(finalbody)
+        }
+        PyStmt::With { items, body, .. } => {
+            items.iter().any(with_item_uses_snail_subprocess) || block_uses_snail_subprocess(body)
+        }
+        PyStmt::Return { value, .. } => value.as_ref().is_some_and(expr_uses_snail_subprocess),
+        PyStmt::Raise { value, from, .. } => {
+            value.as_ref().is_some_and(expr_uses_snail_subprocess)
+                || from.as_ref().is_some_and(expr_uses_snail_subprocess)
+        }
+        PyStmt::Assert { test, message, .. } => {
+            expr_uses_snail_subprocess(test)
+                || message.as_ref().is_some_and(expr_uses_snail_subprocess)
+        }
+        PyStmt::Delete { targets, .. } => targets.iter().any(expr_uses_snail_subprocess),
+        PyStmt::Import { .. }
+        | PyStmt::ImportFrom { .. }
+        | PyStmt::Break { .. }
+        | PyStmt::Continue { .. }
+        | PyStmt::Pass { .. } => false,
+        PyStmt::Assign { targets, value, .. } => {
+            targets.iter().any(expr_uses_snail_subprocess) || expr_uses_snail_subprocess(value)
+        }
+        PyStmt::Expr { value, .. } => expr_uses_snail_subprocess(value),
+    }
+}
+
+fn block_uses_snail_subprocess(block: &[PyStmt]) -> bool {
+    block.iter().any(stmt_uses_snail_subprocess)
+}
+
+fn handler_uses_snail_subprocess(handler: &PyExceptHandler) -> bool {
+    handler
+        .type_name
+        .as_ref()
+        .is_some_and(expr_uses_snail_subprocess)
+        || block_uses_snail_subprocess(&handler.body)
+}
+
+fn with_item_uses_snail_subprocess(item: &PyWithItem) -> bool {
+    expr_uses_snail_subprocess(&item.context)
+        || item.target.as_ref().is_some_and(expr_uses_snail_subprocess)
+}
+
+fn argument_uses_snail_subprocess(arg: &PyArgument) -> bool {
+    match arg {
+        PyArgument::Positional { value, .. }
+        | PyArgument::Keyword { value, .. }
+        | PyArgument::Star { value, .. }
+        | PyArgument::KwStar { value, .. } => expr_uses_snail_subprocess(value),
+    }
+}
+
+fn expr_uses_snail_subprocess(expr: &PyExpr) -> bool {
+    match expr {
+        PyExpr::Name { .. }
+        | PyExpr::Number { .. }
+        | PyExpr::String { .. }
+        | PyExpr::Bool { .. }
+        | PyExpr::None { .. } => false,
+        PyExpr::FString { parts, .. } => parts.iter().any(|part| match part {
+            PyFStringPart::Text(_) => false,
+            PyFStringPart::Expr(expr) => expr_uses_snail_subprocess(expr),
+        }),
+        PyExpr::Unary { operand, .. } => expr_uses_snail_subprocess(operand),
+        PyExpr::Binary { left, right, .. } => {
+            expr_uses_snail_subprocess(left) || expr_uses_snail_subprocess(right)
+        }
+        PyExpr::Compare {
+            left, comparators, ..
+        } => expr_uses_snail_subprocess(left) || comparators.iter().any(expr_uses_snail_subprocess),
+        PyExpr::IfExpr {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_subprocess(test)
+                || expr_uses_snail_subprocess(body)
+                || expr_uses_snail_subprocess(orelse)
+        }
+        PyExpr::Lambda { body, .. } => expr_uses_snail_subprocess(body),
+        PyExpr::Call { func, args, .. } => {
+            if matches!(func.as_ref(), PyExpr::Name { id, .. }
+                if id == SNAIL_SUBPROCESS_CAPTURE || id == SNAIL_SUBPROCESS_STATUS)
+            {
+                return true;
+            }
+            expr_uses_snail_subprocess(func) || args.iter().any(argument_uses_snail_subprocess)
+        }
+        PyExpr::Attribute { value, .. } => expr_uses_snail_subprocess(value),
+        PyExpr::Index { value, index, .. } => {
+            expr_uses_snail_subprocess(value) || expr_uses_snail_subprocess(index)
+        }
+        PyExpr::Paren { expr, .. } => expr_uses_snail_subprocess(expr),
+        PyExpr::List { elements, .. } | PyExpr::Tuple { elements, .. } => {
+            elements.iter().any(expr_uses_snail_subprocess)
+        }
+        PyExpr::Dict { entries, .. } => entries.iter().any(|(key, value)| {
+            expr_uses_snail_subprocess(key) || expr_uses_snail_subprocess(value)
+        }),
+        PyExpr::Set { elements, .. } => elements.iter().any(expr_uses_snail_subprocess),
+        PyExpr::ListComp {
+            element, iter, ifs, ..
+        } => {
+            expr_uses_snail_subprocess(element)
+                || expr_uses_snail_subprocess(iter)
+                || ifs.iter().any(expr_uses_snail_subprocess)
+        }
+        PyExpr::DictComp {
+            key,
+            value,
+            iter,
+            ifs,
+            ..
+        } => {
+            expr_uses_snail_subprocess(key)
+                || expr_uses_snail_subprocess(value)
+                || expr_uses_snail_subprocess(iter)
+                || ifs.iter().any(expr_uses_snail_subprocess)
+        }
+        PyExpr::Slice { start, end, .. } => {
+            start.as_deref().is_some_and(expr_uses_snail_subprocess)
+                || end.as_deref().is_some_and(expr_uses_snail_subprocess)
+        }
+    }
+}
+
 fn block_uses_snail_try(block: &[PyStmt]) -> bool {
     block.iter().any(stmt_uses_snail_try)
 }
@@ -1067,6 +1293,10 @@ fn expr_uses_snail_try(expr: &PyExpr) -> bool {
         | PyExpr::String { .. }
         | PyExpr::Bool { .. }
         | PyExpr::None { .. } => false,
+        PyExpr::FString { parts, .. } => parts.iter().any(|part| match part {
+            PyFStringPart::Text(_) => false,
+            PyFStringPart::Expr(expr) => expr_uses_snail_try(expr),
+        }),
         PyExpr::Unary { operand, .. } => expr_uses_snail_try(operand),
         PyExpr::Binary { left, right, .. } => {
             expr_uses_snail_try(left) || expr_uses_snail_try(right)
@@ -1170,6 +1400,46 @@ impl PythonWriter {
         self.write_line(&format!("return {}", SNAIL_EXCEPTION_VAR));
         self.indent -= 1;
         self.write_line(&format!("return fallback_fn({})", SNAIL_EXCEPTION_VAR));
+        self.indent -= 2;
+    }
+
+    fn write_snail_subprocess_helpers(&mut self) {
+        self.write_line("import subprocess");
+        self.write_line("");
+        self.write_line(&format!("def {}(cmd):", SNAIL_SUBPROCESS_CAPTURE));
+        self.indent += 1;
+        self.write_line("try:");
+        self.indent += 1;
+        self.write_line(
+            "completed = subprocess.run(cmd, shell=True, check=True, text=True, stdout=subprocess.PIPE)",
+        );
+        self.write_line("return completed.stdout.strip()");
+        self.indent -= 1;
+        self.write_line("except subprocess.CalledProcessError as exc:");
+        self.indent += 1;
+        self.write_line("def __fallback(exc=exc):");
+        self.indent += 1;
+        self.write_line("raise exc");
+        self.indent -= 1;
+        self.write_line("exc.__fallback__ = __fallback");
+        self.write_line("raise");
+        self.indent -= 2;
+        self.write_line("");
+        self.write_line(&format!("def {}(cmd):", SNAIL_SUBPROCESS_STATUS));
+        self.indent += 1;
+        self.write_line("try:");
+        self.indent += 1;
+        self.write_line("subprocess.run(cmd, shell=True, check=True)");
+        self.write_line("return 0");
+        self.indent -= 1;
+        self.write_line("except subprocess.CalledProcessError as exc:");
+        self.indent += 1;
+        self.write_line("def __fallback(exc=exc):");
+        self.indent += 1;
+        self.write_line("return exc.returncode");
+        self.indent -= 1;
+        self.write_line("exc.__fallback__ = __fallback");
+        self.write_line("raise");
         self.indent -= 2;
     }
 
@@ -1372,6 +1642,7 @@ fn expr_source(expr: &PyExpr) -> String {
             delimiter,
             ..
         } => format_string_literal(value, *raw, *delimiter),
+        PyExpr::FString { parts, .. } => format_f_string(parts),
         PyExpr::Bool { value, .. } => {
             if *value {
                 "True".to_string()
@@ -1565,6 +1836,38 @@ fn format_string_literal(value: &str, raw: bool, delimiter: StringDelimiter) -> 
     };
     let prefix = if raw { "r" } else { "f" };
     format!("{prefix}{open}{value}{close}")
+}
+
+fn format_f_string(parts: &[PyFStringPart]) -> String {
+    let mut out = String::new();
+    for part in parts {
+        match part {
+            PyFStringPart::Text(text) => out.push_str(&escape_f_string_text(text)),
+            PyFStringPart::Expr(expr) => {
+                out.push('{');
+                out.push_str(&expr_source(expr));
+                out.push('}');
+            }
+        }
+    }
+    format!("f\"{}\"", out)
+}
+
+fn escape_f_string_text(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            '{' => escaped.push_str("{{"),
+            '}' => escaped.push_str("}}"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 fn binary_op(op: PyBinaryOp) -> &'static str {

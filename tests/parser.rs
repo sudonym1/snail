@@ -185,3 +185,14 @@ fallback = risky() ? $e
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 2);
 }
+
+#[test]
+fn parses_subprocess_expressions() {
+    let source = r#"
+name = "snail"
+out = $(echo {name})
+code = @(echo ok)
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 3);
+}

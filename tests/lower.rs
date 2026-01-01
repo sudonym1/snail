@@ -338,6 +338,19 @@ details = risky() ? $e.args[0]
     assert_eq!(rendered, expected);
 }
 
+#[test]
+fn renders_subprocess_expressions() {
+    let source = r#"
+out = $(echo {name})
+code = @(echo ok)
+"#;
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "import subprocess\n\ndef __snail_subprocess_capture(cmd):\n    try:\n        completed = subprocess.run(cmd, shell=True, check=True, text=True, stdout=subprocess.PIPE)\n        return completed.stdout.strip()\n    except subprocess.CalledProcessError as exc:\n        def __fallback(exc=exc):\n            raise exc\n        exc.__fallback__ = __fallback\n        raise\n\ndef __snail_subprocess_status(cmd):\n    try:\n        subprocess.run(cmd, shell=True, check=True)\n        return 0\n    except subprocess.CalledProcessError as exc:\n        def __fallback(exc=exc):\n            return exc.returncode\n        exc.__fallback__ = __fallback\n        raise\n\nout = __snail_subprocess_capture(f\"echo {name}\")\ncode = __snail_subprocess_status(f\"echo ok\")\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {

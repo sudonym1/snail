@@ -77,6 +77,16 @@ multi_text = """line one
 line two"""
 raw_multi = r"""raw\\nline
 raw line two"""
+cmd_name = "snail"
+echoed = $(echo {cmd_name})
+try {
+    echoed = $(false)? # it is required to provide a default value for this form.
+} except Exception as e {
+    echoed = $(false) ? "default"
+}
+assert echoed == "default"
+status_ok = @(echo ready)
+status_fail = @(false)?
 first = data[0]
 mid = data[1:3]
 head = data[:2]
@@ -181,6 +191,9 @@ print("tail", tail)
 print("safe_value", safe_value)
 print("safe_fallback", safe_fallback)
 print("safe_details", safe_details)
+print("echoed", echoed)
+print("status_ok", status_ok)
+print("status_fail", status_fail)
 print("prefer_lambda", prefer_lambda)
 print("dunder_only", dunder_only)
 temp_value = 42

@@ -701,6 +701,7 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::set_literal => parse_set_literal(pair, source),
         Rule::list_comp => parse_list_comp(pair, source),
         Rule::dict_comp => parse_dict_comp(pair, source),
+        Rule::subprocess => parse_subprocess(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -1161,6 +1162,7 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         Rule::set_literal => parse_set_literal(inner_pair, source),
         Rule::list_comp => parse_list_comp(inner_pair, source),
         Rule::dict_comp => parse_dict_comp(inner_pair, source),
+        Rule::subprocess => parse_subprocess(inner_pair, source),
         Rule::expr => {
             let expr = parse_expr_pair(inner_pair, source)?;
             Ok(Expr::Paren {
@@ -1299,6 +1301,69 @@ fn parse_list_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
     })
 }
 
+fn parse_subprocess(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    match pair.as_rule() {
+        Rule::subprocess => {
+            let inner_pair = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| error_with_span("missing subprocess body", span.clone(), source))?;
+            parse_subprocess(inner_pair, source)
+        }
+        Rule::subprocess_capture | Rule::subprocess_status => {
+            let kind = if pair.as_rule() == Rule::subprocess_capture {
+                SubprocessKind::Capture
+            } else {
+                SubprocessKind::Status
+            };
+            let body_pair = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| error_with_span("missing subprocess body", span.clone(), source))?;
+            let parts = parse_subprocess_body(body_pair, source, span.clone())?;
+            Ok(Expr::Subprocess { kind, parts, span })
+        }
+        _ => Err(error_with_span(
+            format!("unsupported subprocess: {:?}", pair.as_rule()),
+            span,
+            source,
+        )),
+    }
+}
+
+fn parse_subprocess_body(
+    pair: Pair<'_, Rule>,
+    source: &str,
+    span: SourceSpan,
+) -> Result<Vec<SubprocessPart>, ParseError> {
+    let mut parts = Vec::new();
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::subprocess_text => {
+                let text = unescape_subprocess_text(inner.as_str());
+                parts.push(SubprocessPart::Text(text));
+            }
+            Rule::subprocess_expr => {
+                let expr_pair = inner.into_inner().next().ok_or_else(|| {
+                    error_with_span("missing subprocess expression", span.clone(), source)
+                })?;
+                let expr = parse_expr_pair(expr_pair, source)?;
+                parts.push(SubprocessPart::Expr(Box::new(expr)));
+            }
+            _ => {}
+        }
+    }
+    if parts.is_empty() {
+        return Err(error_with_span("missing subprocess command", span, source));
+    }
+    Ok(parts)
+}
+
+fn unescape_subprocess_text(text: &str) -> String {
+    text.replace("{{", "{").replace("}}", "}")
+}
+
 fn parse_dict_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
@@ -1420,6 +1485,7 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Compare { span, .. }
         | Expr::IfExpr { span, .. }
         | Expr::TryExpr { span, .. }
+        | Expr::Subprocess { span, .. }
         | Expr::Call { span, .. }
         | Expr::Attribute { span, .. }
         | Expr::Index { span, .. }

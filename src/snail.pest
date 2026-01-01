@@ -98,6 +98,7 @@ slice_end = { expr }
 
 atom = _{
   literal
+  | subprocess
   | exception_var
   | identifier
   | list_comp
@@ -108,6 +109,14 @@ atom = _{
   | tuple_literal
   | "(" ~ expr ~ ")"
 }
+
+subprocess = { subprocess_capture | subprocess_status }
+subprocess_capture = { "$(" ~ subprocess_body ~ ")" }
+subprocess_status = { "@(" ~ subprocess_body ~ ")" }
+subprocess_body = { subprocess_part* }
+subprocess_part = _{ subprocess_expr | subprocess_text }
+subprocess_expr = { "{" ~ expr ~ "}" }
+subprocess_text = @{ ( "{{" | "}}" | (!("{" | ")") ~ ANY) )+ }
 
 tuple_literal = { "(" ~ ")" | "(" ~ expr ~ "," ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
 list_comp = { "[" ~ expr ~ comp_for ~ "]" }

@@ -200,6 +200,11 @@ pub enum Expr {
         fallback: Option<Box<Expr>>,
         span: SourceSpan,
     },
+    Subprocess {
+        kind: SubprocessKind,
+        parts: Vec<SubprocessPart>,
+        span: SourceSpan,
+    },
     Call {
         func: Box<Expr>,
         args: Vec<Argument>,
@@ -255,6 +260,18 @@ pub enum Expr {
         ifs: Vec<Expr>,
         span: SourceSpan,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubprocessKind {
+    Capture,
+    Status,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SubprocessPart {
+    Text(String),
+    Expr(Box<Expr>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
