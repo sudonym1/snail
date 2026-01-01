@@ -54,7 +54,7 @@ pub enum PyStmt {
     },
     FunctionDef {
         name: String,
-        args: Vec<String>,
+        args: Vec<PyParameter>,
         body: Vec<PyStmt>,
         span: SourceSpan,
     },
@@ -207,8 +207,16 @@ pub enum PyExpr {
         elements: Vec<PyExpr>,
         span: SourceSpan,
     },
+    Tuple {
+        elements: Vec<PyExpr>,
+        span: SourceSpan,
+    },
     Dict {
         entries: Vec<(PyExpr, PyExpr)>,
+        span: SourceSpan,
+    },
+    Set {
+        elements: Vec<PyExpr>,
         span: SourceSpan,
     },
     ListComp {
@@ -226,13 +234,49 @@ pub enum PyExpr {
         ifs: Vec<PyExpr>,
         span: SourceSpan,
     },
+    Slice {
+        start: Option<Box<PyExpr>>,
+        end: Option<Box<PyExpr>>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PyArgument {
-    pub name: Option<String>,
-    pub value: PyExpr,
-    pub span: SourceSpan,
+pub enum PyParameter {
+    Regular {
+        name: String,
+        default: Option<PyExpr>,
+        span: SourceSpan,
+    },
+    VarArgs {
+        name: String,
+        span: SourceSpan,
+    },
+    KwArgs {
+        name: String,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PyArgument {
+    Positional {
+        value: PyExpr,
+        span: SourceSpan,
+    },
+    Keyword {
+        name: String,
+        value: PyExpr,
+        span: SourceSpan,
+    },
+    Star {
+        value: PyExpr,
+        span: SourceSpan,
+    },
+    KwStar {
+        value: PyExpr,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -312,7 +356,10 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
             span,
         } => Ok(PyStmt::FunctionDef {
             name: name.clone(),
-            args: params.clone(),
+            args: params
+                .iter()
+                .map(lower_parameter)
+                .collect::<Result<Vec<_>, _>>()?,
             body: lower_block(body)?,
             span: span.clone(),
         }),
@@ -579,6 +626,16 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
                 span: span.clone(),
             })
         }
+        Expr::Tuple { elements, span } => {
+            let mut lowered = Vec::with_capacity(elements.len());
+            for element in elements {
+                lowered.push(lower_expr(element)?);
+            }
+            Ok(PyExpr::Tuple {
+                elements: lowered,
+                span: span.clone(),
+            })
+        }
         Expr::Dict { entries, span } => {
             let mut lowered = Vec::with_capacity(entries.len());
             for (key, value) in entries {
@@ -586,6 +643,16 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
             }
             Ok(PyExpr::Dict {
                 entries: lowered,
+                span: span.clone(),
+            })
+        }
+        Expr::Set { elements, span } => {
+            let mut lowered = Vec::with_capacity(elements.len());
+            for element in elements {
+                lowered.push(lower_expr(element)?);
+            }
+            Ok(PyExpr::Set {
+                elements: lowered,
                 span: span.clone(),
             })
         }
@@ -629,15 +696,56 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
                 span: span.clone(),
             })
         }
+        Expr::Slice { start, end, span } => Ok(PyExpr::Slice {
+            start: start.as_deref().map(lower_expr).transpose()?.map(Box::new),
+            end: end.as_deref().map(lower_expr).transpose()?.map(Box::new),
+            span: span.clone(),
+        }),
     }
 }
 
 fn lower_argument(arg: &Argument) -> Result<PyArgument, LowerError> {
-    Ok(PyArgument {
-        name: arg.name.clone(),
-        value: lower_expr(&arg.value)?,
-        span: arg.span.clone(),
-    })
+    match arg {
+        Argument::Positional { value, span } => Ok(PyArgument::Positional {
+            value: lower_expr(value)?,
+            span: span.clone(),
+        }),
+        Argument::Keyword { name, value, span } => Ok(PyArgument::Keyword {
+            name: name.clone(),
+            value: lower_expr(value)?,
+            span: span.clone(),
+        }),
+        Argument::Star { value, span } => Ok(PyArgument::Star {
+            value: lower_expr(value)?,
+            span: span.clone(),
+        }),
+        Argument::KwStar { value, span } => Ok(PyArgument::KwStar {
+            value: lower_expr(value)?,
+            span: span.clone(),
+        }),
+    }
+}
+
+fn lower_parameter(param: &Parameter) -> Result<PyParameter, LowerError> {
+    match param {
+        Parameter::Regular {
+            name,
+            default,
+            span,
+        } => Ok(PyParameter::Regular {
+            name: name.clone(),
+            default: default.as_ref().map(lower_expr).transpose()?,
+            span: span.clone(),
+        }),
+        Parameter::VarArgs { name, span } => Ok(PyParameter::VarArgs {
+            name: name.clone(),
+            span: span.clone(),
+        }),
+        Parameter::KwArgs { name, span } => Ok(PyParameter::KwArgs {
+            name: name.clone(),
+            span: span.clone(),
+        }),
+    }
 }
 
 fn span_from_block(block: &[PyStmt]) -> Option<SourceSpan> {
@@ -684,9 +792,12 @@ fn expr_span(expr: &PyExpr) -> &SourceSpan {
         | PyExpr::Index { span, .. }
         | PyExpr::Paren { span, .. }
         | PyExpr::List { span, .. }
+        | PyExpr::Tuple { span, .. }
         | PyExpr::Dict { span, .. }
+        | PyExpr::Set { span, .. }
         | PyExpr::ListComp { span, .. }
-        | PyExpr::DictComp { span, .. } => span,
+        | PyExpr::DictComp { span, .. }
+        | PyExpr::Slice { span, .. } => span,
     }
 }
 
@@ -791,7 +902,7 @@ impl PythonWriter {
             PyStmt::FunctionDef {
                 name, args, body, ..
             } => {
-                let args = args.join(", ");
+                let args = args.iter().map(param_source).collect::<Vec<_>>().join(", ");
                 self.write_line(&format!("def {}({}):", name, args));
                 self.write_suite(body);
             }
@@ -998,10 +1109,7 @@ fn expr_source(expr: &PyExpr) -> String {
         PyExpr::Call { func, args, .. } => {
             let args = args
                 .iter()
-                .map(|arg| match &arg.name {
-                    Some(name) => format!("{}={}", name, expr_source(&arg.value)),
-                    None => expr_source(&arg.value),
-                })
+                .map(argument_source)
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{}({})", expr_source(func), args)
@@ -1019,10 +1127,33 @@ fn expr_source(expr: &PyExpr) -> String {
                 .join(", ");
             format!("[{}]", items)
         }
+        PyExpr::Tuple { elements, .. } => {
+            if elements.is_empty() {
+                return "()".to_string();
+            }
+            let items = elements
+                .iter()
+                .map(expr_source)
+                .collect::<Vec<_>>()
+                .join(", ");
+            if elements.len() == 1 {
+                format!("({},)", items)
+            } else {
+                format!("({})", items)
+            }
+        }
         PyExpr::Dict { entries, .. } => {
             let items = entries
                 .iter()
                 .map(|(key, value)| format!("{}: {}", expr_source(key), expr_source(value)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{{}}}", items)
+        }
+        PyExpr::Set { elements, .. } => {
+            let items = elements
+                .iter()
+                .map(expr_source)
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("{{{}}}", items)
@@ -1048,6 +1179,17 @@ fn expr_source(expr: &PyExpr) -> String {
             let tail = comp_for_source(target, iter, ifs);
             format!("{{{}: {}{}}}", expr_source(key), expr_source(value), tail)
         }
+        PyExpr::Slice { start, end, .. } => {
+            let start = start
+                .as_ref()
+                .map(|expr| expr_source(expr))
+                .unwrap_or_default();
+            let end = end
+                .as_ref()
+                .map(|expr| expr_source(expr))
+                .unwrap_or_default();
+            format!("{start}:{end}")
+        }
     }
 }
 
@@ -1066,6 +1208,26 @@ fn import_name(name: &PyImportName) -> String {
         item.push_str(&format!(" as {}", alias));
     }
     item
+}
+
+fn param_source(param: &PyParameter) -> String {
+    match param {
+        PyParameter::Regular { name, default, .. } => match default {
+            Some(expr) => format!("{}={}", name, expr_source(expr)),
+            None => name.clone(),
+        },
+        PyParameter::VarArgs { name, .. } => format!("*{}", name),
+        PyParameter::KwArgs { name, .. } => format!("**{}", name),
+    }
+}
+
+fn argument_source(arg: &PyArgument) -> String {
+    match arg {
+        PyArgument::Positional { value, .. } => expr_source(value),
+        PyArgument::Keyword { name, value, .. } => format!("{}={}", name, expr_source(value)),
+        PyArgument::Star { value, .. } => format!("*{}", expr_source(value)),
+        PyArgument::KwStar { value, .. } => format!("**{}", expr_source(value)),
+    }
 }
 
 fn with_item_source(item: &PyWithItem) -> String {

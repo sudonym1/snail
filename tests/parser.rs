@@ -121,3 +121,29 @@ del value
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 3);
 }
+
+#[test]
+fn parses_tuples_sets_and_slices() {
+    let source = r#"
+items = [1, 2, 3, 4]
+pair = (1, 2)
+single = (1,)
+empty = ()
+flags = {True, False}
+mid = items[1:3]
+head = items[:2]
+tail = items[2:]
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 8);
+}
+
+#[test]
+fn parses_defaults_and_star_args() {
+    let source = r#"
+def join(a, b=1, *rest, **extras) { return a }
+result = join(1, b=2, *rest, **extras)
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 2);
+}

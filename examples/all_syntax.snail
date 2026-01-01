@@ -33,6 +33,17 @@ def compute(nums) {
     return total
 }
 
+def join_all(head, tail=0, * rest, **extras) {
+    total = head + tail
+    for n in rest {
+        total = total + n
+    }
+    if "bonus" in extras {
+        total = total + extras["bonus"]
+    }
+    return total
+}
+
 def risky() {
     return 1
 }
@@ -44,6 +55,10 @@ def cleanup() {
 data = list(range(5))
 nums = [1, 2, 3, 4]
 pairs = {"a": 1, "b": 2}
+pair = (1, 2)
+single = (1,)
+empty = ()
+flags_set = {True, False}
 evens = [n for n in nums if n % 2 == 0]
 lookup = {n: n * 2 for n in nums if n > 1}
 raw_text = r"raw\\ntext"
@@ -52,6 +67,9 @@ line two"""
 raw_multi = r"""raw\\nline
 raw line two"""
 first = data[0]
+mid = data[1:3]
+head = data[:2]
+tail = data[2:]
 missing = None
 flag = not False and True or False
 is_none = missing is None
@@ -94,6 +112,9 @@ except ValueError as err {
 with SimpleCtx() as message { ctx_msg = message }
 
 total = compute(data)
+extras = {"bonus": 5}
+values = [3, 4]
+joined = join_all(1, 2, *values, **extras)
 assert total == 6, "total"
 print("first", first)
 print("value", value)
@@ -106,6 +127,14 @@ print("total", total)
 print("evens", evens)
 print("lookup", lookup)
 print("with", ctx_msg)
+print("joined", joined)
+print("pair", pair)
+print("single", single)
+print("empty", empty)
+print("flags_set", flags_set)
+print("mid", mid)
+print("head", head)
+print("tail", tail)
 temp_value = 42
 del temp_value
 info = "default to f-strings"

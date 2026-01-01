@@ -39,7 +39,7 @@ pub enum Stmt {
     },
     Def {
         name: String,
-        params: Vec<String>,
+        params: Vec<Parameter>,
         body: Vec<Stmt>,
         span: SourceSpan,
     },
@@ -210,8 +210,21 @@ pub enum Expr {
         elements: Vec<Expr>,
         span: SourceSpan,
     },
+    Tuple {
+        elements: Vec<Expr>,
+        span: SourceSpan,
+    },
     Dict {
         entries: Vec<(Expr, Expr)>,
+        span: SourceSpan,
+    },
+    Set {
+        elements: Vec<Expr>,
+        span: SourceSpan,
+    },
+    Slice {
+        start: Option<Box<Expr>>,
+        end: Option<Box<Expr>>,
         span: SourceSpan,
     },
     ListComp {
@@ -240,10 +253,41 @@ pub enum StringDelimiter {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Argument {
-    pub name: Option<String>,
-    pub value: Expr,
-    pub span: SourceSpan,
+pub enum Parameter {
+    Regular {
+        name: String,
+        default: Option<Expr>,
+        span: SourceSpan,
+    },
+    VarArgs {
+        name: String,
+        span: SourceSpan,
+    },
+    KwArgs {
+        name: String,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Argument {
+    Positional {
+        value: Expr,
+        span: SourceSpan,
+    },
+    Keyword {
+        name: String,
+        value: Expr,
+        span: SourceSpan,
+    },
+    Star {
+        value: Expr,
+        span: SourceSpan,
+    },
+    KwStar {
+        value: Expr,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

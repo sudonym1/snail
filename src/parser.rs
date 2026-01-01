@@ -176,7 +176,7 @@ fn parse_def(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let params_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing parameter list", span.clone(), source))?;
-    let params = parse_parameters(params_pair);
+    let params = parse_parameters(params_pair, source)?;
     let body = parse_block(
         inner
             .next()
@@ -524,10 +524,84 @@ fn parse_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseErro
     Ok(Stmt::Expr { value, span })
 }
 
-fn parse_parameters(pair: Pair<'_, Rule>) -> Vec<String> {
-    pair.into_inner()
-        .map(|part| part.as_str().to_string())
-        .collect()
+fn parse_parameters(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Parameter>, ParseError> {
+    let mut params = Vec::new();
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::param_list => params.extend(parse_param_list(inner, source)?),
+            Rule::parameter | Rule::regular_param | Rule::star_param | Rule::kw_param => {
+                params.push(parse_parameter(inner, source)?);
+            }
+            _ => {}
+        }
+    }
+    Ok(params)
+}
+
+fn parse_param_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Parameter>, ParseError> {
+    let mut params = Vec::new();
+    for inner in pair.into_inner() {
+        if matches!(
+            inner.as_rule(),
+            Rule::parameter | Rule::regular_param | Rule::star_param | Rule::kw_param
+        ) {
+            params.push(parse_parameter(inner, source)?);
+        }
+    }
+    Ok(params)
+}
+
+fn parse_parameter(pair: Pair<'_, Rule>, source: &str) -> Result<Parameter, ParseError> {
+    let span = span_from_pair(&pair, source);
+    match pair.as_rule() {
+        Rule::parameter => {
+            let inner = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| error_with_span("missing parameter", span.clone(), source))?;
+            parse_parameter(inner, source)
+        }
+        Rule::regular_param => {
+            let mut inner = pair.into_inner();
+            let name = inner
+                .next()
+                .ok_or_else(|| error_with_span("missing parameter name", span.clone(), source))?
+                .as_str()
+                .to_string();
+            let default = inner
+                .next()
+                .map(|value_pair| parse_expr_pair(value_pair, source))
+                .transpose()?;
+            Ok(Parameter::Regular {
+                name,
+                default,
+                span,
+            })
+        }
+        Rule::star_param => {
+            let name = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| error_with_span("missing *args name", span.clone(), source))?
+                .as_str()
+                .to_string();
+            Ok(Parameter::VarArgs { name, span })
+        }
+        Rule::kw_param => {
+            let name = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| error_with_span("missing **kwargs name", span.clone(), source))?
+                .as_str()
+                .to_string();
+            Ok(Parameter::KwArgs { name, span })
+        }
+        _ => Err(error_with_span(
+            format!("unsupported parameter: {:?}", pair.as_rule()),
+            span,
+            source,
+        )),
+    }
 }
 
 fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -550,6 +624,8 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         }),
         Rule::list_literal => parse_list_literal(pair, source),
         Rule::dict_literal => parse_dict_literal(pair, source),
+        Rule::tuple_literal => parse_tuple_literal(pair, source),
+        Rule::set_literal => parse_set_literal(pair, source),
         Rule::list_comp => parse_list_comp(pair, source),
         Rule::dict_comp => parse_dict_comp(pair, source),
         _ => Err(error_with_span(
@@ -870,7 +946,7 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
             }
             Rule::index => {
                 let mut idx_inner = suffix.into_inner();
-                let index_expr = parse_expr_pair(
+                let index_expr = parse_slice(
                     idx_inner.next().ok_or_else(|| {
                         error_with_span("missing index expr", suffix_span.clone(), source)
                     })?,
@@ -905,21 +981,40 @@ fn parse_argument(pair: Pair<'_, Rule>, source: &str) -> Result<Argument, ParseE
     let first = inner
         .next()
         .ok_or_else(|| error_with_span("missing argument", span.clone(), source))?;
-    let second = inner.next();
-    if let Some(value_pair) = second {
-        let value = parse_expr_pair(value_pair, source)?;
-        Ok(Argument {
-            name: Some(first.as_str().to_string()),
-            value,
-            span,
-        })
-    } else {
-        let value = parse_expr_pair(first, source)?;
-        Ok(Argument {
-            name: None,
-            value,
-            span,
-        })
+    match first.as_rule() {
+        Rule::kw_argument => {
+            let mut kw_inner = first.into_inner();
+            let name = kw_inner
+                .next()
+                .ok_or_else(|| error_with_span("missing keyword argument", span.clone(), source))?
+                .as_str()
+                .to_string();
+            let value_pair = kw_inner.next().ok_or_else(|| {
+                error_with_span("missing keyword argument value", span.clone(), source)
+            })?;
+            let value = parse_expr_pair(value_pair, source)?;
+            Ok(Argument::Keyword { name, value, span })
+        }
+        Rule::star_arg => {
+            let value_pair = first
+                .into_inner()
+                .next()
+                .ok_or_else(|| error_with_span("missing *arg value", span.clone(), source))?;
+            let value = parse_expr_pair(value_pair, source)?;
+            Ok(Argument::Star { value, span })
+        }
+        Rule::kw_star_arg => {
+            let value_pair = first
+                .into_inner()
+                .next()
+                .ok_or_else(|| error_with_span("missing **arg value", span.clone(), source))?;
+            let value = parse_expr_pair(value_pair, source)?;
+            Ok(Argument::KwStar { value, span })
+        }
+        _ => {
+            let value = parse_expr_pair(first, source)?;
+            Ok(Argument::Positional { value, span })
+        }
     }
 }
 
@@ -937,6 +1032,8 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         }),
         Rule::list_literal => parse_list_literal(inner_pair, source),
         Rule::dict_literal => parse_dict_literal(inner_pair, source),
+        Rule::tuple_literal => parse_tuple_literal(inner_pair, source),
+        Rule::set_literal => parse_set_literal(inner_pair, source),
         Rule::list_comp => parse_list_comp(inner_pair, source),
         Rule::dict_comp => parse_dict_comp(inner_pair, source),
         Rule::expr => {
@@ -954,6 +1051,28 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     }
 }
 
+fn parse_tuple_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut elements = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::expr {
+            elements.push(parse_expr_pair(inner, source)?);
+        }
+    }
+    Ok(Expr::Tuple { elements, span })
+}
+
+fn parse_set_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut elements = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::expr {
+            elements.push(parse_expr_pair(inner, source)?);
+        }
+    }
+    Ok(Expr::Set { elements, span })
+}
+
 fn parse_list_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut elements = Vec::new();
@@ -963,6 +1082,51 @@ fn parse_list_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseE
         }
     }
     Ok(Expr::List { elements, span })
+}
+
+fn parse_slice(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    match pair.as_rule() {
+        Rule::slice => {
+            let inner = pair
+                .into_inner()
+                .next()
+                .ok_or_else(|| error_with_span("missing slice expression", span.clone(), source))?;
+            parse_slice(inner, source)
+        }
+        Rule::slice_expr => {
+            let mut start = None;
+            let mut end = None;
+            for part in pair.into_inner() {
+                match part.as_rule() {
+                    Rule::slice_start => {
+                        let expr_pair = part.into_inner().next().ok_or_else(|| {
+                            error_with_span("missing slice start", span.clone(), source)
+                        })?;
+                        start = Some(parse_expr_pair(expr_pair, source)?);
+                    }
+                    Rule::slice_end => {
+                        let expr_pair = part.into_inner().next().ok_or_else(|| {
+                            error_with_span("missing slice end", span.clone(), source)
+                        })?;
+                        end = Some(parse_expr_pair(expr_pair, source)?);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Expr::Slice {
+                start: start.map(Box::new),
+                end: end.map(Box::new),
+                span,
+            })
+        }
+        Rule::expr => parse_expr_pair(pair, source),
+        _ => Err(error_with_span(
+            format!("unsupported slice: {:?}", pair.as_rule()),
+            span,
+            source,
+        )),
+    }
 }
 
 fn parse_dict_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -1134,9 +1298,12 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Index { span, .. }
         | Expr::Paren { span, .. }
         | Expr::List { span, .. }
+        | Expr::Tuple { span, .. }
         | Expr::Dict { span, .. }
+        | Expr::Set { span, .. }
         | Expr::ListComp { span, .. }
-        | Expr::DictComp { span, .. } => span,
+        | Expr::DictComp { span, .. }
+        | Expr::Slice { span, .. } => span,
     }
 }
 

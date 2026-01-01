@@ -230,6 +230,38 @@ del value
     assert_eq!(rendered, expected);
 }
 
+#[test]
+fn renders_tuples_sets_and_slices() {
+    let source = r#"
+items = [1, 2, 3, 4]
+pair = (1, 2)
+single = (1,)
+empty = ()
+flags = {True, False}
+mid = items[1:3]
+head = items[:2]
+tail = items[2:]
+"#;
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "items = [1, 2, 3, 4]\npair = (1, 2)\nsingle = (1,)\nempty = ()\nflags = {True, False}\nmid = items[1:3]\nhead = items[:2]\ntail = items[2:]\n";
+    assert_eq!(rendered, expected);
+}
+
+#[test]
+fn renders_defaults_and_star_args() {
+    let source = r#"
+def join(a, b=1, *rest, **extras) { return a }
+result = join(1, b=2, *rest, **extras)
+"#;
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "def join(a, b=1, *rest, **extras):\n    return a\nresult = join(1, b=2, *rest, **extras)\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {

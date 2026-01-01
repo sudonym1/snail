@@ -36,7 +36,12 @@ with_stmt = { "with" ~ with_items ~ block }
 with_items = { with_item ~ ("," ~ with_item)* }
 with_item = { expr ~ ("as" ~ assign_target)? }
 
-parameters = { "(" ~ (identifier ~ ("," ~ identifier)*)? ~ ")" }
+parameters = { "(" ~ param_list? ~ ")" }
+param_list = { parameter ~ ("," ~ parameter)* ~ ","? }
+parameter = _{ regular_param | star_param | kw_param }
+regular_param = { identifier ~ ("=" ~ expr)? }
+star_param = { "*" ~ identifier }
+kw_param = { "**" ~ identifier }
 
 return_stmt = { "return" ~ expr? }
 raise_stmt = { "raise" ~ expr? ~ ("from" ~ expr)? }
@@ -76,9 +81,17 @@ pow_op = { "**" }
 
 primary = { atom ~ (call | attribute | index)* }
 call = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ")" }
-argument = { identifier ~ "=" ~ expr | expr }
+argument = { kw_argument | star_argument | expr }
+kw_argument = { identifier ~ "=" ~ expr }
+star_argument = _{ kw_star_arg | star_arg }
+star_arg = { "*" ~ expr }
+kw_star_arg = { "**" ~ expr }
 attribute = { "." ~ identifier }
-index = { "[" ~ expr ~ "]" }
+index = { "[" ~ slice ~ "]" }
+slice = { slice_expr | expr }
+slice_expr = { slice_start? ~ ":" ~ slice_end? }
+slice_start = { expr }
+slice_end = { expr }
 
 atom = _{
   literal
@@ -87,13 +100,17 @@ atom = _{
   | list_literal
   | dict_comp
   | dict_literal
+  | set_literal
+  | tuple_literal
   | "(" ~ expr ~ ")"
 }
 
+tuple_literal = { "(" ~ ")" | "(" ~ expr ~ "," ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
 list_comp = { "[" ~ expr ~ comp_for ~ "]" }
 list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 dict_comp = { "{" ~ expr ~ ":" ~ expr ~ comp_for ~ "}" }
 dict_literal = { "{" ~ (dict_entry ~ ("," ~ dict_entry)*)? ~ "}" }
+set_literal = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
 dict_entry = { expr ~ ":" ~ expr }
 
 comp_for = { "for" ~ identifier ~ "in" ~ expr ~ comp_if* }
