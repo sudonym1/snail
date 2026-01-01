@@ -33,6 +33,28 @@ fn executes_snail_code_via_python_api() {
 }
 
 #[test]
+fn future_braces_import_is_noop() {
+    pyo3::prepare_freethreaded_python();
+    let source = "from __future__ import braces\nvalue = 1";
+
+    Python::with_gil(|py| {
+        let globals = exec_snail(py, source, Some("<future-braces>"), None, None)
+            .expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+        let value: i64 = globals
+            .get_item("value")
+            .expect("value lookup should succeed")
+            .expect("value should be present")
+            .extract()
+            .expect("value should be int");
+        assert_eq!(value, 1);
+    });
+}
+
+#[test]
 fn import_hook_loads_snail_files() {
     pyo3::prepare_freethreaded_python();
     let temp = TempDir::new().expect("temp dir");

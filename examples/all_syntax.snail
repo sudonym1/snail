@@ -1,6 +1,7 @@
 # Example Snail program exercising all supported syntax.
 import math, sys as sysmod
 from math import sqrt as root
+from __future__ import braces
 
 class Counter {
     def __init__(self, start) {

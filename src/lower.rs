@@ -539,11 +539,30 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
             module,
             items,
             span,
-        } => Ok(PyStmt::ImportFrom {
-            module: module.clone(),
-            names: items.iter().map(lower_import_name).collect(),
-            span: span.clone(),
-        }),
+        } => {
+            if module.len() == 1 && module[0] == "__future__" {
+                let filtered: Vec<&ImportItem> = items
+                    .iter()
+                    .filter(|item| !(item.name.len() == 1 && item.name[0] == "braces"))
+                    .collect();
+                if filtered.is_empty() {
+                    return Ok(PyStmt::Pass { span: span.clone() });
+                }
+                return Ok(PyStmt::ImportFrom {
+                    module: module.clone(),
+                    names: filtered
+                        .iter()
+                        .map(|item| lower_import_name(item))
+                        .collect(),
+                    span: span.clone(),
+                });
+            }
+            Ok(PyStmt::ImportFrom {
+                module: module.clone(),
+                names: items.iter().map(lower_import_name).collect(),
+                span: span.clone(),
+            })
+        }
         Stmt::Assign {
             targets,
             value,
