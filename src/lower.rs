@@ -565,21 +565,18 @@ fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<Py
     let mut file_loop = Vec::new();
     file_loop.push(assign_name("__snail_fnr", number_expr("0", span), span));
 
-    let mut stdin_body = Vec::new();
-    stdin_body.push(assign_name(
-        "__snail_file",
-        PyExpr::Attribute {
-            value: Box::new(name_expr("sys", span)),
-            attr: "stdin".to_string(),
-            span: span.clone(),
-        },
-        span,
-    ));
-    stdin_body.push(lower_awk_line_loop(
-        program,
-        span,
-        name_expr("__snail_file", span),
-    )?);
+    let stdin_body = vec![
+        assign_name(
+            "__snail_file",
+            PyExpr::Attribute {
+                value: Box::new(name_expr("sys", span)),
+                attr: "stdin".to_string(),
+                span: span.clone(),
+            },
+            span,
+        ),
+        lower_awk_line_loop(program, span, name_expr("__snail_file", span))?,
+    ];
 
     let open_call = PyExpr::Call {
         func: Box::new(name_expr("open", span)),
