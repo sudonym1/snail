@@ -5,12 +5,13 @@ use std::io::{self, Write};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
-use snail::{SnailError, compile_snail_source, format_snail_error};
+use snail::{CompileMode, SnailError, compile_snail_source_with_mode, format_snail_error};
 
 struct CliInput {
     filename: String,
     source: String,
     argv: Vec<String>,
+    mode: CompileMode,
 }
 
 fn main() {
@@ -29,6 +30,7 @@ fn run() -> Result<(), String> {
     let mut argv = Vec::new();
     let mut print_python = false;
     let mut passthrough = false;
+    let mut awk_mode = false;
 
     while let Some(arg) = args.next() {
         if passthrough {
@@ -43,6 +45,9 @@ fn run() -> Result<(), String> {
             }
             "-p" | "--python" => {
                 print_python = true;
+            }
+            "-a" | "--awk" => {
+                awk_mode = true;
             }
             "-c" => {
                 let value = args
@@ -73,6 +78,11 @@ fn run() -> Result<(), String> {
             filename: "<cmd>".to_string(),
             source,
             argv: build_argv("-c", argv),
+            mode: if awk_mode {
+                CompileMode::Awk
+            } else {
+                CompileMode::Auto
+            },
         },
         (None, Some(path)) => {
             let source = read_source(&path)?;
@@ -80,12 +90,17 @@ fn run() -> Result<(), String> {
                 filename: path.clone(),
                 source,
                 argv: build_argv(&path, argv),
+                mode: if awk_mode {
+                    CompileMode::Awk
+                } else {
+                    CompileMode::Auto
+                },
             }
         }
     };
 
     if print_python {
-        let python = match compile_snail_source(&input.source) {
+        let python = match compile_snail_source_with_mode(&input.source, input.mode) {
             Ok(python) => python,
             Err(err) => return Err(format_snail_error(&err, &input.filename)),
         };
@@ -121,6 +136,10 @@ fn print_help() {
     let _ = writeln!(out);
     let _ = writeln!(out, "options:");
     let _ = writeln!(out, "  -c <code>    run a one-liner");
+    let _ = writeln!(
+        out,
+        "  -a, --awk    run code in awk mode (pattern/action over input)"
+    );
     let _ = writeln!(out, "  -p, --python output translated Python and exit");
     let _ = writeln!(out, "  -h, --help   show this help");
 }
@@ -131,7 +150,8 @@ enum CliError {
 }
 
 fn run_source(input: &CliInput) -> Result<(), CliError> {
-    let python = compile_snail_source(&input.source).map_err(CliError::Snail)?;
+    let python =
+        compile_snail_source_with_mode(&input.source, input.mode).map_err(CliError::Snail)?;
 
     Python::with_gil(|py| -> Result<(), CliError> {
         let builtins = PyModule::import_bound(py, "builtins").map_err(CliError::Python)?;

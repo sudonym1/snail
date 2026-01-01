@@ -132,6 +132,26 @@ assert total == 6, "total"
 del temp_value
 ```
 
+## Awk mode
+Invoke Snail's awk mode with `snail --awk` or by starting a file with
+`#!snail awk`. Awk sources are composed of pattern/action pairs evaluated for
+each input line. `BEGIN` and `END` blocks run before and after the line loop, a
+rule with only a pattern prints matching lines by default, and a lone block runs
+for every line.
+
+See `examples/awk.snail` for a runnable sample program.
+
+While processing, Snail populates awk-style variables:
+- `line`: the current line with the trailing newline removed.
+- `fields`: `line.split()` on whitespace.
+- `nr`: global line counter across all files.
+- `fnr`: per-file line counter.
+- `path`: the active filename, with `"-"` representing stdin.
+
+Input files come from `sys.argv[1:]`; when none are provided, awk mode reads
+stdin. Pass `--` to the CLI to forward filenames or other arguments into the
+Snail script.
+
 ## Interoperability
 Snail code runs through Python's AST and execution engine. Functions, classes,
 and modules exported from Snail are standard Python callables and namespaces, so

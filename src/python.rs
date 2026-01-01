@@ -4,12 +4,48 @@ use pyo3::exceptions::{PyException, PySyntaxError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 
-use crate::{SnailError, lower_program, parse_program, python_source};
+use crate::{
+    CompileMode, SnailError, lower_awk_program, lower_program, parse_awk_program, parse_program,
+    python_source,
+};
 
 pub fn compile_snail_source(source: &str) -> Result<String, SnailError> {
-    let program = parse_program(source)?;
-    let module = lower_program(&program)?;
-    Ok(python_source(&module))
+    compile_snail_source_with_mode(source, CompileMode::Auto)
+}
+
+pub fn compile_snail_source_with_mode(
+    source: &str,
+    mode: CompileMode,
+) -> Result<String, SnailError> {
+    let mode = match mode {
+        CompileMode::Auto => detect_compile_mode(source),
+        other => other,
+    };
+
+    match mode {
+        CompileMode::Snail => {
+            let program = parse_program(source)?;
+            let module = lower_program(&program)?;
+            Ok(python_source(&module))
+        }
+        CompileMode::Awk => {
+            let program = parse_awk_program(source)?;
+            let module = lower_awk_program(&program)?;
+            Ok(python_source(&module))
+        }
+        CompileMode::Auto => unreachable!("compile mode is resolved above"),
+    }
+}
+
+fn detect_compile_mode(source: &str) -> CompileMode {
+    if let Some(line) = source.lines().next() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("#!snail awk") || trimmed.starts_with("#!snail --awk") {
+            return CompileMode::Awk;
+        }
+    }
+
+    CompileMode::Snail
 }
 
 fn compile_to_code(py: Python<'_>, source: &str, filename: &str) -> PyResult<PyObject> {
