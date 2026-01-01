@@ -331,22 +331,36 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
             else_body,
             span,
         } => lower_if(cond, body, elifs, else_body, span),
-        Stmt::While { cond, body, span } => Ok(PyStmt::While {
+        Stmt::While {
+            cond,
+            body,
+            else_body,
+            span,
+        } => Ok(PyStmt::While {
             test: lower_expr(cond)?,
             body: lower_block(body)?,
-            orelse: Vec::new(),
+            orelse: else_body
+                .as_ref()
+                .map(|items| lower_block(items))
+                .transpose()?
+                .unwrap_or_default(),
             span: span.clone(),
         }),
         Stmt::For {
             target,
             iter,
             body,
+            else_body,
             span,
         } => Ok(PyStmt::For {
             target: lower_assign_target(target)?,
             iter: lower_expr(iter)?,
             body: lower_block(body)?,
-            orelse: Vec::new(),
+            orelse: else_body
+                .as_ref()
+                .map(|items| lower_block(items))
+                .transpose()?
+                .unwrap_or_default(),
             span: span.clone(),
         }),
         Stmt::Def {

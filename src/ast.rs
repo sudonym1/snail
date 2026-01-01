@@ -29,12 +29,14 @@ pub enum Stmt {
     While {
         cond: Expr,
         body: Vec<Stmt>,
+        else_body: Option<Vec<Stmt>>,
         span: SourceSpan,
     },
     For {
         target: AssignTarget,
         iter: Expr,
         body: Vec<Stmt>,
+        else_body: Option<Vec<Stmt>>,
         span: SourceSpan,
     },
     Def {

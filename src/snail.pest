@@ -22,8 +22,8 @@ simple_stmt = _{
 block = { "{" ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ "}" }
 
 if_stmt = { "if" ~ expr ~ block ~ (stmt_sep* ~ "elif" ~ expr ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
-while_stmt = { "while" ~ expr ~ block }
-for_stmt = { "for" ~ identifier ~ "in" ~ expr ~ block }
+while_stmt = { "while" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
+for_stmt = { "for" ~ identifier ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
 def_stmt = { "def" ~ identifier ~ parameters ~ block }
 class_stmt = { "class" ~ identifier ~ block }
 try_stmt = { "try" ~ block ~ (try_except_tail | try_finally_tail) }

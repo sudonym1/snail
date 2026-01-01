@@ -61,8 +61,7 @@ Phase 5: Add all major python semantics
 - [x] Add `assert` and `del` statements.
 - [x] Add tuple and set literals plus slicing (`a[b:c]`, `a[:c]`, `a[b:]`).
 - [x] Add default parameters, `*args`, and `**kwargs`.
-- [ ] Add `for`/`while` `else` blocks and `break`/`continue` in `try`.
-- [ ] Add pattern matching (`match`/`case`) if keeping parity with Python 3.10+.
+- [x] Add `for`/`while` `else` blocks and `break`/`continue` in `try`.
 - [ ] Add support for if-expressions. e.g. `foo = x if y else z`
 
 Phase 6: Snail Specific semantics

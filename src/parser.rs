@@ -135,7 +135,16 @@ fn parse_while(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
             .ok_or_else(|| error_with_span("missing while block", span.clone(), source))?,
         source,
     )?;
-    Ok(Stmt::While { cond, body, span })
+    let else_body = inner
+        .next()
+        .map(|pair| parse_block(pair, source))
+        .transpose()?;
+    Ok(Stmt::While {
+        cond,
+        body,
+        else_body,
+        span,
+    })
 }
 
 fn parse_for(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
@@ -157,10 +166,15 @@ fn parse_for(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
             .ok_or_else(|| error_with_span("missing for block", span.clone(), source))?,
         source,
     )?;
+    let else_body = inner
+        .next()
+        .map(|pair| parse_block(pair, source))
+        .transpose()?;
     Ok(Stmt::For {
         target,
         iter,
         body,
+        else_body,
         span,
     })
 }

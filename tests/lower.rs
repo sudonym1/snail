@@ -262,6 +262,19 @@ result = join(1, b=2, *rest, **extras)
     assert_eq!(rendered, expected);
 }
 
+#[test]
+fn renders_loop_else_and_try_break_continue() {
+    let source = r#"
+for n in nums { try { break } finally { cleanup() } } else { done = True }
+while flag { try { continue } finally { cleanup() } } else { done = False }
+"#;
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "for n in nums:\n    try:\n        break\n    finally:\n        cleanup()\nelse:\n    done = True\nwhile flag:\n    try:\n        continue\n    finally:\n        cleanup()\nelse:\n    done = False\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {
