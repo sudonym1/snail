@@ -9,6 +9,11 @@ Snail aims to:
 - Provide concise syntax for one-liners and pipelines, inspired by Perl and awk.
 - Favor terse, script-friendly syntax without introducing whitespace coupling.
 
+Documentation and examples live in `docs/REFERENCE.md` and
+`examples/all_syntax.snail`. The reference walks through the syntax surface and
+runtime behaviors, while the example file provides a runnable tour that mirrors
+the language features. Both stay current as phases are delivered.
+
 The compiler/transpiler will generate Python source and execute it with the
 Python interpreter. The implementation language is still open and should be
 chosen based on parser ergonomics, ease of AST manipulation, and maintenance
@@ -88,7 +93,7 @@ Phase 7: Snail Specific semantics
   Both expand into expressions (not statements); complex cases should use Python's `subprocess` directly.
 
 Phase 8: Documentation
-- [ ] Expand documentation, examples, and language reference.
+- [x] Expand documentation, examples, and language reference.
 
 Phase 0 decisions (executed)
 - Implementation language: Rust (2024 edition).
