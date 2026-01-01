@@ -124,6 +124,50 @@ fn executes_examples_all_syntax() {
 }
 
 #[test]
+fn compact_exception_prefers_fallback_lambda() {
+    pyo3::prepare_freethreaded_python();
+    let source = r#"
+def fallback() {
+    return "dunder"
+}
+
+def risky() {
+    err = Exception("boom")
+    err.__fallback__ = fallback
+    raise err
+}
+
+preferred = risky() ? "lambda"
+dunder_only = risky()?
+"#;
+
+    Python::with_gil(|py| {
+        let globals = exec_snail(py, source, Some("<fallback-test>"), None, None)
+            .expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+
+        let preferred: String = globals
+            .get_item("preferred")
+            .expect("preferred lookup should succeed")
+            .expect("preferred should be present")
+            .extract()
+            .expect("preferred should be string");
+        assert_eq!(preferred, "lambda");
+
+        let dunder_only: String = globals
+            .get_item("dunder_only")
+            .expect("dunder_only lookup should succeed")
+            .expect("dunder_only should be present")
+            .extract()
+            .expect("dunder_only should be string");
+        assert_eq!(dunder_only, "dunder");
+    });
+}
+
+#[test]
 fn snail_callables_are_python_callables() {
     pyo3::prepare_freethreaded_python();
     Python::with_gil(|py| {

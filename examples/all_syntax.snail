@@ -136,6 +136,19 @@ safe_value = risky()?
 safe_fallback = risky() ? $e
 safe_details = risky() ? $e.args[0]
 
+def fallback_handler() {
+    return "dunder"
+}
+
+def risky_fallback() {
+    err = Exception("boom")
+    err.__fallback__ = fallback_handler
+    raise err
+}
+
+prefer_lambda = risky_fallback() ? "lambda"
+dunder_only = risky_fallback()?
+
 with SimpleCtx() as message { ctx_msg = message }
 
 total = compute(data)
@@ -168,6 +181,8 @@ print("tail", tail)
 print("safe_value", safe_value)
 print("safe_fallback", safe_fallback)
 print("safe_details", safe_details)
+print("prefer_lambda", prefer_lambda)
+print("dunder_only", dunder_only)
 temp_value = 42
 del temp_value
 info = "default to f-strings"

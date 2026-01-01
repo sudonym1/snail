@@ -334,7 +334,7 @@ details = risky() ? $e.args[0]
     let program = parse_program(source).expect("program should parse");
     let module = lower_program(&program).expect("program should lower");
     let rendered = python_source(&module);
-    let expected = "def __snail_compact_try(expr_fn, fallback_fn=None):\n    try:\n        return expr_fn()\n    except Exception as __snail_compact_exc:\n        if fallback_fn is None:\n            return __snail_compact_exc\n        return fallback_fn(__snail_compact_exc)\n\nvalue = __snail_compact_try(lambda: risky())\nfallback = __snail_compact_try(lambda: risky(), lambda __snail_compact_exc: __snail_compact_exc)\ndetails = __snail_compact_try(lambda: risky(), lambda __snail_compact_exc: __snail_compact_exc.args[0])\n";
+    let expected = "def __snail_compact_try(expr_fn, fallback_fn=None):\n    try:\n        return expr_fn()\n    except Exception as __snail_compact_exc:\n        if fallback_fn is None:\n            fallback_member = getattr(__snail_compact_exc, \"__fallback__\", None)\n            if callable(fallback_member):\n                return fallback_member()\n            return __snail_compact_exc\n        return fallback_fn(__snail_compact_exc)\n\nvalue = __snail_compact_try(lambda: risky())\nfallback = __snail_compact_try(lambda: risky(), lambda __snail_compact_exc: __snail_compact_exc)\ndetails = __snail_compact_try(lambda: risky(), lambda __snail_compact_exc: __snail_compact_exc.args[0])\n";
     assert_eq!(rendered, expected);
 }
 

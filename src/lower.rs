@@ -1159,6 +1159,14 @@ impl PythonWriter {
         self.indent += 1;
         self.write_line("if fallback_fn is None:");
         self.indent += 1;
+        self.write_line(&format!(
+            "fallback_member = getattr({}, \"__fallback__\", None)",
+            SNAIL_EXCEPTION_VAR
+        ));
+        self.write_line("if callable(fallback_member):");
+        self.indent += 1;
+        self.write_line("return fallback_member()");
+        self.indent -= 1;
         self.write_line(&format!("return {}", SNAIL_EXCEPTION_VAR));
         self.indent -= 1;
         self.write_line(&format!("return fallback_fn({})", SNAIL_EXCEPTION_VAR));
