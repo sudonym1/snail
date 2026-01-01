@@ -196,3 +196,14 @@ code = @(echo ok)
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 3);
 }
+
+#[test]
+fn parses_regex_expressions() {
+    let source = r#"
+text = "value"
+found = text in /val(.)/
+compiled = /abc/
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 3);
+}

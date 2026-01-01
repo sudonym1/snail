@@ -9,6 +9,8 @@ const SNAIL_TRY_HELPER: &str = "__snail_compact_try";
 const SNAIL_EXCEPTION_VAR: &str = "__snail_compact_exc";
 const SNAIL_SUBPROCESS_CAPTURE: &str = "__snail_subprocess_capture";
 const SNAIL_SUBPROCESS_STATUS: &str = "__snail_subprocess_status";
+const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
+const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LowerError {
@@ -688,17 +690,51 @@ fn lower_awk_rules(rules: &[AwkRule]) -> Result<Vec<PyStmt>, LowerError> {
         };
 
         if let Some(pattern) = &rule.pattern {
-            stmts.push(PyStmt::If {
-                test: lower_expr(pattern)?,
-                body: action,
-                orelse: Vec::new(),
-                span: rule.span.clone(),
-            });
+            if let Some((value_expr, regex, span)) = regex_pattern_components(pattern) {
+                let match_call = lower_regex_match(&value_expr, &regex, &span, None)?;
+                stmts.push(PyStmt::Assign {
+                    targets: vec![name_expr("match", &span)],
+                    value: match_call,
+                    span: span.clone(),
+                });
+                stmts.push(PyStmt::If {
+                    test: name_expr("match", &span),
+                    body: action,
+                    orelse: Vec::new(),
+                    span: rule.span.clone(),
+                });
+            } else {
+                stmts.push(PyStmt::If {
+                    test: lower_expr(pattern)?,
+                    body: action,
+                    orelse: Vec::new(),
+                    span: rule.span.clone(),
+                });
+            }
         } else {
             stmts.append(&mut action);
         }
     }
     Ok(stmts)
+}
+
+fn regex_pattern_components(pattern: &Expr) -> Option<(Expr, String, SourceSpan)> {
+    match pattern {
+        Expr::RegexMatch {
+            value,
+            pattern,
+            span,
+        } => Some((*value.clone(), pattern.clone(), span.clone())),
+        Expr::Regex { pattern, span } => Some((
+            Expr::Name {
+                name: "line".to_string(),
+                span: span.clone(),
+            },
+            pattern.clone(),
+            span.clone(),
+        )),
+        _ => None,
+    }
 }
 
 fn awk_default_print(span: &SourceSpan) -> PyStmt {
@@ -739,6 +775,15 @@ fn string_expr(value: &str, span: &SourceSpan) -> PyExpr {
 fn number_expr(value: &str, span: &SourceSpan) -> PyExpr {
     PyExpr::Number {
         value: value.to_string(),
+        span: span.clone(),
+    }
+}
+
+fn regex_pattern_expr(pattern: &str, span: &SourceSpan) -> PyExpr {
+    PyExpr::String {
+        value: pattern.to_string(),
+        raw: true,
+        delimiter: StringDelimiter::Double,
         span: span.clone(),
     }
 }
@@ -837,6 +882,25 @@ fn lower_assign_target(target: &AssignTarget) -> Result<PyExpr, LowerError> {
 
 fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
     lower_expr_with_exception(expr, None)
+}
+
+fn lower_regex_match(
+    value: &Expr,
+    pattern: &str,
+    span: &SourceSpan,
+    exception_name: Option<&str>,
+) -> Result<PyExpr, LowerError> {
+    Ok(PyExpr::Call {
+        func: Box::new(PyExpr::Name {
+            id: SNAIL_REGEX_SEARCH.to_string(),
+            span: span.clone(),
+        }),
+        args: vec![
+            pos_arg(lower_expr_with_exception(value, exception_name)?, span),
+            pos_arg(regex_pattern_expr(pattern, span), span),
+        ],
+        span: span.clone(),
+    })
 }
 
 fn lower_expr_with_exception(
@@ -959,6 +1023,19 @@ fn lower_expr_with_exception(
                 span: span.clone(),
             })
         }
+        Expr::Regex { pattern, span } => Ok(PyExpr::Call {
+            func: Box::new(PyExpr::Name {
+                id: SNAIL_REGEX_COMPILE.to_string(),
+                span: span.clone(),
+            }),
+            args: vec![pos_arg(regex_pattern_expr(pattern, span), span)],
+            span: span.clone(),
+        }),
+        Expr::RegexMatch {
+            value,
+            pattern,
+            span,
+        } => lower_regex_match(value, pattern, span, exception_name),
         Expr::Subprocess { kind, parts, span } => {
             let mut lowered_parts = Vec::with_capacity(parts.len());
             for part in parts {
@@ -1260,17 +1337,24 @@ fn lower_compare_op(op: CompareOp) -> PyCompareOp {
 pub fn python_source(module: &PyModule) -> String {
     let mut writer = PythonWriter::new();
     let uses_try = module_uses_snail_try(module);
+    let uses_regex = module_uses_snail_regex(module);
     let uses_subprocess = module_uses_snail_subprocess(module);
     if uses_try {
         writer.write_snail_try_helper();
     }
-    if uses_subprocess {
+    if uses_regex {
         if uses_try {
+            writer.write_line("");
+        }
+        writer.write_snail_regex_helpers();
+    }
+    if uses_subprocess {
+        if uses_try || uses_regex {
             writer.write_line("");
         }
         writer.write_snail_subprocess_helpers();
     }
-    if (uses_try || uses_subprocess) && !module.body.is_empty() {
+    if (uses_try || uses_regex || uses_subprocess) && !module.body.is_empty() {
         writer.write_line("");
     }
     writer.write_module(module);
@@ -1279,6 +1363,10 @@ pub fn python_source(module: &PyModule) -> String {
 
 fn module_uses_snail_try(module: &PyModule) -> bool {
     module.body.iter().any(stmt_uses_snail_try)
+}
+
+fn module_uses_snail_regex(module: &PyModule) -> bool {
+    module.body.iter().any(stmt_uses_snail_regex)
 }
 
 fn module_uses_snail_subprocess(module: &PyModule) -> bool {
@@ -1602,6 +1690,170 @@ fn expr_uses_snail_try(expr: &PyExpr) -> bool {
     }
 }
 
+fn stmt_uses_snail_regex(stmt: &PyStmt) -> bool {
+    match stmt {
+        PyStmt::If {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_regex(test)
+                || block_uses_snail_regex(body)
+                || block_uses_snail_regex(orelse)
+        }
+        PyStmt::While {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_regex(test)
+                || block_uses_snail_regex(body)
+                || block_uses_snail_regex(orelse)
+        }
+        PyStmt::For {
+            target,
+            iter,
+            body,
+            orelse,
+            ..
+        } => {
+            expr_uses_snail_regex(target)
+                || expr_uses_snail_regex(iter)
+                || block_uses_snail_regex(body)
+                || block_uses_snail_regex(orelse)
+        }
+        PyStmt::FunctionDef { body, .. } | PyStmt::ClassDef { body, .. } => {
+            block_uses_snail_regex(body)
+        }
+        PyStmt::Try {
+            body,
+            handlers,
+            orelse,
+            finalbody,
+            ..
+        } => {
+            block_uses_snail_regex(body)
+                || handlers.iter().any(handler_uses_snail_regex)
+                || block_uses_snail_regex(orelse)
+                || block_uses_snail_regex(finalbody)
+        }
+        PyStmt::With { items, body, .. } => {
+            items.iter().any(with_item_uses_snail_regex) || block_uses_snail_regex(body)
+        }
+        PyStmt::Return { value, .. } => value.as_ref().is_some_and(expr_uses_snail_regex),
+        PyStmt::Raise { value, from, .. } => {
+            value.as_ref().is_some_and(expr_uses_snail_regex)
+                || from.as_ref().is_some_and(expr_uses_snail_regex)
+        }
+        PyStmt::Assert { test, message, .. } => {
+            expr_uses_snail_regex(test) || message.as_ref().is_some_and(expr_uses_snail_regex)
+        }
+        PyStmt::Delete { targets, .. } => targets.iter().any(expr_uses_snail_regex),
+        PyStmt::Import { .. }
+        | PyStmt::ImportFrom { .. }
+        | PyStmt::Break { .. }
+        | PyStmt::Continue { .. }
+        | PyStmt::Pass { .. } => false,
+        PyStmt::Assign { targets, value, .. } => {
+            targets.iter().any(expr_uses_snail_regex) || expr_uses_snail_regex(value)
+        }
+        PyStmt::Expr { value, .. } => expr_uses_snail_regex(value),
+    }
+}
+
+fn block_uses_snail_regex(block: &[PyStmt]) -> bool {
+    block.iter().any(stmt_uses_snail_regex)
+}
+
+fn handler_uses_snail_regex(handler: &PyExceptHandler) -> bool {
+    handler
+        .type_name
+        .as_ref()
+        .is_some_and(expr_uses_snail_regex)
+        || block_uses_snail_regex(&handler.body)
+}
+
+fn with_item_uses_snail_regex(item: &PyWithItem) -> bool {
+    expr_uses_snail_regex(&item.context) || item.target.as_ref().is_some_and(expr_uses_snail_regex)
+}
+
+fn argument_uses_snail_regex(arg: &PyArgument) -> bool {
+    match arg {
+        PyArgument::Positional { value, .. }
+        | PyArgument::Keyword { value, .. }
+        | PyArgument::Star { value, .. }
+        | PyArgument::KwStar { value, .. } => expr_uses_snail_regex(value),
+    }
+}
+
+fn expr_uses_snail_regex(expr: &PyExpr) -> bool {
+    match expr {
+        PyExpr::Name { .. }
+        | PyExpr::Number { .. }
+        | PyExpr::String { .. }
+        | PyExpr::Bool { .. }
+        | PyExpr::None { .. } => false,
+        PyExpr::FString { parts, .. } => parts.iter().any(|part| match part {
+            PyFStringPart::Text(_) => false,
+            PyFStringPart::Expr(expr) => expr_uses_snail_regex(expr),
+        }),
+        PyExpr::Unary { operand, .. } => expr_uses_snail_regex(operand),
+        PyExpr::Binary { left, right, .. } => {
+            expr_uses_snail_regex(left) || expr_uses_snail_regex(right)
+        }
+        PyExpr::Compare {
+            left, comparators, ..
+        } => expr_uses_snail_regex(left) || comparators.iter().any(expr_uses_snail_regex),
+        PyExpr::IfExpr {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_regex(test)
+                || expr_uses_snail_regex(body)
+                || expr_uses_snail_regex(orelse)
+        }
+        PyExpr::Lambda { body, .. } => expr_uses_snail_regex(body),
+        PyExpr::Call { func, args, .. } => {
+            if matches!(func.as_ref(), PyExpr::Name { id, .. }
+                if id == SNAIL_REGEX_SEARCH || id == SNAIL_REGEX_COMPILE)
+            {
+                return true;
+            }
+            expr_uses_snail_regex(func) || args.iter().any(argument_uses_snail_regex)
+        }
+        PyExpr::Attribute { value, .. } => expr_uses_snail_regex(value),
+        PyExpr::Index { value, index, .. } => {
+            expr_uses_snail_regex(value) || expr_uses_snail_regex(index)
+        }
+        PyExpr::Paren { expr, .. } => expr_uses_snail_regex(expr),
+        PyExpr::List { elements, .. } | PyExpr::Tuple { elements, .. } => {
+            elements.iter().any(expr_uses_snail_regex)
+        }
+        PyExpr::Dict { entries, .. } => entries
+            .iter()
+            .any(|(key, value)| expr_uses_snail_regex(key) || expr_uses_snail_regex(value)),
+        PyExpr::Set { elements, .. } => elements.iter().any(expr_uses_snail_regex),
+        PyExpr::ListComp {
+            element, iter, ifs, ..
+        } => {
+            expr_uses_snail_regex(element)
+                || expr_uses_snail_regex(iter)
+                || ifs.iter().any(expr_uses_snail_regex)
+        }
+        PyExpr::DictComp {
+            key,
+            value,
+            iter,
+            ifs,
+            ..
+        } => {
+            expr_uses_snail_regex(key)
+                || expr_uses_snail_regex(value)
+                || expr_uses_snail_regex(iter)
+                || ifs.iter().any(expr_uses_snail_regex)
+        }
+        PyExpr::Slice { start, end, .. } => {
+            start.as_deref().is_some_and(expr_uses_snail_regex)
+                || end.as_deref().is_some_and(expr_uses_snail_regex)
+        }
+    }
+}
+
 struct PythonWriter {
     output: String,
     indent: usize,
@@ -1651,6 +1903,20 @@ impl PythonWriter {
         self.indent -= 1;
         self.write_line(&format!("return fallback_fn({})", SNAIL_EXCEPTION_VAR));
         self.indent -= 2;
+    }
+
+    fn write_snail_regex_helpers(&mut self) {
+        self.write_line("import re");
+        self.write_line("");
+        self.write_line(&format!("def {}(value, pattern):", SNAIL_REGEX_SEARCH));
+        self.indent += 1;
+        self.write_line("return re.search(pattern, value)");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line(&format!("def {}(pattern):", SNAIL_REGEX_COMPILE));
+        self.indent += 1;
+        self.write_line("return re.compile(pattern)");
+        self.indent -= 1;
     }
 
     fn write_snail_subprocess_helpers(&mut self) {

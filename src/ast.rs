@@ -200,6 +200,15 @@ pub enum Expr {
         fallback: Option<Box<Expr>>,
         span: SourceSpan,
     },
+    Regex {
+        pattern: String,
+        span: SourceSpan,
+    },
+    RegexMatch {
+        value: Box<Expr>,
+        pattern: String,
+        span: SourceSpan,
+    },
     Subprocess {
         kind: SubprocessKind,
         parts: Vec<SubprocessPart>,

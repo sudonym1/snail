@@ -785,6 +785,7 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::set_literal => parse_set_literal(pair, source),
         Rule::list_comp => parse_list_comp(pair, source),
         Rule::dict_comp => parse_dict_comp(pair, source),
+        Rule::regex => parse_regex_literal(pair, source),
         Rule::subprocess => parse_subprocess(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
@@ -809,6 +810,7 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::power => parse_power(pair, source),
         Rule::primary => parse_primary(pair, source),
         Rule::atom => parse_atom(pair, source),
+        Rule::regex => parse_regex_literal(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -950,6 +952,22 @@ fn parse_comparison(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
         })?;
         ops.push(op);
         comparators.push(parse_expr_pair(rhs_pair, source)?);
+    }
+    if ops.len() == 1
+        && matches!(ops[0], CompareOp::In)
+        && let [
+            Expr::Regex {
+                pattern,
+                span: regex_span,
+            },
+        ] = comparators.as_slice()
+    {
+        let span = merge_span(expr_span(&left), regex_span);
+        return Ok(Expr::RegexMatch {
+            value: Box::new(left),
+            pattern: pattern.clone(),
+            span,
+        });
     }
     if ops.is_empty() {
         return Ok(left);
@@ -1246,6 +1264,7 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         Rule::set_literal => parse_set_literal(inner_pair, source),
         Rule::list_comp => parse_list_comp(inner_pair, source),
         Rule::dict_comp => parse_dict_comp(inner_pair, source),
+        Rule::regex => parse_regex_literal(inner_pair, source),
         Rule::subprocess => parse_subprocess(inner_pair, source),
         Rule::expr => {
             let expr = parse_expr_pair(inner_pair, source)?;
@@ -1534,6 +1553,20 @@ fn parse_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
     }
 }
 
+fn parse_regex_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let text = pair.as_str();
+    let pattern = if text.len() >= 2 {
+        &text[1..text.len() - 1]
+    } else {
+        ""
+    };
+    Ok(Expr::Regex {
+        pattern: pattern.replace("\\/", "/"),
+        span,
+    })
+}
+
 fn parse_string_literal(value: &str) -> (String, bool, StringDelimiter) {
     let (raw, rest) = if let Some(stripped) = value.strip_prefix('r') {
         (true, stripped)
@@ -1569,6 +1602,8 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Compare { span, .. }
         | Expr::IfExpr { span, .. }
         | Expr::TryExpr { span, .. }
+        | Expr::Regex { span, .. }
+        | Expr::RegexMatch { span, .. }
         | Expr::Subprocess { span, .. }
         | Expr::Call { span, .. }
         | Expr::Attribute { span, .. }

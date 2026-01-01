@@ -57,3 +57,32 @@ fn awk_directive_enables_mode() {
     assert!(stdout.contains("there!"));
     assert!(stdout.contains("done"));
 }
+
+#[test]
+fn awk_regex_pattern_sets_match() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "/a.+c/ { print(match.group(0)) }";
+
+    let mut child = Command::new(exe)
+        .args(["--awk", "-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"abc\nzzz\n")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "abc\n");
+}
