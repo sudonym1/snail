@@ -506,15 +506,52 @@ fn parse_assign_target(pair: Pair<'_, Rule>, source: &str) -> Result<AssignTarge
             let name_pair = inner
                 .next()
                 .ok_or_else(|| error_with_span("missing assignment name", span.clone(), source))?;
-            let name = name_pair.as_str().to_string();
-            if inner.next().is_some() {
-                return Err(error_with_span(
-                    "assignment target must be a name for now",
-                    span,
-                    source,
-                ));
+            let mut expr = Expr::Name {
+                name: name_pair.as_str().to_string(),
+                span: span_from_pair(&name_pair, source),
+            };
+            for suffix in inner {
+                let suffix_span = span_from_pair(&suffix, source);
+                match suffix.as_rule() {
+                    Rule::attribute => {
+                        let attr = suffix
+                            .into_inner()
+                            .next()
+                            .ok_or_else(|| {
+                                error_with_span(
+                                    "missing attribute name",
+                                    suffix_span.clone(),
+                                    source,
+                                )
+                            })?
+                            .as_str()
+                            .to_string();
+                        let span = merge_span(expr_span(&expr), &suffix_span);
+                        expr = Expr::Attribute {
+                            value: Box::new(expr),
+                            attr,
+                            span,
+                        };
+                    }
+                    Rule::index => {
+                        let mut idx_inner = suffix.into_inner();
+                        let index_expr = parse_slice(
+                            idx_inner.next().ok_or_else(|| {
+                                error_with_span("missing index expr", suffix_span.clone(), source)
+                            })?,
+                            source,
+                        )?;
+                        let span = merge_span(expr_span(&expr), expr_span(&index_expr));
+                        expr = Expr::Index {
+                            value: Box::new(expr),
+                            index: Box::new(index_expr),
+                            span,
+                        };
+                    }
+                    _ => {}
+                }
             }
-            Ok(AssignTarget::Name { name, span })
+            assign_target_from_expr(expr, source)
         }
         Rule::identifier => Ok(AssignTarget::Name {
             name: pair.as_str().to_string(),
@@ -525,6 +562,22 @@ fn parse_assign_target(pair: Pair<'_, Rule>, source: &str) -> Result<AssignTarge
             span,
             source,
         )),
+    }
+}
+
+fn assign_target_from_expr(expr: Expr, source: &str) -> Result<AssignTarget, ParseError> {
+    match expr {
+        Expr::Name { name, span } => Ok(AssignTarget::Name { name, span }),
+        Expr::Attribute { value, attr, span } => Ok(AssignTarget::Attribute { value, attr, span }),
+        Expr::Index { value, index, span } => Ok(AssignTarget::Index { value, index, span }),
+        other => {
+            let span = expr_span(&other).clone();
+            Err(error_with_span(
+                format!("unsupported assignment target: {:?}", other),
+                span,
+                source,
+            ))
+        }
     }
 }
 

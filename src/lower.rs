@@ -552,9 +552,16 @@ fn lower_assign_target(target: &AssignTarget) -> Result<PyExpr, LowerError> {
             id: name.clone(),
             span: span.clone(),
         }),
-        AssignTarget::Attribute { .. } | AssignTarget::Index { .. } => Err(LowerError::new(
-            "complex assignment targets are not supported yet",
-        )),
+        AssignTarget::Attribute { value, attr, span } => Ok(PyExpr::Attribute {
+            value: Box::new(lower_expr(value)?),
+            attr: attr.clone(),
+            span: span.clone(),
+        }),
+        AssignTarget::Index { value, index, span } => Ok(PyExpr::Index {
+            value: Box::new(lower_expr(value)?),
+            index: Box::new(lower_expr(index)?),
+            span: span.clone(),
+        }),
     }
 }
 

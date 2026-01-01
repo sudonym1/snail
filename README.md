@@ -64,7 +64,13 @@ Phase 5: Add all major python semantics
 - [x] Add `for`/`while` `else` blocks and `break`/`continue` in `try`.
 - [x] Add support for if-expressions. e.g. `foo = x if y else z`
 
-Phase 6: Snail Specific semantics
+Phase 6: Interop and runtime features
+- [x] Ensure Snail functions/classes are normal Python callables.
+- [x] Handle globals/locals and module namespaces correctly.
+- [x] Define the standard library boundary and any Snail-specific helpers.
+- [x] Add integration tests that mix Snail and Python modules.
+
+Phase 7: Snail Specific semantics
 - [ ] Add first-class syntax for subprocess calls using `$(<command>)` and `@(<command>)`.
   The `<command>` body is treated as an implicit f-string (no quotes required), so
   `$(echo {name})` is valid. `$(<command>)` captures stdout and returns a string,
@@ -80,12 +86,6 @@ Phase 6: Snail Specific semantics
   invoked by the `?` operator in the casee where no explicit fallback
   expression is defined. For example the class that implements `@(command)`
   could implement `__fallback__` to return the CalledProcessError.returncode.
-
-Phase 7: Interop and runtime features
-- [ ] Ensure Snail functions/classes are normal Python callables.
-- [ ] Handle globals/locals and module namespaces correctly.
-- [ ] Define the standard library boundary and any Snail-specific helpers.
-- [ ] Add integration tests that mix Snail and Python modules.
 
 Phase 8: Performance and polish
 - [ ] Cache compiled modules and improve incremental import speed.

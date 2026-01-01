@@ -34,3 +34,9 @@ Tooling
 - Build: `cargo build`
 - Tests: `cargo test`
 - Lint: `cargo fmt --check`, `cargo clippy -- -D warnings`
+
+Phase 6 decisions
+- Standard library boundary: Snail uses the Python standard library directly.
+- Snail-specific helpers live in the `snail` Python module (compile/exec/translate and import hook).
+- `exec_snail` initializes globals with `__builtins__`, `__name__ = "__snail__"`, `__package__ = ""`,
+  and `__file__` (when provided); callers can override by supplying their own globals/locals.

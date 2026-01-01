@@ -79,6 +79,45 @@ fn lowers_assignment_and_binary_expr() {
 }
 
 #[test]
+fn lowers_attribute_and_index_assignment_targets() {
+    let source = "obj.value = 1\nitems[0] = 2";
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    assert_eq!(module.body.len(), 2);
+
+    let first = &module.body[0];
+    if let PyStmt::Assign { targets, .. } = first {
+        assert_eq!(targets.len(), 1);
+        match &targets[0] {
+            snail::PyExpr::Attribute { value, attr, .. } => {
+                assert_eq!(attr, "value");
+                assert_name_location(value, "obj", 1, 1);
+            }
+            other => panic!("expected attribute target, got {other:?}"),
+        }
+    } else {
+        panic!("expected assignment, got {first:?}");
+    }
+
+    let second = &module.body[1];
+    if let PyStmt::Assign { targets, .. } = second {
+        assert_eq!(targets.len(), 1);
+        match &targets[0] {
+            snail::PyExpr::Index { value, index, .. } => {
+                assert_name_location(value, "items", 2, 1);
+                assert!(matches!(
+                    index.as_ref(),
+                    snail::PyExpr::Number { value, .. } if value == "0"
+                ));
+            }
+            other => panic!("expected index target, got {other:?}"),
+        }
+    } else {
+        panic!("expected assignment, got {second:?}");
+    }
+}
+
+#[test]
 fn lowers_comparisons_and_calls() {
     let source = "result = check(x) == True";
     let program = parse_program(source).expect("program should parse");

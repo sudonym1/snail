@@ -60,10 +60,14 @@ from collections import deque, defaultdict as dd
 }
 
 #[test]
-fn rejects_attribute_assignment_targets_for_now() {
-    let source = "a.b = 1";
-    let err = parse_program(source).expect_err("attribute assignment should fail");
-    assert!(err.to_string().contains("assignment target must be a name"));
+fn parses_attribute_and_index_assignment_targets() {
+    let source = r#"
+config.value = 1
+items[0] = 2
+nested.value[1].name = 3
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 3);
 }
 
 #[test]

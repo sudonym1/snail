@@ -85,7 +85,7 @@ fn executes_examples_all_syntax() {
     let source = fs::read_to_string(&path).expect("read example source");
 
     Python::with_gil(|py| {
-        let globals = exec_snail(py, &source, Some("examples/all_syntax.snail"))
+        let globals = exec_snail(py, &source, Some("examples/all_syntax.snail"), None, None)
             .expect("example should execute");
         let globals = globals
             .bind(py)
@@ -120,5 +120,104 @@ fn executes_examples_all_syntax() {
         assert_eq!(lookup.get(&2), Some(&4));
         assert_eq!(lookup.get(&3), Some(&6));
         assert_eq!(lookup.get(&4), Some(&8));
+    });
+}
+
+#[test]
+fn snail_callables_are_python_callables() {
+    pyo3::prepare_freethreaded_python();
+    Python::with_gil(|py| {
+        let module = register_in_python(py).expect("snail module should register");
+        let locals = PyDict::new_bound(py);
+        locals.set_item("snail_module", &module).unwrap();
+
+        py.run_bound(
+            "import sys\nsys.modules['snail'] = snail_module\nfrom snail import exec_snail\nns = exec_snail('def add(x, y) { return x + y }\\nclass Greeter {\\n    def greet(self, name) { return \"hi \" + name }\\n}')\nvalue = ns['add'](1, 2)\ngreeting = ns['Greeter']().greet('Snail')\nname = ns['__name__']",
+            None,
+            Some(&locals),
+        )
+        .expect("python should call snail values");
+
+        let value_obj = locals
+            .get_item("value")
+            .expect("value lookup should succeed")
+            .expect("value should be present");
+        let value: i64 = value_obj.extract().unwrap();
+        assert_eq!(value, 3);
+
+        let greeting_obj = locals
+            .get_item("greeting")
+            .expect("greeting lookup should succeed")
+            .expect("greeting should be present");
+        let greeting: String = greeting_obj.extract().unwrap();
+        assert_eq!(greeting, "hi Snail");
+
+        let name_obj = locals
+            .get_item("name")
+            .expect("name lookup should succeed")
+            .expect("name should be present");
+        let name: String = name_obj.extract().unwrap();
+        assert_eq!(name, "__snail__");
+    });
+}
+
+#[test]
+fn mixes_snail_and_python_modules() {
+    pyo3::prepare_freethreaded_python();
+    let temp = TempDir::new().expect("temp dir");
+    let mut python_path = PathBuf::from(temp.path());
+    python_path.push("helper.py");
+    fs::write(
+        &python_path,
+        "def greeting(name):\n    return f\"hello {name}\"",
+    )
+    .expect("write python module");
+
+    let mut snail_path = PathBuf::from(temp.path());
+    snail_path.push("worker.snail");
+    fs::write(
+        &snail_path,
+        "import helper\ndef build() { return helper.greeting(\"snail\") }\nvalue = build()",
+    )
+    .expect("write snail module");
+
+    Python::with_gil(|py| {
+        let module = register_in_python(py).expect("snail module should register");
+        let locals = PyDict::new_bound(py);
+        locals.set_item("snail_module", &module).unwrap();
+        locals
+            .set_item("module_dir", temp.path().to_string_lossy().to_string())
+            .unwrap();
+
+        py.run_bound(
+            r#"
+import sys
+sys.modules['snail'] = snail_module
+from snail import install_import_hook
+install_import_hook()
+sys.path.insert(0, module_dir)
+import worker
+import helper
+snail_value = worker.value
+python_value = helper.greeting("python")
+"#,
+            None,
+            Some(&locals),
+        )
+        .expect("python should mix snail and python modules");
+
+        let snail_value_obj = locals
+            .get_item("snail_value")
+            .expect("snail value lookup should succeed")
+            .expect("snail value should be present");
+        let snail_value: String = snail_value_obj.extract().unwrap();
+        assert_eq!(snail_value, "hello snail");
+
+        let python_value_obj = locals
+            .get_item("python_value")
+            .expect("python value lookup should succeed")
+            .expect("python value should be present");
+        let python_value: String = python_value_obj.extract().unwrap();
+        assert_eq!(python_value, "hello python");
     });
 }

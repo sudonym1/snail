@@ -28,6 +28,27 @@ fn to_py_err(err: SnailError) -> PyErr {
     }
 }
 
+fn ensure_exec_globals(
+    py: Python<'_>,
+    globals: &Bound<'_, PyDict>,
+    filename: &str,
+) -> PyResult<()> {
+    if globals.get_item("__builtins__")?.is_none() {
+        let builtins = PyModule::import_bound(py, "builtins")?;
+        globals.set_item("__builtins__", builtins)?;
+    }
+    if globals.get_item("__name__")?.is_none() {
+        globals.set_item("__name__", "__snail__")?;
+    }
+    if globals.get_item("__package__")?.is_none() {
+        globals.set_item("__package__", "")?;
+    }
+    if globals.get_item("__file__")?.is_none() {
+        globals.set_item("__file__", filename)?;
+    }
+    Ok(())
+}
+
 #[pyfunction]
 #[allow(unsafe_op_in_unsafe_fn)]
 pub fn compile_snail(py: Python<'_>, source: &str, filename: Option<&str>) -> PyResult<PyObject> {
@@ -37,13 +58,27 @@ pub fn compile_snail(py: Python<'_>, source: &str, filename: Option<&str>) -> Py
 
 #[pyfunction]
 #[allow(unsafe_op_in_unsafe_fn)]
-pub fn exec_snail(py: Python<'_>, source: &str, filename: Option<&str>) -> PyResult<PyObject> {
+pub fn exec_snail(
+    py: Python<'_>,
+    source: &str,
+    filename: Option<&str>,
+    globals: Option<&Bound<'_, PyDict>>,
+    locals: Option<&Bound<'_, PyDict>>,
+) -> PyResult<PyObject> {
     let filename = filename.unwrap_or("<snail>");
     let code = compile_to_code(py, source, filename)?;
-    let globals = PyDict::new_bound(py);
+    let globals = match globals {
+        Some(globals) => globals.clone(),
+        None => PyDict::new_bound(py),
+    };
+    ensure_exec_globals(py, &globals, filename)?;
+    let locals = match locals {
+        Some(locals) => locals.clone(),
+        None => globals.clone(),
+    };
     PyModule::import_bound(py, "builtins")?
         .getattr("exec")?
-        .call1((code, &globals, &globals))?;
+        .call1((code, &globals, &locals))?;
     flush_python_io(py)?;
     Ok(globals.into())
 }

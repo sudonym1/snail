@@ -3,8 +3,11 @@ import math, sys as sysmod
 from math import sqrt as root
 
 class Counter {
-    def inc(self, start, step) {
-        value = start + step
+    def __init__(self, start) {
+        self.start = start
+    }
+    def inc(self, step) {
+        value = self.start + step
         return value
     }
 }
@@ -86,8 +89,8 @@ fallback = "yes" if flag else "no"
 power = -2 ** 3
 mix = (1 + 2) * 3 - 4 / 2 + 5 % 2 + 7 // 2
 
-counter = Counter()
-value = counter.inc(10, 5)
+counter = Counter(10)
+value = counter.inc(5)
 root_val = root(16)
 pi = math.pi
 
