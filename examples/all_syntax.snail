@@ -39,6 +39,8 @@ def named_args(head, tail) {
 
 named_args(head=1,  tail=2)
 
+named_args(1,2);
+
 def join_all(head, tail=0, * rest, **extras) {
     total = head + tail
     for n in rest {
@@ -80,6 +82,7 @@ missing = None
 flag = not False and True or False
 is_none = missing is None
 has_two = 2 in data
+fallback = "yes" if flag else "no"
 power = -2 ** 3
 mix = (1 + 2) * 3 - 4 / 2 + 5 % 2 + 7 // 2
 
@@ -138,6 +141,7 @@ print("value", value)
 print("root", root_val)
 print("pi", pi)
 print("flags", flag, is_none, has_two)
+print("fallback", fallback)
 print("power", power)
 print("mix", mix)
 print("total", total)

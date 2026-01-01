@@ -62,7 +62,7 @@ Phase 5: Add all major python semantics
 - [x] Add tuple and set literals plus slicing (`a[b:c]`, `a[:c]`, `a[b:]`).
 - [x] Add default parameters, `*args`, and `**kwargs`.
 - [x] Add `for`/`while` `else` blocks and `break`/`continue` in `try`.
-- [ ] Add support for if-expressions. e.g. `foo = x if y else z`
+- [x] Add support for if-expressions. e.g. `foo = x if y else z`
 
 Phase 6: Snail Specific semantics
 - [ ] Add first-class syntax for subprocess calls using `$(<command>)` and `@(<command>)`.

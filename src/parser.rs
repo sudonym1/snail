@@ -621,6 +621,7 @@ fn parse_parameter(pair: Pair<'_, Rule>, source: &str) -> Result<Parameter, Pars
 fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match pair.as_rule() {
         Rule::expr
+        | Rule::if_expr
         | Rule::or_expr
         | Rule::and_expr
         | Rule::not_expr
@@ -653,6 +654,7 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
 fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match pair.as_rule() {
         Rule::expr => parse_expr_rule(pair.into_inner().next().unwrap(), source),
+        Rule::if_expr => parse_if_expr(pair, source),
         Rule::or_expr => fold_left_binary(pair, source, BinaryOp::Or),
         Rule::and_expr => fold_left_binary(pair, source, BinaryOp::And),
         Rule::not_expr => parse_not_expr(pair, source),
@@ -669,6 +671,30 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
             source,
         )),
     }
+}
+
+fn parse_if_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let pair_span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let body_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing if-expression body", pair_span.clone(), source))?;
+    let body = parse_expr_pair(body_pair, source)?;
+    let Some(test_pair) = inner.next() else {
+        return Ok(body);
+    };
+    let test = parse_expr_pair(test_pair, source)?;
+    let orelse_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing if-expression else", pair_span.clone(), source))?;
+    let orelse = parse_expr_pair(orelse_pair, source)?;
+    let span = merge_span(expr_span(&body), expr_span(&orelse));
+    Ok(Expr::IfExpr {
+        test: Box::new(test),
+        body: Box::new(body),
+        orelse: Box::new(orelse),
+        span,
+    })
 }
 
 fn fold_left_binary(pair: Pair<'_, Rule>, source: &str, op: BinaryOp) -> Result<Expr, ParseError> {
@@ -1307,6 +1333,7 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Unary { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Compare { span, .. }
+        | Expr::IfExpr { span, .. }
         | Expr::Call { span, .. }
         | Expr::Attribute { span, .. }
         | Expr::Index { span, .. }

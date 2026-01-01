@@ -189,6 +189,12 @@ pub enum Expr {
         comparators: Vec<Expr>,
         span: SourceSpan,
     },
+    IfExpr {
+        test: Box<Expr>,
+        body: Box<Expr>,
+        orelse: Box<Expr>,
+        span: SourceSpan,
+    },
     Call {
         func: Box<Expr>,
         args: Vec<Argument>,

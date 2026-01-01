@@ -13,6 +13,13 @@ if x {
 }
 
 #[test]
+fn parses_semicolon_before_newline() {
+    let source = "x = 1;\ny = 2";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 2);
+}
+
+#[test]
 fn reports_parse_error_with_location() {
     let source = "if { }";
     let err = parse_program(source).expect_err("program should fail");
@@ -156,4 +163,11 @@ while flag { try { continue } finally { cleanup() } } else { done = False }
 "#;
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 2);
+}
+
+#[test]
+fn parses_if_expression() {
+    let source = "value = 1 if flag else 2";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
 }

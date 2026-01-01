@@ -275,6 +275,16 @@ while flag { try { continue } finally { cleanup() } } else { done = False }
     assert_eq!(rendered, expected);
 }
 
+#[test]
+fn renders_if_expression() {
+    let source = "value = 1 if flag else 2";
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "value = (1 if flag else 2)\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {

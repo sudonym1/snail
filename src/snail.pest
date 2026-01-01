@@ -1,7 +1,7 @@
 program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 
 stmt_list = { stmt ~ (stmt_sep ~ stmt)* ~ stmt_sep? }
-stmt_sep = _{ ";" | NEWLINE+ }
+stmt_sep = _{ ";" ~ NEWLINE* | NEWLINE+ }
 
 stmt = _{ compound_stmt | simple_stmt }
 
@@ -62,7 +62,8 @@ assign_stmt = { assign_target ~ "=" ~ expr }
 assign_target = { identifier ~ (attribute | index)* }
 expr_stmt = { expr }
 
-expr = { or_expr }
+expr = { if_expr }
+if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }
 or_expr = { and_expr ~ ("or" ~ and_expr)* }
 and_expr = { not_expr ~ ("and" ~ not_expr)* }
 not_expr = { (not_op ~ not_expr) | comparison }

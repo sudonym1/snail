@@ -184,6 +184,12 @@ pub enum PyExpr {
         comparators: Vec<PyExpr>,
         span: SourceSpan,
     },
+    IfExpr {
+        test: Box<PyExpr>,
+        body: Box<PyExpr>,
+        orelse: Box<PyExpr>,
+        span: SourceSpan,
+    },
     Call {
         func: Box<PyExpr>,
         args: Vec<PyArgument>,
@@ -608,6 +614,17 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
                 .collect::<Result<Vec<_>, _>>()?,
             span: span.clone(),
         }),
+        Expr::IfExpr {
+            test,
+            body,
+            orelse,
+            span,
+        } => Ok(PyExpr::IfExpr {
+            test: Box::new(lower_expr(test)?),
+            body: Box::new(lower_expr(body)?),
+            orelse: Box::new(lower_expr(orelse)?),
+            span: span.clone(),
+        }),
         Expr::Call { func, args, span } => Ok(PyExpr::Call {
             func: Box::new(lower_expr(func)?),
             args: args
@@ -801,6 +818,7 @@ fn expr_span(expr: &PyExpr) -> &SourceSpan {
         | PyExpr::Unary { span, .. }
         | PyExpr::Binary { span, .. }
         | PyExpr::Compare { span, .. }
+        | PyExpr::IfExpr { span, .. }
         | PyExpr::Call { span, .. }
         | PyExpr::Attribute { span, .. }
         | PyExpr::Index { span, .. }
@@ -1120,6 +1138,14 @@ fn expr_source(expr: &PyExpr) -> String {
             }
             format!("({})", parts.join(" "))
         }
+        PyExpr::IfExpr {
+            test, body, orelse, ..
+        } => format!(
+            "({} if {} else {})",
+            expr_source(body),
+            expr_source(test),
+            expr_source(orelse)
+        ),
         PyExpr::Call { func, args, .. } => {
             let args = args
                 .iter()
