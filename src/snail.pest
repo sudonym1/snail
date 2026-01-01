@@ -105,6 +105,7 @@ slice_end = { expr }
 
 atom = _{
   literal
+  | regex
   | subprocess
   | exception_var
   | identifier
@@ -146,6 +147,7 @@ triple_double = { "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" }
 triple_single = { "'''" ~ (!"'''" ~ ANY)* ~ "'''" }
 double_string = { "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" }
 single_string = { "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'" }
+regex = @{ "/" ~ ( "\\/" | !"/" ~ ANY )* ~ "/" }
 
 identifier = @{ !keyword ~ ident_start ~ ident_continue* }
 ident_start = { ASCII_ALPHA | "_" }

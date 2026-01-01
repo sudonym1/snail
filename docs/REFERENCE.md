@@ -108,6 +108,20 @@ prefer_lambda = risky_fallback() ? "lambda"
 dunder_only = risky_fallback()?
 ```
 
+## Regex expressions
+Use regex literals for concise searches:
+
+- `string in /<pattern>/` runs `re.search` and returns the match object (or
+  `None`), so truthiness checks work naturally.
+- `/pattern/` alone produces a compiled regex object you can reuse.
+- Regex literals are treated as raw strings and do not interpolate `{}`
+  expressions, so backslashes stay intact.
+- Escape `/` inside the pattern as `\/`.
+
+In awk mode, regex patterns can stand alone. A bare `/pattern/` matches against
+`line` implicitly and binds the match object to `match` for use inside the
+action block.
+
 ## Subprocess expressions
 Snail provides succinct subprocess helpers:
 - `$(<command>)` runs the command, captures stdout, and returns it as a string.

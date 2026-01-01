@@ -351,6 +351,27 @@ code = @(echo ok)
     assert_eq!(rendered, expected);
 }
 
+#[test]
+fn renders_regex_expressions() {
+    let source = r#"
+text = "value"
+found = text in /val(.)/
+compiled = /abc/
+"#;
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "import re\n\n".to_string()
+        + "def __snail_regex_search(value, pattern):\n"
+        + "    return re.search(pattern, value)\n\n"
+        + "def __snail_regex_compile(pattern):\n"
+        + "    return re.compile(pattern)\n\n"
+        + "text = f\"value\"\n"
+        + "found = __snail_regex_search(text, r\"val(.)\")\n"
+        + "compiled = __snail_regex_compile(r\"abc\")\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {

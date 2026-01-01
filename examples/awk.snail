@@ -1,5 +1,6 @@
 #!snail awk
 BEGIN { print("demo begin") }
 line.startswith("d") { print("matched: {line}") }
+/demo/ { print("regex: {match.group(0)}") }
 { print(fnr) }
 END { print("demo end") }

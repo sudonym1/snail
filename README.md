@@ -114,7 +114,7 @@ Phase 7: Snail Specific semantics
   code. In the case of the `$()` form, the __fallback__ method re-raises the
   exception forcing users to provide a fallback value.
   Both expand into expressions (not statements); complex cases should use Python's `subprocess` directly.
-- [ ] add a regex expression. `string in /<pattern>/` performes an re.search and returns any match object. 
+- [x] add a regex expression. `string in /<pattern>/` performes an re.search and returns any match object.
 
 Phase 8: Documentation and utilities
 - [x] Expand documentation, examples, and language reference.
@@ -127,7 +127,7 @@ Phase 9: Awk-style line processing
 - [x] Add an awk mode that evaluates pattern/action pairs across input lines.
 - [x] Provide syntactic sugar for common awk idioms (e.g., default actions, begin/end hooks).
 - [x] Surface a clear entry point for enabling awk mode (CLI flag or file directive) and document usage.
-- [ ] add support for the regex expression as a pattern. if no string is provided `line` is implicit. just the pattern is valid. the match object should be made available to the action.
+- [x] add support for the regex expression as a pattern. if no string is provided `line` is implicit. just the pattern is valid. the match object should be made available to the action.
 
 Phase 0 decisions (executed)
 - Implementation language: Rust (2024 edition).
