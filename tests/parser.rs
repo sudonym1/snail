@@ -175,3 +175,13 @@ fn parses_if_expression() {
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 1);
 }
+
+#[test]
+fn parses_compact_exception_expression() {
+    let source = r#"
+value = risky()?
+fallback = risky() ? $e
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 2);
+}

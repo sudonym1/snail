@@ -195,6 +195,11 @@ pub enum Expr {
         orelse: Box<Expr>,
         span: SourceSpan,
     },
+    TryExpr {
+        expr: Box<Expr>,
+        fallback: Option<Box<Expr>>,
+        span: SourceSpan,
+    },
     Call {
         func: Box<Expr>,
         args: Vec<Argument>,

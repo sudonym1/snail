@@ -4,6 +4,9 @@ use std::fmt::Write as _;
 
 use crate::ast::*;
 
+const SNAIL_TRY_HELPER: &str = "__snail_compact_try";
+const SNAIL_EXCEPTION_VAR: &str = "__snail_compact_exc";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LowerError {
     pub message: String,
@@ -188,6 +191,11 @@ pub enum PyExpr {
         test: Box<PyExpr>,
         body: Box<PyExpr>,
         orelse: Box<PyExpr>,
+        span: SourceSpan,
+    },
+    Lambda {
+        params: Vec<String>,
+        body: Box<PyExpr>,
         span: SourceSpan,
     },
     Call {
@@ -566,11 +574,31 @@ fn lower_assign_target(target: &AssignTarget) -> Result<PyExpr, LowerError> {
 }
 
 fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
+    lower_expr_with_exception(expr, None)
+}
+
+fn lower_expr_with_exception(
+    expr: &Expr,
+    exception_name: Option<&str>,
+) -> Result<PyExpr, LowerError> {
     match expr {
-        Expr::Name { name, span } => Ok(PyExpr::Name {
-            id: name.clone(),
-            span: span.clone(),
-        }),
+        Expr::Name { name, span } => {
+            if name == "$e" {
+                if let Some(exception_name) = exception_name {
+                    return Ok(PyExpr::Name {
+                        id: exception_name.to_string(),
+                        span: span.clone(),
+                    });
+                }
+                return Err(LowerError::new(
+                    "`$e` is only available in compact exception fallbacks",
+                ));
+            }
+            Ok(PyExpr::Name {
+                id: name.clone(),
+                span: span.clone(),
+            })
+        }
         Expr::Number { value, span } => Ok(PyExpr::Number {
             value: value.clone(),
             span: span.clone(),
@@ -593,7 +621,7 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
         Expr::None { span } => Ok(PyExpr::None { span: span.clone() }),
         Expr::Unary { op, expr, span } => Ok(PyExpr::Unary {
             op: lower_unary_op(*op),
-            operand: Box::new(lower_expr(expr)?),
+            operand: Box::new(lower_expr_with_exception(expr, exception_name)?),
             span: span.clone(),
         }),
         Expr::Binary {
@@ -602,9 +630,9 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
             right,
             span,
         } => Ok(PyExpr::Binary {
-            left: Box::new(lower_expr(left)?),
+            left: Box::new(lower_expr_with_exception(left, exception_name)?),
             op: lower_binary_op(*op),
-            right: Box::new(lower_expr(right)?),
+            right: Box::new(lower_expr_with_exception(right, exception_name)?),
             span: span.clone(),
         }),
         Expr::Compare {
@@ -613,11 +641,11 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
             comparators,
             span,
         } => Ok(PyExpr::Compare {
-            left: Box::new(lower_expr(left)?),
+            left: Box::new(lower_expr_with_exception(left, exception_name)?),
             ops: ops.iter().map(|op| lower_compare_op(*op)).collect(),
             comparators: comparators
                 .iter()
-                .map(lower_expr)
+                .map(|expr| lower_expr_with_exception(expr, exception_name))
                 .collect::<Result<Vec<_>, _>>()?,
             span: span.clone(),
         }),
@@ -627,37 +655,74 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
             orelse,
             span,
         } => Ok(PyExpr::IfExpr {
-            test: Box::new(lower_expr(test)?),
-            body: Box::new(lower_expr(body)?),
-            orelse: Box::new(lower_expr(orelse)?),
+            test: Box::new(lower_expr_with_exception(test, exception_name)?),
+            body: Box::new(lower_expr_with_exception(body, exception_name)?),
+            orelse: Box::new(lower_expr_with_exception(orelse, exception_name)?),
             span: span.clone(),
         }),
+        Expr::TryExpr {
+            expr,
+            fallback,
+            span,
+        } => {
+            let try_lambda = PyExpr::Lambda {
+                params: Vec::new(),
+                body: Box::new(lower_expr_with_exception(expr, exception_name)?),
+                span: span.clone(),
+            };
+            let mut args = vec![PyArgument::Positional {
+                value: try_lambda,
+                span: span.clone(),
+            }];
+            if let Some(fallback_expr) = fallback {
+                let fallback_lambda = PyExpr::Lambda {
+                    params: vec![SNAIL_EXCEPTION_VAR.to_string()],
+                    body: Box::new(lower_expr_with_exception(
+                        fallback_expr,
+                        Some(SNAIL_EXCEPTION_VAR),
+                    )?),
+                    span: span.clone(),
+                };
+                args.push(PyArgument::Positional {
+                    value: fallback_lambda,
+                    span: span.clone(),
+                });
+            }
+            Ok(PyExpr::Call {
+                func: Box::new(PyExpr::Name {
+                    id: SNAIL_TRY_HELPER.to_string(),
+                    span: span.clone(),
+                }),
+                args,
+                span: span.clone(),
+            })
+        }
         Expr::Call { func, args, span } => Ok(PyExpr::Call {
-            func: Box::new(lower_expr(func)?),
+            func: Box::new(lower_expr_with_exception(func, exception_name)?),
             args: args
                 .iter()
-                .map(lower_argument)
+                .map(|arg| lower_argument(arg, exception_name))
                 .collect::<Result<Vec<_>, _>>()?,
             span: span.clone(),
         }),
         Expr::Attribute { value, attr, span } => Ok(PyExpr::Attribute {
-            value: Box::new(lower_expr(value)?),
+            value: Box::new(lower_expr_with_exception(value, exception_name)?),
             attr: attr.clone(),
             span: span.clone(),
         }),
         Expr::Index { value, index, span } => Ok(PyExpr::Index {
-            value: Box::new(lower_expr(value)?),
-            index: Box::new(lower_expr(index)?),
+            value: Box::new(lower_expr_with_exception(value, exception_name)?),
+            index: Box::new(lower_expr_with_exception(index, exception_name)?),
             span: span.clone(),
         }),
         Expr::Paren { expr, span } => Ok(PyExpr::Paren {
-            expr: Box::new(lower_expr(expr)?),
+            expr: Box::new(lower_expr_with_exception(expr, exception_name)?),
             span: span.clone(),
         }),
         Expr::List { elements, span } => {
             let mut lowered = Vec::with_capacity(elements.len());
             for element in elements {
-                lowered.push(lower_expr(element)?);
+                lowered.push(lower_expr_with_exception(element, exception_name)?);
             }
             Ok(PyExpr::List {
                 elements: lowered,
@@ -667,7 +732,7 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
         Expr::Tuple { elements, span } => {
             let mut lowered = Vec::with_capacity(elements.len());
             for element in elements {
-                lowered.push(lower_expr(element)?);
+                lowered.push(lower_expr_with_exception(element, exception_name)?);
             }
             Ok(PyExpr::Tuple {
                 elements: lowered,
@@ -677,7 +742,10 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
         Expr::Dict { entries, span } => {
             let mut lowered = Vec::with_capacity(entries.len());
             for (key, value) in entries {
-                lowered.push((lower_expr(key)?, lower_expr(value)?));
+                lowered.push((
+                    lower_expr_with_exception(key, exception_name)?,
+                    lower_expr_with_exception(value, exception_name)?,
+                ));
             }
             Ok(PyExpr::Dict {
                 entries: lowered,
@@ -687,7 +755,7 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
         Expr::Set { elements, span } => {
             let mut lowered = Vec::with_capacity(elements.len());
             for element in elements {
-                lowered.push(lower_expr(element)?);
+                lowered.push(lower_expr_with_exception(element, exception_name)?);
             }
             Ok(PyExpr::Set {
                 elements: lowered,
@@ -703,12 +771,12 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
         } => {
             let mut lowered_ifs = Vec::with_capacity(ifs.len());
             for cond in ifs {
-                lowered_ifs.push(lower_expr(cond)?);
+                lowered_ifs.push(lower_expr_with_exception(cond, exception_name)?);
             }
             Ok(PyExpr::ListComp {
-                element: Box::new(lower_expr(element)?),
+                element: Box::new(lower_expr_with_exception(element, exception_name)?),
                 target: target.clone(),
-                iter: Box::new(lower_expr(iter)?),
+                iter: Box::new(lower_expr_with_exception(iter, exception_name)?),
                 ifs: lowered_ifs,
                 span: span.clone(),
             })
@@ -723,42 +791,50 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
         } => {
             let mut lowered_ifs = Vec::with_capacity(ifs.len());
             for cond in ifs {
-                lowered_ifs.push(lower_expr(cond)?);
+                lowered_ifs.push(lower_expr_with_exception(cond, exception_name)?);
             }
             Ok(PyExpr::DictComp {
-                key: Box::new(lower_expr(key)?),
-                value: Box::new(lower_expr(value)?),
+                key: Box::new(lower_expr_with_exception(key, exception_name)?),
+                value: Box::new(lower_expr_with_exception(value, exception_name)?),
                 target: target.clone(),
-                iter: Box::new(lower_expr(iter)?),
+                iter: Box::new(lower_expr_with_exception(iter, exception_name)?),
                 ifs: lowered_ifs,
                 span: span.clone(),
             })
         }
         Expr::Slice { start, end, span } => Ok(PyExpr::Slice {
-            start: start.as_deref().map(lower_expr).transpose()?.map(Box::new),
-            end: end.as_deref().map(lower_expr).transpose()?.map(Box::new),
+            start: start
+                .as_deref()
+                .map(|expr| lower_expr_with_exception(expr, exception_name))
+                .transpose()?
+                .map(Box::new),
+            end: end
+                .as_deref()
+                .map(|expr| lower_expr_with_exception(expr, exception_name))
+                .transpose()?
+                .map(Box::new),
             span: span.clone(),
         }),
     }
 }
 
-fn lower_argument(arg: &Argument) -> Result<PyArgument, LowerError> {
+fn lower_argument(arg: &Argument, exception_name: Option<&str>) -> Result<PyArgument, LowerError> {
     match arg {
         Argument::Positional { value, span } => Ok(PyArgument::Positional {
-            value: lower_expr(value)?,
+            value: lower_expr_with_exception(value, exception_name)?,
             span: span.clone(),
         }),
         Argument::Keyword { name, value, span } => Ok(PyArgument::Keyword {
             name: name.clone(),
-            value: lower_expr(value)?,
+            value: lower_expr_with_exception(value, exception_name)?,
             span: span.clone(),
         }),
         Argument::Star { value, span } => Ok(PyArgument::Star {
-            value: lower_expr(value)?,
+            value: lower_expr_with_exception(value, exception_name)?,
             span: span.clone(),
         }),
         Argument::KwStar { value, span } => Ok(PyArgument::KwStar {
-            value: lower_expr(value)?,
+            value: lower_expr_with_exception(value, exception_name)?,
             span: span.clone(),
         }),
     }
@@ -826,6 +902,7 @@ fn expr_span(expr: &PyExpr) -> &SourceSpan {
         | PyExpr::Binary { span, .. }
         | PyExpr::Compare { span, .. }
         | PyExpr::IfExpr { span, .. }
+        | PyExpr::Lambda { span, .. }
         | PyExpr::Call { span, .. }
         | PyExpr::Attribute { span, .. }
         | PyExpr::Index { span, .. }
@@ -884,8 +961,165 @@ fn lower_compare_op(op: CompareOp) -> PyCompareOp {
 
 pub fn python_source(module: &PyModule) -> String {
     let mut writer = PythonWriter::new();
+    if module_uses_snail_try(module) {
+        writer.write_snail_try_helper();
+        if !module.body.is_empty() {
+            writer.write_line("");
+        }
+    }
     writer.write_module(module);
     writer.finish()
+}
+
+fn module_uses_snail_try(module: &PyModule) -> bool {
+    module.body.iter().any(stmt_uses_snail_try)
+}
+
+fn stmt_uses_snail_try(stmt: &PyStmt) -> bool {
+    match stmt {
+        PyStmt::If {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_try(test) || block_uses_snail_try(body) || block_uses_snail_try(orelse)
+        }
+        PyStmt::While {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_try(test) || block_uses_snail_try(body) || block_uses_snail_try(orelse)
+        }
+        PyStmt::For {
+            target,
+            iter,
+            body,
+            orelse,
+            ..
+        } => {
+            expr_uses_snail_try(target)
+                || expr_uses_snail_try(iter)
+                || block_uses_snail_try(body)
+                || block_uses_snail_try(orelse)
+        }
+        PyStmt::FunctionDef { body, .. } | PyStmt::ClassDef { body, .. } => {
+            block_uses_snail_try(body)
+        }
+        PyStmt::Try {
+            body,
+            handlers,
+            orelse,
+            finalbody,
+            ..
+        } => {
+            block_uses_snail_try(body)
+                || handlers.iter().any(handler_uses_snail_try)
+                || block_uses_snail_try(orelse)
+                || block_uses_snail_try(finalbody)
+        }
+        PyStmt::With { items, body, .. } => {
+            items.iter().any(with_item_uses_snail_try) || block_uses_snail_try(body)
+        }
+        PyStmt::Return { value, .. } => value.as_ref().is_some_and(expr_uses_snail_try),
+        PyStmt::Raise { value, from, .. } => {
+            value.as_ref().is_some_and(expr_uses_snail_try)
+                || from.as_ref().is_some_and(expr_uses_snail_try)
+        }
+        PyStmt::Assert { test, message, .. } => {
+            expr_uses_snail_try(test) || message.as_ref().is_some_and(expr_uses_snail_try)
+        }
+        PyStmt::Delete { targets, .. } => targets.iter().any(expr_uses_snail_try),
+        PyStmt::Import { .. }
+        | PyStmt::ImportFrom { .. }
+        | PyStmt::Break { .. }
+        | PyStmt::Continue { .. }
+        | PyStmt::Pass { .. } => false,
+        PyStmt::Assign { targets, value, .. } => {
+            targets.iter().any(expr_uses_snail_try) || expr_uses_snail_try(value)
+        }
+        PyStmt::Expr { value, .. } => expr_uses_snail_try(value),
+    }
+}
+
+fn block_uses_snail_try(block: &[PyStmt]) -> bool {
+    block.iter().any(stmt_uses_snail_try)
+}
+
+fn handler_uses_snail_try(handler: &PyExceptHandler) -> bool {
+    handler.type_name.as_ref().is_some_and(expr_uses_snail_try)
+        || block_uses_snail_try(&handler.body)
+}
+
+fn with_item_uses_snail_try(item: &PyWithItem) -> bool {
+    expr_uses_snail_try(&item.context) || item.target.as_ref().is_some_and(expr_uses_snail_try)
+}
+
+fn argument_uses_snail_try(arg: &PyArgument) -> bool {
+    match arg {
+        PyArgument::Positional { value, .. }
+        | PyArgument::Keyword { value, .. }
+        | PyArgument::Star { value, .. }
+        | PyArgument::KwStar { value, .. } => expr_uses_snail_try(value),
+    }
+}
+
+fn expr_uses_snail_try(expr: &PyExpr) -> bool {
+    match expr {
+        PyExpr::Name { .. }
+        | PyExpr::Number { .. }
+        | PyExpr::String { .. }
+        | PyExpr::Bool { .. }
+        | PyExpr::None { .. } => false,
+        PyExpr::Unary { operand, .. } => expr_uses_snail_try(operand),
+        PyExpr::Binary { left, right, .. } => {
+            expr_uses_snail_try(left) || expr_uses_snail_try(right)
+        }
+        PyExpr::Compare {
+            left, comparators, ..
+        } => expr_uses_snail_try(left) || comparators.iter().any(expr_uses_snail_try),
+        PyExpr::IfExpr {
+            test, body, orelse, ..
+        } => expr_uses_snail_try(test) || expr_uses_snail_try(body) || expr_uses_snail_try(orelse),
+        PyExpr::Lambda { body, .. } => expr_uses_snail_try(body),
+        PyExpr::Call { func, args, .. } => {
+            if matches!(func.as_ref(), PyExpr::Name { id, .. } if id == SNAIL_TRY_HELPER) {
+                return true;
+            }
+            expr_uses_snail_try(func) || args.iter().any(argument_uses_snail_try)
+        }
+        PyExpr::Attribute { value, .. } => expr_uses_snail_try(value),
+        PyExpr::Index { value, index, .. } => {
+            expr_uses_snail_try(value) || expr_uses_snail_try(index)
+        }
+        PyExpr::Paren { expr, .. } => expr_uses_snail_try(expr),
+        PyExpr::List { elements, .. } | PyExpr::Tuple { elements, .. } => {
+            elements.iter().any(expr_uses_snail_try)
+        }
+        PyExpr::Dict { entries, .. } => entries
+            .iter()
+            .any(|(key, value)| expr_uses_snail_try(key) || expr_uses_snail_try(value)),
+        PyExpr::Set { elements, .. } => elements.iter().any(expr_uses_snail_try),
+        PyExpr::ListComp {
+            element, iter, ifs, ..
+        } => {
+            expr_uses_snail_try(element)
+                || expr_uses_snail_try(iter)
+                || ifs.iter().any(expr_uses_snail_try)
+        }
+        PyExpr::DictComp {
+            key,
+            value,
+            iter,
+            ifs,
+            ..
+        } => {
+            expr_uses_snail_try(key)
+                || expr_uses_snail_try(value)
+                || expr_uses_snail_try(iter)
+                || ifs.iter().any(expr_uses_snail_try)
+        }
+        PyExpr::Slice { start, end, .. } => {
+            start.as_deref().is_some_and(expr_uses_snail_try)
+                || end.as_deref().is_some_and(expr_uses_snail_try)
+        }
+    }
 }
 
 struct PythonWriter {
@@ -909,6 +1143,26 @@ impl PythonWriter {
         for stmt in &module.body {
             self.write_stmt(stmt);
         }
+    }
+
+    fn write_snail_try_helper(&mut self) {
+        self.write_line(&format!(
+            "def {}(expr_fn, fallback_fn=None):",
+            SNAIL_TRY_HELPER
+        ));
+        self.indent += 1;
+        self.write_line("try:");
+        self.indent += 1;
+        self.write_line("return expr_fn()");
+        self.indent -= 1;
+        self.write_line(&format!("except Exception as {}:", SNAIL_EXCEPTION_VAR));
+        self.indent += 1;
+        self.write_line("if fallback_fn is None:");
+        self.indent += 1;
+        self.write_line(&format!("return {}", SNAIL_EXCEPTION_VAR));
+        self.indent -= 1;
+        self.write_line(&format!("return fallback_fn({})", SNAIL_EXCEPTION_VAR));
+        self.indent -= 2;
     }
 
     fn write_stmt(&mut self, stmt: &PyStmt) {
@@ -1153,6 +1407,14 @@ fn expr_source(expr: &PyExpr) -> String {
             expr_source(test),
             expr_source(orelse)
         ),
+        PyExpr::Lambda { params, body, .. } => {
+            if params.is_empty() {
+                format!("lambda: {}", expr_source(body))
+            } else {
+                let params = params.join(", ");
+                format!("lambda {params}: {}", expr_source(body))
+            }
+        }
         PyExpr::Call { func, args, .. } => {
             let args = args
                 .iter()

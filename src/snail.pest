@@ -62,7 +62,9 @@ assign_stmt = { assign_target ~ "=" ~ expr }
 assign_target = { identifier ~ (attribute | index)* }
 expr_stmt = { expr }
 
-expr = { if_expr }
+expr = { try_expr }
+try_expr = { if_expr ~ try_suffix? }
+try_suffix = { "?" ~ expr? }
 if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }
 or_expr = { and_expr ~ ("or" ~ and_expr)* }
 and_expr = { not_expr ~ ("and" ~ not_expr)* }
@@ -96,6 +98,7 @@ slice_end = { expr }
 
 atom = _{
   literal
+  | exception_var
   | identifier
   | list_comp
   | list_literal
@@ -119,6 +122,7 @@ comp_if = { "if" ~ expr }
 literal = { number | string | boolean | none }
 boolean = { "True" | "False" }
 none = { "None" }
+exception_var = { "$e" }
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 string = @{ raw_prefix? ~ (triple_double | triple_single | double_string | single_string) }
 raw_prefix = { "r" }
