@@ -69,6 +69,15 @@ pub enum Stmt {
         from: Option<Expr>,
         span: SourceSpan,
     },
+    Assert {
+        test: Expr,
+        message: Option<Expr>,
+        span: SourceSpan,
+    },
+    Delete {
+        targets: Vec<AssignTarget>,
+        span: SourceSpan,
+    },
     Break {
         span: SourceSpan,
     },

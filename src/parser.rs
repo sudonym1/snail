@@ -44,6 +44,8 @@ fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
         Rule::with_stmt => parse_with(pair, source),
         Rule::return_stmt => parse_return(pair, source),
         Rule::raise_stmt => parse_raise(pair, source),
+        Rule::assert_stmt => parse_assert(pair, source),
+        Rule::del_stmt => parse_del(pair, source),
         Rule::break_stmt => Ok(Stmt::Break {
             span: span_from_pair(&pair, source),
         }),
@@ -235,6 +237,38 @@ fn parse_raise(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
         ));
     }
     Ok(Stmt::Raise { value, from, span })
+}
+
+fn parse_assert(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let test_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing assert condition", span.clone(), source))?;
+    let test = parse_expr_pair(test_pair, source)?;
+    let message = inner
+        .next()
+        .map(|message_pair| parse_expr_pair(message_pair, source))
+        .transpose()?;
+    Ok(Stmt::Assert {
+        test,
+        message,
+        span,
+    })
+}
+
+fn parse_del(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut targets = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::assign_target {
+            targets.push(parse_assign_target(inner, source)?);
+        }
+    }
+    if targets.is_empty() {
+        return Err(error_with_span("missing del target", span, source));
+    }
+    Ok(Stmt::Delete { targets, span })
 }
 
 fn parse_try(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {

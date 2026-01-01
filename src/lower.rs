@@ -84,6 +84,15 @@ pub enum PyStmt {
         from: Option<PyExpr>,
         span: SourceSpan,
     },
+    Assert {
+        test: PyExpr,
+        message: Option<PyExpr>,
+        span: SourceSpan,
+    },
+    Delete {
+        targets: Vec<PyExpr>,
+        span: SourceSpan,
+    },
     Break {
         span: SourceSpan,
     },
@@ -351,6 +360,22 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
         Stmt::Raise { value, from, span } => Ok(PyStmt::Raise {
             value: value.as_ref().map(lower_expr).transpose()?,
             from: from.as_ref().map(lower_expr).transpose()?,
+            span: span.clone(),
+        }),
+        Stmt::Assert {
+            test,
+            message,
+            span,
+        } => Ok(PyStmt::Assert {
+            test: lower_expr(test)?,
+            message: message.as_ref().map(lower_expr).transpose()?,
+            span: span.clone(),
+        }),
+        Stmt::Delete { targets, span } => Ok(PyStmt::Delete {
+            targets: targets
+                .iter()
+                .map(lower_assign_target)
+                .collect::<Result<Vec<_>, _>>()?,
             span: span.clone(),
         }),
         Stmt::Break { span } => Ok(PyStmt::Break { span: span.clone() }),
@@ -632,6 +657,8 @@ fn stmt_span(stmt: &PyStmt) -> &SourceSpan {
         | PyStmt::With { span, .. }
         | PyStmt::Return { span, .. }
         | PyStmt::Raise { span, .. }
+        | PyStmt::Assert { span, .. }
+        | PyStmt::Delete { span, .. }
         | PyStmt::Break { span, .. }
         | PyStmt::Continue { span, .. }
         | PyStmt::Pass { span, .. }
@@ -815,6 +842,22 @@ impl PythonWriter {
                 (Some(expr), None) => self.write_line(&format!("raise {}", expr_source(expr))),
                 (None, _) => self.write_line("raise"),
             },
+            PyStmt::Assert { test, message, .. } => match message {
+                Some(expr) => self.write_line(&format!(
+                    "assert {}, {}",
+                    expr_source(test),
+                    expr_source(expr)
+                )),
+                None => self.write_line(&format!("assert {}", expr_source(test))),
+            },
+            PyStmt::Delete { targets, .. } => {
+                let targets = targets
+                    .iter()
+                    .map(expr_source)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.write_line(&format!("del {}", targets));
+            }
             PyStmt::Break { .. } => self.write_line("break"),
             PyStmt::Continue { .. } => self.write_line("continue"),
             PyStmt::Pass { .. } => self.write_line("pass"),

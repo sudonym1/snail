@@ -216,6 +216,20 @@ with open("data") as f, lock() { line = f.read() }
     assert_eq!(rendered, expected);
 }
 
+#[test]
+fn renders_assert_and_del() {
+    let source = r#"
+value = 1
+assert value == 1, "ok"
+del value
+"#;
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "value = 1\nassert (value == 1), f\"ok\"\ndel value\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {

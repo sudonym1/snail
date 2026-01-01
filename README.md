@@ -58,7 +58,7 @@ Phase 5: Add all major python semantics
 - [x] advanced support for strings
 - [x] support for exceptions
 - [x] Add `with` statements and context manager support.
-- [ ] Add `assert` and `del` statements.
+- [x] Add `assert` and `del` statements.
 - [ ] Add tuple and set literals plus slicing (`a[b:c]`, `a[:c]`, `a[b:]`).
 - [ ] Add default parameters, `*args`, and `**kwargs`.
 - [ ] Add `for`/`while` `else` blocks and `break`/`continue` in `try`.

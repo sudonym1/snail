@@ -110,3 +110,14 @@ with open("data") as f { line = f.read() }
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 1);
 }
+
+#[test]
+fn parses_assert_and_del() {
+    let source = r#"
+value = 1
+assert value == 1, "ok"
+del value
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 3);
+}

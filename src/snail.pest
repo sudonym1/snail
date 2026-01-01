@@ -12,6 +12,8 @@ simple_stmt = _{
   | continue_stmt
   | pass_stmt
   | raise_stmt
+  | assert_stmt
+  | del_stmt
   | import_stmt
   | assign_stmt
   | expr_stmt
@@ -38,6 +40,8 @@ parameters = { "(" ~ (identifier ~ ("," ~ identifier)*)? ~ ")" }
 
 return_stmt = { "return" ~ expr? }
 raise_stmt = { "raise" ~ expr? ~ ("from" ~ expr)? }
+assert_stmt = { "assert" ~ expr ~ ("," ~ expr)? }
+del_stmt = { "del" ~ assign_target ~ ("," ~ assign_target)* }
 break_stmt = { "break" }
 continue_stmt = { "continue" }
 pass_stmt = { "pass" }
@@ -111,7 +115,7 @@ ident_continue = { ASCII_ALPHANUMERIC | "_" }
 keyword = _{
   ("if" | "else" | "elif" | "while" | "for" | "in" | "def" | "class"
   | "return" | "break" | "continue" | "pass" | "raise" | "try" | "except"
-  | "finally" | "with" | "and" | "or" | "not" | "import" | "from" | "as"
+  | "finally" | "with" | "assert" | "del" | "and" | "or" | "not" | "import" | "from" | "as"
   | "True" | "False" | "None") ~ !ident_continue
 }
 

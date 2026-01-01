@@ -94,6 +94,7 @@ except ValueError as err {
 with SimpleCtx() as message { ctx_msg = message }
 
 total = compute(data)
+assert total == 6, "total"
 print("first", first)
 print("value", value)
 print("root", root_val)
@@ -105,6 +106,8 @@ print("total", total)
 print("evens", evens)
 print("lookup", lookup)
 print("with", ctx_msg)
+temp_value = 42
+del temp_value
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
 print(sysmod.version)
