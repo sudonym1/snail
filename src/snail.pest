@@ -5,7 +5,7 @@ stmt_sep = _{ ";" | NEWLINE+ }
 
 stmt = _{ compound_stmt | simple_stmt }
 
-compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt | try_stmt }
+compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt | try_stmt | with_stmt }
 simple_stmt = _{
   return_stmt
   | break_stmt
@@ -30,6 +30,9 @@ try_finally_tail = _{ stmt_sep* ~ finally_clause }
 except_clause = { "except" ~ (expr ~ ("as" ~ identifier)?)? ~ block }
 else_clause = { "else" ~ block }
 finally_clause = { "finally" ~ block }
+with_stmt = { "with" ~ with_items ~ block }
+with_items = { with_item ~ ("," ~ with_item)* }
+with_item = { expr ~ ("as" ~ assign_target)? }
 
 parameters = { "(" ~ (identifier ~ ("," ~ identifier)*)? ~ ")" }
 
@@ -108,7 +111,7 @@ ident_continue = { ASCII_ALPHANUMERIC | "_" }
 keyword = _{
   ("if" | "else" | "elif" | "while" | "for" | "in" | "def" | "class"
   | "return" | "break" | "continue" | "pass" | "raise" | "try" | "except"
-  | "finally" | "and" | "or" | "not" | "import" | "from" | "as"
+  | "finally" | "with" | "and" | "or" | "not" | "import" | "from" | "as"
   | "True" | "False" | "None") ~ !ident_continue
 }
 

@@ -41,6 +41,7 @@ fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
         Rule::def_stmt => parse_def(pair, source),
         Rule::class_stmt => parse_class(pair, source),
         Rule::try_stmt => parse_try(pair, source),
+        Rule::with_stmt => parse_with(pair, source),
         Rule::return_stmt => parse_return(pair, source),
         Rule::raise_stmt => parse_raise(pair, source),
         Rule::break_stmt => Ok(Stmt::Break {
@@ -280,6 +281,52 @@ fn parse_try(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
         handlers,
         else_body,
         finally_body,
+        span,
+    })
+}
+
+fn parse_with(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut items = Vec::new();
+    let mut body = None;
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::with_items => items.extend(parse_with_items(inner, source)?),
+            Rule::block => body = Some(parse_block(inner, source)?),
+            _ => {}
+        }
+    }
+    let body = body.ok_or_else(|| error_with_span("missing with block", span.clone(), source))?;
+    if items.is_empty() {
+        return Err(error_with_span("missing with items", span, source));
+    }
+    Ok(Stmt::With { items, body, span })
+}
+
+fn parse_with_items(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<WithItem>, ParseError> {
+    let mut items = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::with_item {
+            items.push(parse_with_item(inner, source)?);
+        }
+    }
+    Ok(items)
+}
+
+fn parse_with_item(pair: Pair<'_, Rule>, source: &str) -> Result<WithItem, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let context_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing with context", span.clone(), source))?;
+    let context = parse_expr_pair(context_pair, source)?;
+    let target = inner
+        .next()
+        .map(|target_pair| parse_assign_target(target_pair, source))
+        .transpose()?;
+    Ok(WithItem {
+        context,
+        target,
         span,
     })
 }

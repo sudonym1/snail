@@ -204,6 +204,18 @@ raise ValueError('bad') from err
     assert_eq!(rendered, expected);
 }
 
+#[test]
+fn renders_with_statement() {
+    let source = r#"
+with open("data") as f, lock() { line = f.read() }
+"#;
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+    let rendered = python_source(&module);
+    let expected = "with open(f\"data\") as f, lock():\n    line = f.read()\n";
+    assert_eq!(rendered, expected);
+}
+
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
         snail::PyExpr::Name { id, span } => {

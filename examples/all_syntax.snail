@@ -9,6 +9,16 @@ class Counter {
     }
 }
 
+class SimpleCtx {
+    def __enter__(self) {
+        return "context"
+    }
+
+    def __exit__(self, exc_type, exc, tb) {
+        return False
+    }
+}
+
 def compute(nums) {
     total = 0
     for n in nums {
@@ -81,6 +91,8 @@ except ValueError as err {
     except { pass }
 }
 
+with SimpleCtx() as message { ctx_msg = message }
+
 total = compute(data)
 print("first", first)
 print("value", value)
@@ -92,6 +104,7 @@ print("mix", mix)
 print("total", total)
 print("evens", evens)
 print("lookup", lookup)
+print("with", ctx_msg)
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
 print(sysmod.version)

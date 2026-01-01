@@ -55,6 +55,11 @@ pub enum Stmt {
         finally_body: Option<Vec<Stmt>>,
         span: SourceSpan,
     },
+    With {
+        items: Vec<WithItem>,
+        body: Vec<Stmt>,
+        span: SourceSpan,
+    },
     Return {
         value: Option<Expr>,
         span: SourceSpan,
@@ -91,6 +96,13 @@ pub enum Stmt {
         value: Expr,
         span: SourceSpan,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WithItem {
+    pub context: Expr,
+    pub target: Option<AssignTarget>,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -70,6 +70,11 @@ pub enum PyStmt {
         finalbody: Vec<PyStmt>,
         span: SourceSpan,
     },
+    With {
+        items: Vec<PyWithItem>,
+        body: Vec<PyStmt>,
+        span: SourceSpan,
+    },
     Return {
         value: Option<PyExpr>,
         span: SourceSpan,
@@ -113,6 +118,13 @@ pub struct PyExceptHandler {
     pub type_name: Option<PyExpr>,
     pub name: Option<String>,
     pub body: Vec<PyStmt>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PyWithItem {
+    pub context: PyExpr,
+    pub target: Option<PyExpr>,
     pub span: SourceSpan,
 }
 
@@ -324,6 +336,14 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
                 .unwrap_or_default(),
             span: span.clone(),
         }),
+        Stmt::With { items, body, span } => Ok(PyStmt::With {
+            items: items
+                .iter()
+                .map(lower_with_item)
+                .collect::<Result<Vec<_>, _>>()?,
+            body: lower_block(body)?,
+            span: span.clone(),
+        }),
         Stmt::Return { value, span } => Ok(PyStmt::Return {
             value: value.as_ref().map(lower_expr).transpose()?,
             span: span.clone(),
@@ -415,6 +435,14 @@ fn lower_except_handler(handler: &ExceptHandler) -> Result<PyExceptHandler, Lowe
         name: handler.name.clone(),
         body: lower_block(&handler.body)?,
         span: handler.span.clone(),
+    })
+}
+
+fn lower_with_item(item: &WithItem) -> Result<PyWithItem, LowerError> {
+    Ok(PyWithItem {
+        context: lower_expr(&item.context)?,
+        target: item.target.as_ref().map(lower_assign_target).transpose()?,
+        span: item.span.clone(),
     })
 }
 
@@ -601,6 +629,7 @@ fn stmt_span(stmt: &PyStmt) -> &SourceSpan {
         | PyStmt::FunctionDef { span, .. }
         | PyStmt::ClassDef { span, .. }
         | PyStmt::Try { span, .. }
+        | PyStmt::With { span, .. }
         | PyStmt::Return { span, .. }
         | PyStmt::Raise { span, .. }
         | PyStmt::Break { span, .. }
@@ -763,6 +792,15 @@ impl PythonWriter {
                     self.write_line("finally:");
                     self.write_suite(finalbody);
                 }
+            }
+            PyStmt::With { items, body, .. } => {
+                let items = items
+                    .iter()
+                    .map(with_item_source)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.write_line(&format!("with {}:", items));
+                self.write_suite(body);
             }
             PyStmt::Return { value, .. } => match value {
                 Some(expr) => self.write_line(&format!("return {}", expr_source(expr))),
@@ -985,6 +1023,15 @@ fn import_name(name: &PyImportName) -> String {
         item.push_str(&format!(" as {}", alias));
     }
     item
+}
+
+fn with_item_source(item: &PyWithItem) -> String {
+    let mut out = expr_source(&item.context);
+    if let Some(target) = &item.target {
+        out.push_str(" as ");
+        out.push_str(&expr_source(target));
+    }
+    out
 }
 
 fn format_string_literal(value: &str, raw: bool, delimiter: StringDelimiter) -> String {

@@ -101,3 +101,12 @@ raise ValueError("bad") from err
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 2);
 }
+
+#[test]
+fn parses_with_statement() {
+    let source = r#"
+with open("data") as f { line = f.read() }
+"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+}
