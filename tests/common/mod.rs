@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use snail::{lower_program, parse_program, python_source, Program};
+use snail::{Program, lower_program, parse_program, python_source};
 
 /// Parse source code and panic with a helpful message if it fails
 pub fn assert_parses(source: &str) -> Program {

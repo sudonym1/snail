@@ -3,7 +3,7 @@ mod common;
 use common::*;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use snail::{lower_program, parse_program, PyBinaryOp, PyCompareOp, PyStmt};
+use snail::{PyBinaryOp, PyCompareOp, PyStmt, lower_program, parse_program};
 
 #[test]
 fn lowers_if_chain_into_nested_orelse() {
@@ -209,7 +209,8 @@ fn renders_list_and_dict_comprehensions() {
         assert_python_compiles(&python);
 
         let globals = PyDict::new_bound(py);
-        py.run_bound(&python, Some(&globals), Some(&globals)).unwrap();
+        py.run_bound(&python, Some(&globals), Some(&globals))
+            .unwrap();
 
         // Verify semantic correctness
         let vals: Bound<PyDict> = globals
@@ -304,7 +305,8 @@ tail = items[2:]
         assert_python_compiles(&python);
 
         let globals = PyDict::new_bound(py);
-        py.run_bound(&python, Some(&globals), Some(&globals)).unwrap();
+        py.run_bound(&python, Some(&globals), Some(&globals))
+            .unwrap();
 
         // Verify semantic correctness
         let pair: (i64, i64) = get_py_var(py, &globals, "pair");
@@ -420,7 +422,8 @@ compiled = /abc/
 
         // Verify semantic correctness
         let globals = PyDict::new_bound(py);
-        py.run_bound(&python, Some(&globals), Some(&globals)).unwrap();
+        py.run_bound(&python, Some(&globals), Some(&globals))
+            .unwrap();
 
         // Check that regex search worked
         let found = globals.get_item("found").unwrap().unwrap();
