@@ -11,11 +11,12 @@ use snail::{CompileMode, SnailError, compile_snail_source_with_mode, format_snai
 #[command(
     name = "snail",
     about = "Snail programming language interpreter",
-    override_usage = "snail [options] <file>\n       snail -c <code>"
+    override_usage = "snail [options] <file> [args]...\n       snail [options] -c <code> [args]...",
+    trailing_var_arg = true
 )]
 struct Cli {
     /// Run a one-liner
-    #[arg(short = 'c', value_name = "code", conflicts_with = "file")]
+    #[arg(short = 'c', value_name = "code")]
     code: Option<String>,
 
     /// Run code in awk mode (pattern/action over input)
@@ -26,12 +27,8 @@ struct Cli {
     #[arg(short = 'p', long = "python")]
     python: bool,
 
-    /// Input file
-    #[arg(conflicts_with = "code")]
-    file: Option<String>,
-
-    /// Arguments passed to the script
-    #[arg(last = true)]
+    /// Input file and arguments passed to the script
+    #[arg(allow_hyphen_values = true)]
     args: Vec<String>,
 }
 
@@ -54,35 +51,29 @@ fn main() {
 fn run() -> Result<(), String> {
     let cli = Cli::parse();
 
-    let input = match (cli.code, cli.file) {
-        (Some(source), None) => CliInput {
+    let mode = if cli.awk {
+        CompileMode::Awk
+    } else {
+        CompileMode::Auto
+    };
+
+    let input = if let Some(source) = cli.code {
+        CliInput {
             filename: "<cmd>".to_string(),
             source,
             argv: build_argv("-c", cli.args),
-            mode: if cli.awk {
-                CompileMode::Awk
-            } else {
-                CompileMode::Auto
-            },
-        },
-        (None, Some(path)) => {
-            let source = read_source(&path)?;
-            CliInput {
-                filename: path.clone(),
-                source,
-                argv: build_argv(&path, cli.args),
-                mode: if cli.awk {
-                    CompileMode::Awk
-                } else {
-                    CompileMode::Auto
-                },
-            }
+            mode,
         }
-        (None, None) => {
-            // No input provided - clap will have shown help or we need to show usage
-            return Err("no input provided; use -c <code> or provide a file".to_string());
+    } else if let Some((path, script_args)) = cli.args.split_first() {
+        let source = read_source(path)?;
+        CliInput {
+            filename: path.clone(),
+            source,
+            argv: build_argv(path, script_args.to_vec()),
+            mode,
         }
-        (Some(_), Some(_)) => unreachable!(), // clap handles this conflict
+    } else {
+        return Err("no input provided; use -c <code> or provide a file".to_string());
     };
 
     if cli.python {
