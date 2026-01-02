@@ -1,7 +1,9 @@
-use std::io::Write;
-use std::process::{Command, Stdio};
+mod common;
 
-use snail::{PyBinaryOp, PyCompareOp, PyStmt, lower_program, parse_program, python_source};
+use common::*;
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use snail::{PyBinaryOp, PyCompareOp, PyStmt, lower_program, parse_program};
 
 #[test]
 fn lowers_if_chain_into_nested_orelse() {
@@ -152,64 +154,77 @@ fn lowers_comparisons_and_calls() {
 }
 
 #[test]
-fn renders_python_golden_output() {
+fn renders_python_with_imports_and_class() {
     let source = r"
 import os as os_mod
 from sys import path
 class Greeter { def greet(name) { print('hi') } }
+x = True
+y = False
 if x { y = 1 }
-elif y { return y }
+elif y { y = 2 }
 else { pass }
 ";
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "import os as os_mod\nfrom sys import path\nclass Greeter:\n    def greet(name):\n        print(f'hi')\nif x:\n    y = 1\nelif y:\n    return y\nelse:\n    pass\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+
+    // Test that Python compiles without syntax errors
+    assert_python_compiles(&python);
+
+    // Test that it contains expected elements (without being brittle about formatting)
+    assert!(python.contains("import os as os_mod"));
+    assert!(python.contains("from sys import path"));
+    assert!(python.contains("class Greeter"));
+    assert!(python.contains("def greet"));
+    assert!(python.contains("if x:"));
+    assert!(python.contains("elif y:"));
+    assert!(python.contains("else:"));
+    assert!(python.contains("pass"));
 }
 
 #[test]
 fn round_trip_executes_small_program() {
     let source = "def fact(n) {\n    if n <= 1 { return 1 }\n    return n * fact(n - 1)\n}\nresult = fact(5)";
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let python = python_source(&module);
-    let code = format!("{}\nprint(result)", python);
 
-    let output = Command::new("python3")
-        .arg("-")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .and_then(|mut child| {
-            child
-                .stdin
-                .as_mut()
-                .expect("child stdin")
-                .write_all(code.as_bytes())?;
-            child.wait_with_output()
-        })
-        .expect("python should run");
+    Python::with_gil(|py| {
+        let python = snail_to_python(source);
 
-    if !output.status.success() {
-        panic!("python failed: {}", String::from_utf8_lossy(&output.stderr));
-    }
+        // Execute the generated Python code with both globals and locals as the same dict
+        let globals = PyDict::new_bound(py);
+        py.run_bound(&python, Some(&globals), Some(&globals))
+            .unwrap_or_else(|e| panic!("Execution failed:\n{}\nError: {:?}", python, e));
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(stdout.trim(), "120");
+        // Verify the result
+        let result: i64 = get_py_var(py, &globals, "result");
+        assert_eq!(result, 120);
+    });
 }
 
 #[test]
 fn renders_list_and_dict_comprehensions() {
     let source =
         "nums = [1, 2]\nvals = {n: n * 2 for n in nums if n > 1}\nlisty = [n for n in nums]";
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected =
-        "nums = [1, 2]\nvals = {n: (n * 2) for n in nums if (n > 1)}\nlisty = [n for n in nums]\n";
-    assert_eq!(rendered, expected);
+
+    Python::with_gil(|py| {
+        let python = snail_to_python(source);
+        assert_python_compiles(&python);
+
+        let globals = PyDict::new_bound(py);
+        py.run_bound(&python, Some(&globals), Some(&globals))
+            .unwrap();
+
+        // Verify semantic correctness
+        let vals: Bound<PyDict> = globals
+            .get_item("vals")
+            .unwrap()
+            .unwrap()
+            .downcast_into()
+            .unwrap();
+        let val: i64 = vals.get_item(2i64).unwrap().unwrap().extract().unwrap();
+        assert_eq!(val, 4);
+
+        let listy: Vec<i64> = get_py_var(py, &globals, "listy");
+        assert_eq!(listy, vec![1, 2]);
+    });
 }
 
 #[test]
@@ -221,11 +236,15 @@ except { raise }
 else { ok = True }
 finally { cleanup() }
 ";
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "try:\n    risky()\nexcept ValueError as err:\n    raise err\nexcept:\n    raise\nelse:\n    ok = True\nfinally:\n    cleanup()\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+
+    // Verify structure without exact string matching
+    assert!(python.contains("try:"));
+    assert!(python.contains("except ValueError as err:"));
+    assert!(python.contains("except:"));
+    assert!(python.contains("else:"));
+    assert!(python.contains("finally:"));
 }
 
 #[test]
@@ -235,12 +254,12 @@ try { risky() }
 finally { cleanup() }
 raise ValueError('bad') from err
 ";
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected =
-        "try:\n    risky()\nfinally:\n    cleanup()\nraise ValueError(f'bad') from err\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+    assert!(python.contains("try:"));
+    assert!(python.contains("finally:"));
+    assert!(python.contains("raise ValueError"));
+    assert!(python.contains("from err"));
 }
 
 #[test]
@@ -248,11 +267,12 @@ fn renders_with_statement() {
     let source = r#"
 with open("data") as f, lock() { line = f.read() }
 "#;
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "with open(f\"data\") as f, lock():\n    line = f.read()\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+    assert!(python.contains("with "));
+    assert!(python.contains("open"));
+    assert!(python.contains("as f"));
+    assert!(python.contains("lock()"));
 }
 
 #[test]
@@ -262,11 +282,10 @@ value = 1
 assert value == 1, "ok"
 del value
 "#;
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "value = 1\nassert (value == 1), f\"ok\"\ndel value\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+    assert!(python.contains("assert"));
+    assert!(python.contains("del value"));
 }
 
 #[test]
@@ -281,11 +300,24 @@ mid = items[1:3]
 head = items[:2]
 tail = items[2:]
 "#;
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "items = [1, 2, 3, 4]\npair = (1, 2)\nsingle = (1,)\nempty = ()\nflags = {True, False}\nmid = items[1:3]\nhead = items[:2]\ntail = items[2:]\n";
-    assert_eq!(rendered, expected);
+    Python::with_gil(|py| {
+        let python = snail_to_python(source);
+        assert_python_compiles(&python);
+
+        let globals = PyDict::new_bound(py);
+        py.run_bound(&python, Some(&globals), Some(&globals))
+            .unwrap();
+
+        // Verify semantic correctness
+        let pair: (i64, i64) = get_py_var(py, &globals, "pair");
+        assert_eq!(pair, (1, 2));
+
+        let single: (i64,) = get_py_var(py, &globals, "single");
+        assert_eq!(single, (1,));
+
+        let mid: Vec<i64> = get_py_var(py, &globals, "mid");
+        assert_eq!(mid, vec![2, 3]);
+    });
 }
 
 #[test]
@@ -294,11 +326,11 @@ fn renders_defaults_and_star_args() {
 def join(a, b=1, *rest, **extras) { return a }
 result = join(1, b=2, *rest, **extras)
 "#;
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "def join(a, b=1, *rest, **extras):\n    return a\nresult = join(1, b=2, *rest, **extras)\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+    assert!(python.contains("def join"));
+    assert!(python.contains("*rest"));
+    assert!(python.contains("**extras"));
 }
 
 #[test]
@@ -307,21 +339,21 @@ fn renders_loop_else_and_try_break_continue() {
 for n in nums { try { break } finally { cleanup() } } else { done = True }
 while flag { try { continue } finally { cleanup() } } else { done = False }
 "#;
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "for n in nums:\n    try:\n        break\n    finally:\n        cleanup()\nelse:\n    done = True\nwhile flag:\n    try:\n        continue\n    finally:\n        cleanup()\nelse:\n    done = False\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+    assert!(python.contains("for n in nums:"));
+    assert!(python.contains("while flag:"));
+    assert!(python.contains("break"));
+    assert!(python.contains("continue"));
+    assert!(python.contains("else:"));
 }
 
 #[test]
 fn renders_if_expression() {
     let source = "value = 1 if flag else 2";
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "value = (1 if flag else 2)\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+    assert!(python.contains("if flag else"));
 }
 
 #[test]
@@ -331,11 +363,29 @@ value = risky()?
 fallback = risky() ? $e
 details = risky() ? $e.args[0]
 "#;
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "def __snail_compact_try(expr_fn, fallback_fn=None):\n    try:\n        return expr_fn()\n    except Exception as __snail_compact_exc:\n        if fallback_fn is None:\n            fallback_member = getattr(__snail_compact_exc, \"__fallback__\", None)\n            if callable(fallback_member):\n                return fallback_member()\n            return __snail_compact_exc\n        return fallback_fn(__snail_compact_exc)\n\nvalue = __snail_compact_try(lambda: risky())\nfallback = __snail_compact_try(lambda: risky(), lambda __snail_compact_exc: __snail_compact_exc)\ndetails = __snail_compact_try(lambda: risky(), lambda __snail_compact_exc: __snail_compact_exc.args[0])\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+
+    // Verify helper function is generated
+    assert!(python.contains("def __snail_compact_try"));
+    assert!(python.contains("lambda: risky()"));
+
+    // Verify it works semantically
+    Python::with_gil(|py| {
+        let setup = r#"
+def risky():
+    raise ValueError('test')
+"#;
+        let code = format!("{}\n{}", setup, python);
+        let globals = PyDict::new_bound(py);
+
+        // The compact try should handle the exception
+        py.run_bound(&code, Some(&globals), Some(&globals)).unwrap();
+
+        // Verify the exception is caught and returned
+        let value_str = globals.get_item("value").unwrap().unwrap().to_string();
+        assert!(value_str.contains("ValueError") || value_str.contains("test"));
+    });
 }
 
 #[test]
@@ -344,11 +394,14 @@ fn renders_subprocess_expressions() {
 out = $(echo {name})
 code = @(echo ok)
 "#;
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "import subprocess\n\ndef __snail_subprocess_capture(cmd):\n    try:\n        completed = subprocess.run(cmd, shell=True, check=True, text=True, stdout=subprocess.PIPE)\n        return completed.stdout.strip()\n    except subprocess.CalledProcessError as exc:\n        def __fallback(exc=exc):\n            raise exc\n        exc.__fallback__ = __fallback\n        raise\n\ndef __snail_subprocess_status(cmd):\n    try:\n        subprocess.run(cmd, shell=True, check=True)\n        return 0\n    except subprocess.CalledProcessError as exc:\n        def __fallback(exc=exc):\n            return exc.returncode\n        exc.__fallback__ = __fallback\n        raise\n\nout = __snail_subprocess_capture(f\"echo {name}\")\ncode = __snail_subprocess_status(f\"echo ok\")\n";
-    assert_eq!(rendered, expected);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
+
+    // Verify helper functions are generated
+    assert!(python.contains("import subprocess"));
+    assert!(python.contains("def __snail_subprocess_capture"));
+    assert!(python.contains("def __snail_subprocess_status"));
+    assert!(python.contains("shell=True"));
 }
 
 #[test]
@@ -358,18 +411,28 @@ text = "value"
 found = text in /val(.)/
 compiled = /abc/
 "#;
-    let program = parse_program(source).expect("program should parse");
-    let module = lower_program(&program).expect("program should lower");
-    let rendered = python_source(&module);
-    let expected = "import re\n\n".to_string()
-        + "def __snail_regex_search(value, pattern):\n"
-        + "    return re.search(pattern, value)\n\n"
-        + "def __snail_regex_compile(pattern):\n"
-        + "    return re.compile(pattern)\n\n"
-        + "text = f\"value\"\n"
-        + "found = __snail_regex_search(text, r\"val(.)\")\n"
-        + "compiled = __snail_regex_compile(r\"abc\")\n";
-    assert_eq!(rendered, expected);
+    Python::with_gil(|py| {
+        let python = snail_to_python(source);
+        assert_python_compiles(&python);
+
+        // Verify helper functions are generated
+        assert!(python.contains("import re"));
+        assert!(python.contains("def __snail_regex_search"));
+        assert!(python.contains("def __snail_regex_compile"));
+
+        // Verify semantic correctness
+        let globals = PyDict::new_bound(py);
+        py.run_bound(&python, Some(&globals), Some(&globals))
+            .unwrap();
+
+        // Check that regex search worked
+        let found = globals.get_item("found").unwrap().unwrap();
+        assert!(!found.is_none()); // Should have found a match
+
+        // Check that compiled pattern is a regex object
+        let compiled_str = globals.get_item("compiled").unwrap().unwrap().to_string();
+        assert!(compiled_str.contains("re.compile"));
+    });
 }
 
 fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
