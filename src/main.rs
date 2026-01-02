@@ -1,11 +1,16 @@
+use std::collections::VecDeque;
 use std::fs;
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
-use snail::{CompileMode, SnailError, compile_snail_source_with_mode, format_snail_error};
+use snail::{
+    CompileMode, SnailError, compile_snail_source_with_mode, format_snail_error,
+    format_snail_source, unified_diff,
+};
 
 #[derive(Parser)]
 #[command(
@@ -26,6 +31,14 @@ struct Cli {
     /// Output translated Python and exit
     #[arg(short = 'p', long = "python")]
     python: bool,
+
+    /// Check Snail source formatting (optional paths can scope the search)
+    #[arg(long = "format")]
+    format: bool,
+
+    /// Update files in place instead of printing unified diffs
+    #[arg(long = "write", requires = "format")]
+    write: bool,
 
     /// Input file and arguments passed to the script
     #[arg(allow_hyphen_values = true)]
@@ -50,6 +63,10 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let cli = Cli::parse();
+
+    if cli.format {
+        return run_formatting(&cli);
+    }
 
     let mode = if cli.awk {
         CompileMode::Awk
@@ -154,4 +171,77 @@ fn flush_python_io(sys: &Bound<'_, PyModule>) {
     }
     let _ = io::stdout().flush();
     let _ = io::stderr().flush();
+}
+
+fn run_formatting(cli: &Cli) -> Result<(), String> {
+    if cli.code.is_some() || cli.python || cli.awk {
+        return Err("--format cannot be combined with execution flags".to_string());
+    }
+
+    let targets: Vec<PathBuf> = if cli.args.is_empty() {
+        vec![PathBuf::from(".")]
+    } else {
+        cli.args.iter().map(PathBuf::from).collect()
+    };
+
+    let files = find_snail_files(&targets)?;
+    let mut had_changes = false;
+
+    for (idx, path) in files.iter().enumerate() {
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| format!("non-utf8 path: {}", path.display()))?;
+        let source = read_source(path_str)?;
+        let formatted = format_snail_source(&source);
+
+        if formatted != source {
+            had_changes = true;
+
+            if cli.write {
+                fs::write(path, &formatted)
+                    .map_err(|err| format!("failed to write {}: {err}", path.display()))?;
+            }
+
+            let diff = unified_diff(&source, &formatted, path)?;
+            if idx > 0 {
+                println!();
+            }
+            print!("{}", diff);
+        }
+    }
+
+    if had_changes && !cli.write {
+        return Err("formatting changes needed".to_string());
+    }
+
+    Ok(())
+}
+
+fn find_snail_files(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+    let mut queue: VecDeque<PathBuf> = VecDeque::from(paths.to_vec());
+    let mut files = Vec::new();
+
+    while let Some(path) = queue.pop_front() {
+        let metadata = fs::metadata(&path)
+            .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+
+        if metadata.is_dir() {
+            for entry in fs::read_dir(&path)
+                .map_err(|err| format!("failed to list {}: {err}", path.display()))?
+            {
+                let entry =
+                    entry.map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+                queue.push_back(entry.path());
+            }
+        } else if metadata.is_file() && is_snail_file(&path) {
+            files.push(path);
+        }
+    }
+
+    files.sort();
+    Ok(files)
+}
+
+fn is_snail_file(path: &Path) -> bool {
+    path.extension().map(|ext| ext == "snail").unwrap_or(false)
 }

@@ -1,7 +1,8 @@
+use std::fs;
 use std::io::Write;
 use std::process::Command;
 
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, tempdir};
 
 #[test]
 fn passes_args_to_script_with_c_flag() {
@@ -195,6 +196,47 @@ fn cli_handles_syntax_error_in_generated_python() {
         .expect("should run");
 
     assert!(!output.status.success());
+}
+
+#[test]
+fn format_check_outputs_diff() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let dir = tempdir().expect("temp dir");
+    let path = dir.path().join("example.snail");
+    fs::write(&path, "value = 1  \n").expect("write file");
+
+    let output = Command::new(exe)
+        .arg("--format")
+        .arg(path.to_str().unwrap())
+        .current_dir(dir.path())
+        .output()
+        .expect("run snail");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("---"));
+    assert!(stdout.contains("+++"));
+    assert!(stdout.contains("value = 1"));
+}
+
+#[test]
+fn format_write_updates_file() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let dir = tempdir().expect("temp dir");
+    let path = dir.path().join("example.snail");
+    fs::write(&path, "value = 1  \nsecond\t\tline\t\t").expect("write file");
+
+    let output = Command::new(exe)
+        .arg("--format")
+        .arg("--write")
+        .arg(path.to_str().unwrap())
+        .current_dir(dir.path())
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    let contents = fs::read_to_string(&path).expect("read formatted file");
+    assert_eq!(contents, "value = 1\nsecond\t\tline\n");
 }
 
 #[test]

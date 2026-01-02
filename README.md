@@ -15,6 +15,12 @@ through the syntax surface and runtime behaviors, while the example files
 provide runnable tours that mirror the language features. Both stay current as
 phases are delivered.
 
+Snail ships with a formatting pass for `.snail` sources. Run `snail --format`
+to check the current directory tree (or specific paths) and print unified
+diffs for any files that would change. Add `--write` to apply the formatting in
+place. The formatter currently trims trailing whitespace and ensures files end
+with a newline.
+
 Awk mode is available for line-oriented scripts. Enable it with `snail --awk`
 or by starting a file with `#!snail awk`. Awk sources are written as
 pattern/action pairs evaluated for each input line. `BEGIN` and `END` blocks run
@@ -80,7 +86,7 @@ Phase 3: CPython integration
 Phase 4: CLI and tooling
 - [x] Build a `snail` CLI for running files and one-liners.
 - [x] Add error formatting suitable for terminal output.
-- [ ] Add formatting flags to the `snail` CLI that check or update Snail source.
+- [x] Add formatting flags to the `snail` CLI that check or update Snail source.
   - Default behavior: recurse from the current directory, find all Snail files,
     and print unified diffs for any formatting changes to stdout.
   - Specific files or directories can be passed to limit which sources are
