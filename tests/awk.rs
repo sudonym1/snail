@@ -90,7 +90,7 @@ fn awk_regex_pattern_sets_match() {
 #[test]
 fn awk_field_index_zero_is_whole_line() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let source = "True { print($0) }";
+    let source = "{ print($0) }";
 
     let mut child = Command::new(exe)
         .args(["--awk", "-c", source])
@@ -119,7 +119,7 @@ fn awk_field_index_zero_is_whole_line() {
 #[test]
 fn awk_field_index_basic() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let source = "True { print($1, $2) }";
+    let source = "{ print($1, $2) }";
 
     let mut child = Command::new(exe)
         .args(["--awk", "-c", source])
@@ -148,7 +148,7 @@ fn awk_field_index_basic() {
 #[test]
 fn awk_field_index_high_numbers() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let source = "True { print($10) }";
+    let source = "{ print($10) }";
 
     let mut child = Command::new(exe)
         .args(["--awk", "-c", source])
@@ -177,7 +177,7 @@ fn awk_field_index_high_numbers() {
 #[test]
 fn awk_field_index_mixed_with_injected_vars() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let source = "True { print($0, $1, len($f)) }";
+    let source = "{ print($0, $1, len($f)) }";
 
     let mut child = Command::new(exe)
         .args(["--awk", "-c", source])
@@ -200,13 +200,16 @@ fn awk_field_index_mixed_with_injected_vars() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert_eq!(String::from_utf8_lossy(&output.stdout), "hello world hello 2\n");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "hello world hello 2\n"
+    );
 }
 
 #[test]
 fn awk_field_index_in_expressions() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let source = "True { print($1 + ' ' + $2) }";
+    let source = "{ print($1 + ' ' + $2) }";
 
     let mut child = Command::new(exe)
         .args(["--awk", "-c", source])
@@ -235,7 +238,7 @@ fn awk_field_index_in_expressions() {
 #[test]
 fn awk_field_index_multiple_lines() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let source = "True { print($2) }";
+    let source = "{ print($2) }";
 
     let mut child = Command::new(exe)
         .args(["--awk", "-c", source])

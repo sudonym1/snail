@@ -4,7 +4,7 @@ awk_entry_list = { awk_entry ~ (stmt_sep+ ~ awk_entry)* ~ stmt_sep? }
 awk_entry = _{ awk_begin | awk_end | awk_rule }
 awk_begin = { "BEGIN" ~ block }
 awk_end = { "END" ~ block }
-awk_rule = { awk_pattern ~ block? | block }
+awk_rule = { block | awk_pattern ~ block? }
 awk_pattern = { expr }
 
 stmt_list = { stmt ~ (stmt_sep ~ stmt)* ~ stmt_sep? }
