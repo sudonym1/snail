@@ -1,11 +1,39 @@
-use std::env;
 use std::fs;
 use std::io::{self, Write};
 
+use clap::Parser;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
 use snail::{CompileMode, SnailError, compile_snail_source_with_mode, format_snail_error};
+
+#[derive(Parser)]
+#[command(
+    name = "snail",
+    about = "Snail programming language interpreter",
+    override_usage = "snail [options] <file>\n       snail -c <code>"
+)]
+struct Cli {
+    /// Run a one-liner
+    #[arg(short = 'c', value_name = "code", conflicts_with = "file")]
+    code: Option<String>,
+
+    /// Run code in awk mode (pattern/action over input)
+    #[arg(short = 'a', long = "awk")]
+    awk: bool,
+
+    /// Output translated Python and exit
+    #[arg(short = 'p', long = "python")]
+    python: bool,
+
+    /// Input file
+    #[arg(conflicts_with = "code")]
+    file: Option<String>,
+
+    /// Arguments passed to the script
+    #[arg(last = true)]
+    args: Vec<String>,
+}
 
 struct CliInput {
     filename: String,
@@ -24,61 +52,14 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    let mut args = env::args().skip(1);
-    let mut code = None;
-    let mut filename = None;
-    let mut argv = Vec::new();
-    let mut print_python = false;
-    let mut passthrough = false;
-    let mut awk_mode = false;
+    let cli = Cli::parse();
 
-    while let Some(arg) = args.next() {
-        if passthrough {
-            argv.push(arg);
-            continue;
-        }
-
-        match arg.as_str() {
-            "-h" | "--help" => {
-                print_help();
-                return Ok(());
-            }
-            "-p" | "--python" => {
-                print_python = true;
-            }
-            "-a" | "--awk" => {
-                awk_mode = true;
-            }
-            "-c" => {
-                let value = args
-                    .next()
-                    .ok_or_else(|| "missing argument for -c".to_string())?;
-                code = Some(value);
-            }
-            "--" => passthrough = true,
-            _ if arg.starts_with('-') => {
-                return Err(format!("unknown option: {arg}"));
-            }
-            _ => {
-                if filename.is_some() {
-                    return Err("multiple input files provided".to_string());
-                }
-                filename = Some(arg);
-            }
-        }
-    }
-
-    let input = match (code, filename) {
-        (Some(_), Some(_)) => return Err("use -c for code or a file path, not both".to_string()),
-        (None, None) => {
-            print_help();
-            return Ok(());
-        }
+    let input = match (cli.code, cli.file) {
         (Some(source), None) => CliInput {
             filename: "<cmd>".to_string(),
             source,
-            argv: build_argv("-c", argv),
-            mode: if awk_mode {
+            argv: build_argv("-c", cli.args),
+            mode: if cli.awk {
                 CompileMode::Awk
             } else {
                 CompileMode::Auto
@@ -89,17 +70,22 @@ fn run() -> Result<(), String> {
             CliInput {
                 filename: path.clone(),
                 source,
-                argv: build_argv(&path, argv),
-                mode: if awk_mode {
+                argv: build_argv(&path, cli.args),
+                mode: if cli.awk {
                     CompileMode::Awk
                 } else {
                     CompileMode::Auto
                 },
             }
         }
+        (None, None) => {
+            // No input provided - clap will have shown help or we need to show usage
+            return Err("no input provided; use -c <code> or provide a file".to_string());
+        }
+        (Some(_), Some(_)) => unreachable!(), // clap handles this conflict
     };
 
-    if print_python {
+    if cli.python {
         let python = match compile_snail_source_with_mode(&input.source, input.mode) {
             Ok(python) => python,
             Err(err) => return Err(format_snail_error(&err, &input.filename)),
@@ -127,21 +113,6 @@ fn build_argv(argv0: &str, extra: Vec<String>) -> Vec<String> {
     argv.push(argv0.to_string());
     argv.extend(extra);
     argv
-}
-
-fn print_help() {
-    let mut out = io::stderr();
-    let _ = writeln!(out, "usage: snail [options] <file>");
-    let _ = writeln!(out, "       snail -c <code>");
-    let _ = writeln!(out);
-    let _ = writeln!(out, "options:");
-    let _ = writeln!(out, "  -c <code>    run a one-liner");
-    let _ = writeln!(
-        out,
-        "  -a, --awk    run code in awk mode (pattern/action over input)"
-    );
-    let _ = writeln!(out, "  -p, --python output translated Python and exit");
-    let _ = writeln!(out, "  -h, --help   show this help");
 }
 
 enum CliError {
