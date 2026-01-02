@@ -79,7 +79,13 @@ Phase 3: CPython integration
 Phase 4: CLI and tooling
 - [x] Build a `snail` CLI for running files and one-liners.
 - [x] Add error formatting suitable for terminal output.
-- [ ] Provide a formatter or linter (optional, if syntax stabilizes).
+- [ ] Add formatting flags to the `snail` CLI that check or update Snail source.
+  - Default behavior: recurse from the current directory, find all Snail files,
+    and print unified diffs for any formatting changes to stdout.
+  - Specific files or directories can be passed to limit which sources are
+    inspected.
+  - Support both check-only mode (diff output) and in-place formatting to write
+    updates back to disk.
 
 Phase 5: Add all major python semantics
 - [x] support for basic expressions
