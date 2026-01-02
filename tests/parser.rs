@@ -29,6 +29,14 @@ fn reports_parse_error_with_location() {
 }
 
 #[test]
+fn rejects_user_defined_dollar_identifiers() {
+    let source = "$bad = 1";
+    let err = parse_program(source).expect_err("$ identifiers are injected");
+    let message = err.to_string();
+    assert!(message.contains("$bad"));
+}
+
+#[test]
 fn parses_if_elif_else_chain() {
     let source = r#"
 if x { y = 1 }

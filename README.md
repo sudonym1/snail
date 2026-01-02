@@ -19,9 +19,11 @@ Awk mode is available for line-oriented scripts. Enable it with `snail --awk`
 or by starting a file with `#!snail awk`. Awk sources are written as
 pattern/action pairs evaluated for each input line. `BEGIN` and `END` blocks run
 before and after the line loop, a lone pattern defaults to printing matching
-lines, and a bare block runs for every line. Built-in variables mirror awk: the
-current line as `line`, whitespace-split fields as `fields`, and counters `nr`
-and `fnr` for global and per-file line numbers.
+lines, and a bare block runs for every line. Built-in variables mirror awk but
+use short `$`-prefixed names: the current line as `$l`, whitespace-split fields
+as `$f`, counters `$n` and `$fn` for global and per-file line numbers, the
+current file path as `$p`, and `$m` for the last regex match. These `$` names
+are injected by Snail itself; user-defined identifiers cannot start with `$`.
 
 The compiler/transpiler will generate Python source and execute it with the
 Python interpreter. The implementation language is still open and should be
@@ -127,7 +129,7 @@ Phase 9: Awk-style line processing
 - [x] Add an awk mode that evaluates pattern/action pairs across input lines.
 - [x] Provide syntactic sugar for common awk idioms (e.g., default actions, begin/end hooks).
 - [x] Surface a clear entry point for enabling awk mode (CLI flag or file directive) and document usage.
-- [x] add support for the regex expression as a pattern. if no string is provided `line` is implicit. just the pattern is valid. the match object should be made available to the action.
+- [x] add support for the regex expression as a pattern. if no string is provided `$l` is implicit. just the pattern is valid. the match object should be made available to the action.
 
 Phase 0 decisions (executed)
 - Implementation language: Rust (2024 edition).

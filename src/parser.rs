@@ -775,6 +775,10 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
         }),
+        Rule::injected_var => Ok(Expr::Name {
+            name: pair.as_str().to_string(),
+            span: span_from_pair(&pair, source),
+        }),
         Rule::identifier => Ok(Expr::Name {
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
@@ -1251,6 +1255,10 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match inner_pair.as_rule() {
         Rule::literal => parse_literal(inner_pair, source),
         Rule::exception_var => Ok(Expr::Name {
+            name: inner_pair.as_str().to_string(),
+            span: span_from_pair(&inner_pair, source),
+        }),
+        Rule::injected_var => Ok(Expr::Name {
             name: inner_pair.as_str().to_string(),
             span: span_from_pair(&inner_pair, source),
         }),

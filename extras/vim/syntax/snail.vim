@@ -29,7 +29,7 @@ syn keyword snailKeyword True try while with yield
 " Snail-specific syntax helpers
 syn match snailSubprocess "\$([^)]*)"
 syn match snailSubprocessBg "@([^)]*)"
-syn match snailFallbackVar "\$e"
+syn match snailInjectedVar "\$\(e\|l\|f\|n\|fn\|p\|m\)"
 syn match snailSwallow "?" containedin=snailOperator
 
 syn match snailOperator "[][{}():.,]"
@@ -42,7 +42,7 @@ hi def link snailFormat         Special
 hi def link snailKeyword        Keyword
 hi def link snailSubprocess     Function
 hi def link snailSubprocessBg   Function
-hi def link snailFallbackVar    Identifier
+hi def link snailInjectedVar    Identifier
 hi def link snailSwallow        Operator
 hi def link snailOperator       Operator
 

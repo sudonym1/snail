@@ -11,6 +11,30 @@ const SNAIL_SUBPROCESS_CAPTURE: &str = "__snail_subprocess_capture";
 const SNAIL_SUBPROCESS_STATUS: &str = "__snail_subprocess_status";
 const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
 const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
+const SNAIL_AWK_LINE: &str = "$l";
+const SNAIL_AWK_FIELDS: &str = "$f";
+const SNAIL_AWK_NR: &str = "$n";
+const SNAIL_AWK_FNR: &str = "$fn";
+const SNAIL_AWK_PATH: &str = "$p";
+const SNAIL_AWK_MATCH: &str = "$m";
+const SNAIL_AWK_LINE_PYVAR: &str = "__snail_line";
+const SNAIL_AWK_FIELDS_PYVAR: &str = "__snail_fields";
+const SNAIL_AWK_NR_PYVAR: &str = "__snail_nr_user";
+const SNAIL_AWK_FNR_PYVAR: &str = "__snail_fnr_user";
+const SNAIL_AWK_PATH_PYVAR: &str = "__snail_path_user";
+const SNAIL_AWK_MATCH_PYVAR: &str = "__snail_match";
+
+fn injected_py_name(name: &str) -> Option<&'static str> {
+    match name {
+        SNAIL_AWK_LINE => Some(SNAIL_AWK_LINE_PYVAR),
+        SNAIL_AWK_FIELDS => Some(SNAIL_AWK_FIELDS_PYVAR),
+        SNAIL_AWK_NR => Some(SNAIL_AWK_NR_PYVAR),
+        SNAIL_AWK_FNR => Some(SNAIL_AWK_FNR_PYVAR),
+        SNAIL_AWK_PATH => Some(SNAIL_AWK_PATH_PYVAR),
+        SNAIL_AWK_MATCH => Some(SNAIL_AWK_MATCH_PYVAR),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LowerError {
@@ -672,21 +696,33 @@ fn lower_awk_line_loop(
         args: vec![pos_arg(string_expr("\\n", span), span)],
         span: span.clone(),
     };
-    loop_body.push(assign_name("line", rstrip_call, span));
+    loop_body.push(assign_name(SNAIL_AWK_LINE_PYVAR, rstrip_call, span));
 
     let split_call = PyExpr::Call {
         func: Box::new(PyExpr::Attribute {
-            value: Box::new(name_expr("line", span)),
+            value: Box::new(name_expr(SNAIL_AWK_LINE_PYVAR, span)),
             attr: "split".to_string(),
             span: span.clone(),
         }),
         args: Vec::new(),
         span: span.clone(),
     };
-    loop_body.push(assign_name("fields", split_call, span));
-    loop_body.push(assign_name("nr", name_expr("__snail_nr", span), span));
-    loop_body.push(assign_name("fnr", name_expr("__snail_fnr", span), span));
-    loop_body.push(assign_name("path", name_expr("__snail_path", span), span));
+    loop_body.push(assign_name(SNAIL_AWK_FIELDS_PYVAR, split_call, span));
+    loop_body.push(assign_name(
+        SNAIL_AWK_NR_PYVAR,
+        name_expr("__snail_nr", span),
+        span,
+    ));
+    loop_body.push(assign_name(
+        SNAIL_AWK_FNR_PYVAR,
+        name_expr("__snail_fnr", span),
+        span,
+    ));
+    loop_body.push(assign_name(
+        SNAIL_AWK_PATH_PYVAR,
+        name_expr("__snail_path", span),
+        span,
+    ));
 
     loop_body.extend(lower_awk_rules(&program.rules)?);
 
@@ -712,12 +748,12 @@ fn lower_awk_rules(rules: &[AwkRule]) -> Result<Vec<PyStmt>, LowerError> {
             if let Some((value_expr, regex, span)) = regex_pattern_components(pattern) {
                 let match_call = lower_regex_match(&value_expr, &regex, &span, None)?;
                 stmts.push(PyStmt::Assign {
-                    targets: vec![name_expr("match", &span)],
+                    targets: vec![name_expr(SNAIL_AWK_MATCH_PYVAR, &span)],
                     value: match_call,
                     span: span.clone(),
                 });
                 stmts.push(PyStmt::If {
-                    test: name_expr("match", &span),
+                    test: name_expr(SNAIL_AWK_MATCH_PYVAR, &span),
                     body: action,
                     orelse: Vec::new(),
                     span: rule.span.clone(),
@@ -746,7 +782,7 @@ fn regex_pattern_components(pattern: &Expr) -> Option<(Expr, String, SourceSpan)
         } => Some((*value.clone(), pattern.clone(), span.clone())),
         Expr::Regex { pattern, span } => Some((
             Expr::Name {
-                name: "line".to_string(),
+                name: SNAIL_AWK_LINE.to_string(),
                 span: span.clone(),
             },
             pattern.clone(),
@@ -760,7 +796,7 @@ fn awk_default_print(span: &SourceSpan) -> PyStmt {
     PyStmt::Expr {
         value: PyExpr::Call {
             func: Box::new(name_expr("print", span)),
-            args: vec![pos_arg(name_expr("line", span), span)],
+            args: vec![pos_arg(name_expr(SNAIL_AWK_LINE_PYVAR, span), span)],
             span: span.clone(),
         },
         span: span.clone(),
@@ -938,6 +974,12 @@ fn lower_expr_with_exception(
                 return Err(LowerError::new(
                     "`$e` is only available in compact exception fallbacks",
                 ));
+            }
+            if let Some(py_name) = injected_py_name(name) {
+                return Ok(PyExpr::Name {
+                    id: py_name.to_string(),
+                    span: span.clone(),
+                });
             }
             Ok(PyExpr::Name {
                 id: name.clone(),
