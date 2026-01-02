@@ -1,3 +1,9 @@
+<p align="center">
+  <img src="logo.png" alt="Snail logo" width="200">
+</p>
+
+What do you get when you shove a snake in a shell?
+
 Snail is a new programming language that compiles to Python. The goal is to
 keep Python's core semantics and runtime model while offering a syntax that
 feels closer to Perl or awk for quick, incremental one-liners. It should be
