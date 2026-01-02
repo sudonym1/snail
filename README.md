@@ -62,6 +62,7 @@ Phase 1: Parser and AST
 - [x] Build a Snail AST with source spans (line/column).
 - [x] Add error reporting with friendly messages and snippets.
 - [x] Create fixture tests for parsing and error cases.
+- [ ] Own f-string parsing for all string-like forms (`"..."`, `r"..."`, regex `/.../`, subprocess `$(...)`, `@(...)`) to support `{expr}` interpolation consistently.
 
 Phase 2: Lowering to Python AST
 - [x] Map Snail AST nodes to Python AST nodes.
@@ -140,6 +141,10 @@ Phase 9: Awk-style line processing
 - [x] Provide syntactic sugar for common awk idioms (e.g., default actions, begin/end hooks).
 - [x] Surface a clear entry point for enabling awk mode (CLI flag or file directive) and document usage.
 - [x] add support for the regex expression as a pattern. if no string is provided `$l` is implicit. just the pattern is valid. the match object should be made available to the action.
+- [ ] Support Snail `{expr}` interpolation in string literals for awk-mode variables (e.g., `{print("{$1}")}`).
+  - [ ] Inspect current string parsing/lowering to see where interpolation is lost or rejected.
+  - [ ] Define supported `{expr}` interpolation (including awk `$` vars and escaping rules), then update parser/lowering and add tests.
+  - [ ] Validate end-to-end with `{print("{$1}")}` and refresh docs/examples.
 
 Phase 0 decisions (executed)
 - Implementation language: Rust (2024 edition).
