@@ -117,6 +117,16 @@ Phase 7: Snail Specific semantics
   exception forcing users to provide a fallback value.
   Both expand into expressions (not statements); complex cases should use Python's `subprocess` directly.
 - [x] add a regex expression. `string in /<pattern>/` performes an re.search and returns any match object.
+- [ ] Add compound expressions `(expr1; expr2; exprN)` that evaluate to the final
+  expression, enabling chained usage with the `?` operator.
+  - [ ] Extend the grammar to parse semicolon-delimited expression groups inside
+    parentheses and ensure precedence/associativity integrate with existing
+    expressions.
+  - [ ] Update AST nodes and lowering to produce the correct Python expression
+    sequence (e.g., using tuples or blocks) while returning the last value.
+  - [ ] Add parser and lowering tests plus examples in
+    `examples/all_syntax.snail` and `docs/REFERENCE.md` demonstrating `?`
+    interplay.
 
 Phase 8: Documentation and utilities
 - [x] Expand documentation, examples, and language reference.
