@@ -23,6 +23,11 @@ from math import sqrt as root
 - Boolean operators, comparisons, membership checks, and arithmetic follow
   Python's precedence and short-circuiting rules.
 - Conditional expressions are supported: `fallback = "yes" if flag else "no"`.
+- Compound expressions `(expr1; expr2; expr3)` evaluate each expression from
+  left to right and return the final value. Newlines after the opening `(` and
+  between expressions are allowed, making them convenient for bundling setup
+  work and a risky call into a single expression alongside Snail's `?`
+  fallback operator.
 - Tuple and set literals plus slicing use Python syntax: `(1, 2)`, `{True, False}`,
   `data[1:3]`, `data[:2]`, and `data[2:]`.
 

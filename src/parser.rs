@@ -769,7 +769,8 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         | Rule::unary
         | Rule::power
         | Rule::primary
-        | Rule::atom => parse_expr_rule(pair, source),
+        | Rule::atom
+        | Rule::compound_expr => parse_expr_rule(pair, source),
         Rule::literal => parse_literal(pair, source),
         Rule::exception_var => Ok(Expr::Name {
             name: pair.as_str().to_string(),
@@ -822,6 +823,7 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::power => parse_power(pair, source),
         Rule::primary => parse_primary(pair, source),
         Rule::atom => parse_atom(pair, source),
+        Rule::compound_expr => parse_compound_expr(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
@@ -1254,6 +1256,26 @@ fn parse_argument(pair: Pair<'_, Rule>, source: &str) -> Result<Argument, ParseE
     }
 }
 
+fn parse_compound_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut expressions = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::expr {
+            expressions.push(parse_expr_pair(inner, source)?);
+        }
+    }
+
+    if expressions.is_empty() {
+        return Err(error_with_span(
+            "compound expression requires at least one expression",
+            span,
+            source,
+        ));
+    }
+
+    Ok(Expr::Compound { expressions, span })
+}
+
 fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
@@ -1262,6 +1284,7 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         .ok_or_else(|| error_with_span("missing atom", pair_span.clone(), source))?;
     match inner_pair.as_rule() {
         Rule::literal => parse_literal(inner_pair, source),
+        Rule::compound_expr => parse_compound_expr(inner_pair, source),
         Rule::exception_var => Ok(Expr::Name {
             name: inner_pair.as_str().to_string(),
             span: span_from_pair(&inner_pair, source),
@@ -1626,6 +1649,7 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Compare { span, .. }
         | Expr::IfExpr { span, .. }
         | Expr::TryExpr { span, .. }
+        | Expr::Compound { span, .. }
         | Expr::Regex { span, .. }
         | Expr::RegexMatch { span, .. }
         | Expr::Subprocess { span, .. }

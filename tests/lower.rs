@@ -3,7 +3,7 @@ mod common;
 use common::*;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use snail::{PyBinaryOp, PyCompareOp, PyStmt, lower_program, parse_program};
+use snail::{PyBinaryOp, PyCompareOp, PyStmt, PyUnaryOp, lower_program, parse_program};
 
 #[test]
 fn lowers_if_chain_into_nested_orelse() {
@@ -77,6 +77,38 @@ fn lowers_assignment_and_binary_expr() {
         assert!(matches!(right.as_ref(), snail::PyExpr::Number { value, .. } if value == "2"));
     } else {
         panic!("expected binary expression, got {assign:?}");
+    }
+}
+
+#[test]
+fn lowers_compound_expression_to_tuple_index() {
+    let source = "result = (1; 2; 3)";
+    let program = parse_program(source).expect("program should parse");
+    let module = lower_program(&program).expect("program should lower");
+
+    let value = match &module.body[0] {
+        PyStmt::Assign { value, .. } => value,
+        other => panic!("expected assignment, got {other:?}"),
+    };
+
+    if let snail::PyExpr::Index { value, index, .. } = value {
+        if let snail::PyExpr::Tuple { elements, .. } = value.as_ref() {
+            assert_eq!(elements.len(), 3);
+        } else {
+            panic!("expected tuple in compound lowering, got {value:?}");
+        }
+
+        if let snail::PyExpr::Unary { op, operand, .. } = index.as_ref() {
+            assert_eq!(*op, PyUnaryOp::Minus);
+            assert!(matches!(
+                operand.as_ref(),
+                snail::PyExpr::Number { value, .. } if value == "1"
+            ));
+        } else {
+            panic!("expected unary index, got {index:?}");
+        }
+    } else {
+        panic!("expected index expression, got {value:?}");
     }
 }
 

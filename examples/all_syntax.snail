@@ -163,6 +163,9 @@ def risky_fallback() {
 
 prefer_lambda = risky_fallback() ? "lambda"
 dunder_only = risky_fallback()?
+compound_value = (counter.inc(1); counter.inc(2); counter.inc(3))
+compound_recovered = (risky_fallback(); counter.inc(4)) ? "rescued"
+compound_swallowed = (risky_fallback(); counter.inc(5))?
 
 with SimpleCtx() as message { ctx_msg = message }
 
@@ -202,6 +205,9 @@ print("status_ok", status_ok)
 print("status_fail", status_fail)
 print("prefer_lambda", prefer_lambda)
 print("dunder_only", dunder_only)
+print("compound_value", compound_value)
+print("compound_recovered", compound_recovered)
+print("compound_swallowed", compound_swallowed)
 temp_value = 42
 del temp_value
 

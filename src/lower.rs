@@ -1111,6 +1111,32 @@ fn lower_expr_with_exception(
                 span: span.clone(),
             })
         }
+        Expr::Compound { expressions, span } => {
+            let mut lowered = Vec::new();
+            for expr in expressions {
+                lowered.push(lower_expr_with_exception(expr, exception_name)?);
+            }
+
+            let tuple_expr = PyExpr::Tuple {
+                elements: lowered,
+                span: span.clone(),
+            };
+
+            let index_expr = PyExpr::Unary {
+                op: PyUnaryOp::Minus,
+                operand: Box::new(PyExpr::Number {
+                    value: "1".to_string(),
+                    span: span.clone(),
+                }),
+                span: span.clone(),
+            };
+
+            Ok(PyExpr::Index {
+                value: Box::new(tuple_expr),
+                index: Box::new(index_expr),
+                span: span.clone(),
+            })
+        }
         Expr::Regex { pattern, span } => Ok(PyExpr::Call {
             func: Box::new(PyExpr::Name {
                 id: SNAIL_REGEX_COMPILE.to_string(),
