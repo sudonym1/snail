@@ -1,6 +1,8 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+use snail::{lower_awk_program, parse_awk_program, python_source};
+
 #[test]
 fn awk_flag_filters_input() {
     let exe = env!("CARGO_BIN_EXE_snail");
@@ -85,6 +87,46 @@ fn awk_entries_allow_whitespace_separation() {
     );
 
     assert_eq!(String::from_utf8_lossy(&output.stdout), "hello\n");
+}
+
+#[test]
+fn awk_fstring_interpolates_field_vars() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "{ print(\"{$1}\") }";
+
+    let mut child = Command::new(exe)
+        .args(["--awk", "-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"hello world\n")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "hello\n");
+}
+
+#[test]
+fn awk_subprocess_interpolates_field_vars_in_string_literals() {
+    let source = r#"{ print("{$($2)}") }"#;
+    let program = parse_awk_program(source).expect("awk program should parse");
+    let module = lower_awk_program(&program).expect("awk program should lower");
+    let python = python_source(&module);
+
+    assert!(python.contains("__snail_subprocess_capture"));
+    assert!(python.contains("__snail_fields[1]"));
 }
 
 #[test]

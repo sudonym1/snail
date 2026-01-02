@@ -55,6 +55,32 @@ fn future_braces_import_is_noop() {
 }
 
 #[test]
+fn interpolates_fstrings_in_string_literals() {
+    pyo3::prepare_freethreaded_python();
+    let source = r#"
+name = "snail"
+greeting = "hello {name}"
+"#;
+
+    Python::with_gil(|py| {
+        let globals = exec_snail(py, source, Some("<fstring-test>"), None, None)
+            .expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+
+        let greeting: String = globals
+            .get_item("greeting")
+            .expect("greeting lookup should succeed")
+            .expect("greeting should be present")
+            .extract()
+            .expect("greeting should be string");
+        assert_eq!(greeting, "hello snail");
+    });
+}
+
+#[test]
 fn import_hook_loads_snail_files() {
     pyo3::prepare_freethreaded_python();
     let temp = TempDir::new().expect("temp dir");

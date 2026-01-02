@@ -773,7 +773,7 @@ fn lower_awk_rules(rules: &[AwkRule]) -> Result<Vec<PyStmt>, LowerError> {
     Ok(stmts)
 }
 
-fn regex_pattern_components(pattern: &Expr) -> Option<(Expr, String, SourceSpan)> {
+fn regex_pattern_components(pattern: &Expr) -> Option<(Expr, RegexPattern, SourceSpan)> {
     match pattern {
         Expr::RegexMatch {
             value,
@@ -941,7 +941,7 @@ fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
 
 fn lower_regex_match(
     value: &Expr,
-    pattern: &str,
+    pattern: &RegexPattern,
     span: &SourceSpan,
     exception_name: Option<&str>,
 ) -> Result<PyExpr, LowerError> {
@@ -952,10 +952,46 @@ fn lower_regex_match(
         }),
         args: vec![
             pos_arg(lower_expr_with_exception(value, exception_name)?, span),
-            pos_arg(regex_pattern_expr(pattern, span), span),
+            pos_arg(
+                lower_regex_pattern_expr(pattern, span, exception_name)?,
+                span,
+            ),
         ],
         span: span.clone(),
     })
+}
+
+fn lower_regex_pattern_expr(
+    pattern: &RegexPattern,
+    span: &SourceSpan,
+    exception_name: Option<&str>,
+) -> Result<PyExpr, LowerError> {
+    match pattern {
+        RegexPattern::Literal(text) => Ok(regex_pattern_expr(text, span)),
+        RegexPattern::Interpolated(parts) => Ok(PyExpr::FString {
+            parts: lower_fstring_parts(parts, exception_name)?,
+            span: span.clone(),
+        }),
+    }
+}
+
+fn lower_fstring_parts(
+    parts: &[FStringPart],
+    exception_name: Option<&str>,
+) -> Result<Vec<PyFStringPart>, LowerError> {
+    let mut lowered = Vec::with_capacity(parts.len());
+    for part in parts {
+        match part {
+            FStringPart::Text(text) => lowered.push(PyFStringPart::Text(text.clone())),
+            FStringPart::Expr(expr) => {
+                lowered.push(PyFStringPart::Expr(lower_expr_with_exception(
+                    expr,
+                    exception_name,
+                )?));
+            }
+        }
+    }
+    Ok(lowered)
 }
 
 fn lower_expr_with_exception(
@@ -1026,6 +1062,10 @@ fn lower_expr_with_exception(
             value: value.clone(),
             raw: *raw,
             delimiter: *delimiter,
+            span: span.clone(),
+        }),
+        Expr::FString { parts, span } => Ok(PyExpr::FString {
+            parts: lower_fstring_parts(parts, exception_name)?,
             span: span.clone(),
         }),
         Expr::Bool { value, span } => Ok(PyExpr::Bool {
@@ -1142,7 +1182,10 @@ fn lower_expr_with_exception(
                 id: SNAIL_REGEX_COMPILE.to_string(),
                 span: span.clone(),
             }),
-            args: vec![pos_arg(regex_pattern_expr(pattern, span), span)],
+            args: vec![pos_arg(
+                lower_regex_pattern_expr(pattern, span, exception_name)?,
+                span,
+            )],
             span: span.clone(),
         }),
         Expr::RegexMatch {
@@ -2464,7 +2507,7 @@ fn format_string_literal(value: &str, raw: bool, delimiter: StringDelimiter) -> 
         StringDelimiter::TripleSingle => ("'''", "'''"),
         StringDelimiter::TripleDouble => ("\"\"\"", "\"\"\""),
     };
-    let prefix = if raw { "r" } else { "f" };
+    let prefix = if raw { "r" } else { "" };
     format!("{prefix}{open}{value}{close}")
 }
 

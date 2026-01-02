@@ -78,6 +78,9 @@ multi_text = """line one
 line two"""
 raw_multi = r"""raw\\nline
 raw line two"""
+user_name = "snail"
+greeting = "hello {user_name}"
+brace_text = "brace {{ok}}"
 cmd_name = "snail"
 echoed = $(echo {cmd_name})
 try {
@@ -182,6 +185,8 @@ print("flags", flag, is_none, has_two)
 print("fallback", fallback)
 print("power", power)
 print("mix", mix)
+print("greeting", greeting)
+print("brace_text", brace_text)
 print("total", total)
 print("evens", evens)
 print("lookup", lookup)

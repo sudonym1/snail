@@ -165,6 +165,10 @@ pub enum Expr {
         delimiter: StringDelimiter,
         span: SourceSpan,
     },
+    FString {
+        parts: Vec<FStringPart>,
+        span: SourceSpan,
+    },
     Bool {
         value: bool,
         span: SourceSpan,
@@ -205,12 +209,12 @@ pub enum Expr {
         span: SourceSpan,
     },
     Regex {
-        pattern: String,
+        pattern: RegexPattern,
         span: SourceSpan,
     },
     RegexMatch {
         value: Box<Expr>,
-        pattern: String,
+        pattern: RegexPattern,
         span: SourceSpan,
     },
     Subprocess {
@@ -277,6 +281,18 @@ pub enum Expr {
         ifs: Vec<Expr>,
         span: SourceSpan,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FStringPart {
+    Text(String),
+    Expr(Box<Expr>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RegexPattern {
+    Literal(String),
+    Interpolated(Vec<FStringPart>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
