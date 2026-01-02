@@ -234,6 +234,72 @@ dunder_only = risky()?
 }
 
 #[test]
+fn compound_expressions_sequence_and_work_with_fallbacks() {
+    pyo3::prepare_freethreaded_python();
+    let source = r#"
+calls = []
+
+def push(value) {
+    calls.append(value)
+    return value
+}
+
+def boom() {
+    raise ValueError("boom")
+}
+
+last_value = (push(1); push(2); push(3))
+recovered = (push("before"); boom()) ? "handled"
+swallowed = (boom(); push("never"))?
+"#;
+
+    Python::with_gil(|py| {
+        let globals = exec_snail(py, source, Some("<compound-expr>"), None, None)
+            .expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+
+        let calls = globals
+            .get_item("calls")
+            .expect("calls lookup should succeed")
+            .expect("calls should be present");
+        let calls_repr: String = calls.str().unwrap().extract().unwrap();
+        assert_eq!(calls_repr, "[1, 2, 3, 'before']");
+
+        let last_value: i64 = globals
+            .get_item("last_value")
+            .expect("last_value lookup should succeed")
+            .expect("last_value should be present")
+            .extract()
+            .expect("last_value should be int");
+        assert_eq!(last_value, 3);
+
+        let recovered: String = globals
+            .get_item("recovered")
+            .expect("recovered lookup should succeed")
+            .expect("recovered should be present")
+            .extract()
+            .expect("recovered should be string");
+        assert_eq!(recovered, "handled");
+
+        let swallowed = globals
+            .get_item("swallowed")
+            .expect("swallowed lookup should succeed")
+            .expect("swallowed should be present");
+        let swallowed_type: String = swallowed
+            .getattr("__class__")
+            .unwrap()
+            .getattr("__name__")
+            .unwrap()
+            .extract()
+            .unwrap();
+        assert_eq!(swallowed_type, "ValueError");
+    });
+}
+
+#[test]
 fn snail_callables_are_python_callables() {
     pyo3::prepare_freethreaded_python();
     Python::with_gil(|py| {

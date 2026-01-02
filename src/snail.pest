@@ -117,8 +117,11 @@ atom = _{
   | dict_literal
   | set_literal
   | tuple_literal
+  | compound_expr
   | "(" ~ expr ~ ")"
 }
+
+compound_expr = { "(" ~ NEWLINE* ~ expr ~ (";" ~ NEWLINE* ~ expr)+ ~ NEWLINE* ~ ";"? ~ ")" }
 
 subprocess = { subprocess_capture | subprocess_status }
 subprocess_capture = { "$(" ~ subprocess_body ~ ")" }

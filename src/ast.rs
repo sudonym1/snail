@@ -200,6 +200,10 @@ pub enum Expr {
         fallback: Option<Box<Expr>>,
         span: SourceSpan,
     },
+    Compound {
+        expressions: Vec<Expr>,
+        span: SourceSpan,
+    },
     Regex {
         pattern: String,
         span: SourceSpan,

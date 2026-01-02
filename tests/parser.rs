@@ -154,6 +154,39 @@ result = add(1, 2)
 }
 
 #[test]
+fn parses_compound_expression() {
+    let source = r#"result = (
+    first;
+    second;
+    third
+)"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Compound { expressions, .. } => {
+                assert_eq!(expressions.len(), 3);
+                assert!(matches!(
+                    &expressions[0],
+                    Expr::Name { name, .. } if name == "first"
+                ));
+                assert!(matches!(
+                    &expressions[1],
+                    Expr::Name { name, .. } if name == "second"
+                ));
+                assert!(matches!(
+                    &expressions[2],
+                    Expr::Name { name, .. } if name == "third"
+                ));
+            }
+            other => panic!("Expected compound expression, got {:?}", other),
+        },
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
 fn parses_imports() {
     let source = r#"
 import sys, os as operating_system
