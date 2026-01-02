@@ -59,6 +59,35 @@ fn awk_directive_enables_mode() {
 }
 
 #[test]
+fn awk_entries_allow_whitespace_separation() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "BEGIN {def err(x) { raise Exception(x) }} {print($0)}";
+
+    let mut child = Command::new(exe)
+        .args(["--awk", "-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"hello\n")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "hello\n");
+}
+
+#[test]
 fn awk_regex_pattern_sets_match() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let source = "/a.+c/ { print($m.group(0)) }";

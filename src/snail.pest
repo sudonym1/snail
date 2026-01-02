@@ -1,6 +1,6 @@
 program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 awk_program = { SOI ~ stmt_sep* ~ awk_entry_list? ~ stmt_sep* ~ EOI }
-awk_entry_list = { awk_entry ~ (stmt_sep+ ~ awk_entry)* ~ stmt_sep? }
+awk_entry_list = { awk_entry ~ (stmt_sep* ~ awk_entry)* ~ stmt_sep* }
 awk_entry = _{ awk_begin | awk_end | awk_rule }
 awk_begin = { "BEGIN" ~ block }
 awk_end = { "END" ~ block }
