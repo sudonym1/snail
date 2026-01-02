@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 fn awk_flag_filters_input() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let mut child = Command::new(exe)
-        .args(["--awk", "-c", "line.startswith('a') { print(line) }"])
+        .args(["--awk", "-c", "$l.startswith('a') { print($l) }"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -29,7 +29,7 @@ fn awk_flag_filters_input() {
 #[test]
 fn awk_directive_enables_mode() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let source = "#!snail awk\nBEGIN { print('start') }\nline.endswith('!')\nEND { print('done') }";
+    let source = "#!snail awk\nBEGIN { print('start') }\n$l.endswith('!')\nEND { print('done') }";
 
     let mut child = Command::new(exe)
         .args(["-c", source])
@@ -61,7 +61,7 @@ fn awk_directive_enables_mode() {
 #[test]
 fn awk_regex_pattern_sets_match() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let source = "/a.+c/ { print(match.group(0)) }";
+    let source = "/a.+c/ { print($m.group(0)) }";
 
     let mut child = Command::new(exe)
         .args(["--awk", "-c", source])

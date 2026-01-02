@@ -119,8 +119,8 @@ Use regex literals for concise searches:
 - Escape `/` inside the pattern as `\/`.
 
 In awk mode, regex patterns can stand alone. A bare `/pattern/` matches against
-`line` implicitly and binds the match object to `match` for use inside the
-action block.
+`$l` implicitly and binds the match object to `$m` for use inside the action
+block.
 
 ## Subprocess expressions
 Snail provides succinct subprocess helpers:
@@ -156,11 +156,15 @@ for every line.
 See `examples/awk.snail` for a runnable sample program.
 
 While processing, Snail populates awk-style variables:
-- `line`: the current line with the trailing newline removed.
-- `fields`: `line.split()` on whitespace.
-- `nr`: global line counter across all files.
-- `fnr`: per-file line counter.
-- `path`: the active filename, with `"-"` representing stdin.
+- `$l`: the current line with the trailing newline removed.
+- `$f`: `$l.split()` on whitespace.
+- `$n`: global line counter across all files.
+- `$fn`: per-file line counter.
+- `$p`: the active filename, with `"-"` representing stdin.
+- `$m`: the last regex match object.
+
+These `$` variables are injected by the language; user-defined identifiers
+cannot start with `$`.
 
 Input files come from `sys.argv[1:]`; when none are provided, awk mode reads
 stdin. Pass `--` to the CLI to forward filenames or other arguments into the

@@ -4,7 +4,7 @@ awk_entry_list = { awk_entry ~ (stmt_sep+ ~ awk_entry)* ~ stmt_sep? }
 awk_entry = _{ awk_begin | awk_end | awk_rule }
 awk_begin = { "BEGIN" ~ block }
 awk_end = { "END" ~ block }
-awk_rule = { awk_pattern? ~ block? }
+awk_rule = { awk_pattern ~ block? | block }
 awk_pattern = { expr }
 
 stmt_list = { stmt ~ (stmt_sep ~ stmt)* ~ stmt_sep? }
@@ -108,6 +108,7 @@ atom = _{
   | regex
   | subprocess
   | exception_var
+  | injected_var
   | identifier
   | list_comp
   | list_literal
@@ -140,6 +141,7 @@ literal = { number | string | boolean | none }
 boolean = { "True" | "False" }
 none = { "None" }
 exception_var = { "$e" }
+injected_var = { "$fn" | "$l" | "$f" | "$n" | "$p" | "$m" }
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 string = @{ raw_prefix? ~ (triple_double | triple_single | double_string | single_string) }
 raw_prefix = { "r" }
