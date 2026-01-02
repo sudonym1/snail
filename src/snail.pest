@@ -108,6 +108,7 @@ atom = _{
   | regex
   | subprocess
   | exception_var
+  | field_index_var
   | injected_var
   | identifier
   | list_comp
@@ -141,6 +142,7 @@ literal = { number | string | boolean | none }
 boolean = { "True" | "False" }
 none = { "None" }
 exception_var = { "$e" }
+field_index_var = @{ "$" ~ ASCII_DIGIT+ }
 injected_var = { "$fn" | "$l" | "$f" | "$n" | "$p" | "$m" }
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 string = @{ raw_prefix? ~ (triple_double | triple_single | double_string | single_string) }

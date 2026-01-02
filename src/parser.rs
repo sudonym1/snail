@@ -775,6 +775,14 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
         }),
+        Rule::field_index_var => {
+            let text = pair.as_str();
+            let index = text[1..].to_string();
+            Ok(Expr::FieldIndex {
+                index,
+                span: span_from_pair(&pair, source),
+            })
+        }
         Rule::injected_var => Ok(Expr::Name {
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
@@ -1258,6 +1266,14 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
             name: inner_pair.as_str().to_string(),
             span: span_from_pair(&inner_pair, source),
         }),
+        Rule::field_index_var => {
+            let text = inner_pair.as_str();
+            let index = text[1..].to_string();
+            Ok(Expr::FieldIndex {
+                index,
+                span: span_from_pair(&inner_pair, source),
+            })
+        }
         Rule::injected_var => Ok(Expr::Name {
             name: inner_pair.as_str().to_string(),
             span: span_from_pair(&inner_pair, source),
@@ -1617,6 +1633,7 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Attribute { span, .. }
         | Expr::Index { span, .. }
         | Expr::Paren { span, .. }
+        | Expr::FieldIndex { span, .. }
         | Expr::List { span, .. }
         | Expr::Tuple { span, .. }
         | Expr::Dict { span, .. }

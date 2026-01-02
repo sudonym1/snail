@@ -233,6 +233,10 @@ pub enum Expr {
         expr: Box<Expr>,
         span: SourceSpan,
     },
+    FieldIndex {
+        index: String,
+        span: SourceSpan,
+    },
     List {
         elements: Vec<Expr>,
         span: SourceSpan,

@@ -986,6 +986,33 @@ fn lower_expr_with_exception(
                 span: span.clone(),
             })
         }
+        Expr::FieldIndex { index, span } => {
+            // AWK convention: $0 is the whole line, $1 is first field, etc.
+            if index == "0" {
+                Ok(PyExpr::Name {
+                    id: SNAIL_AWK_LINE_PYVAR.to_string(),
+                    span: span.clone(),
+                })
+            } else {
+                // Parse index and convert from 1-based to 0-based
+                let field_index = index.parse::<i32>().map_err(|_| LowerError {
+                    message: format!("Invalid field index: ${}", index),
+                })?;
+                let python_index = field_index - 1;
+
+                Ok(PyExpr::Index {
+                    value: Box::new(PyExpr::Name {
+                        id: SNAIL_AWK_FIELDS_PYVAR.to_string(),
+                        span: span.clone(),
+                    }),
+                    index: Box::new(PyExpr::Number {
+                        value: python_index.to_string(),
+                        span: span.clone(),
+                    }),
+                    span: span.clone(),
+                })
+            }
+        }
         Expr::Number { value, span } => Ok(PyExpr::Number {
             value: value.clone(),
             span: span.clone(),
