@@ -326,6 +326,53 @@ swallowed = (boom(); push("never"))?
 }
 
 #[test]
+fn compact_try_precedence_applies_before_infix_and_accessors() {
+    pyo3::prepare_freethreaded_python();
+    let source = r#"
+def boom() {
+    raise ValueError("boom")
+}
+
+sum_value = 1 + boom() ? 5
+first_arg = boom()? .args[0]
+exc_name = boom()? .__class__.__name__
+"#;
+
+    Python::with_gil(|py| {
+        let globals = exec_snail(py, source, Some("<try-precedence>"), None, None)
+            .expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+
+        let sum_value: i64 = globals
+            .get_item("sum_value")
+            .expect("sum_value lookup should succeed")
+            .expect("sum_value should be present")
+            .extract()
+            .expect("sum_value should be int");
+        assert_eq!(sum_value, 6);
+
+        let first_arg: String = globals
+            .get_item("first_arg")
+            .expect("first_arg lookup should succeed")
+            .expect("first_arg should be present")
+            .extract()
+            .expect("first_arg should be string");
+        assert_eq!(first_arg, "boom");
+
+        let exc_name: String = globals
+            .get_item("exc_name")
+            .expect("exc_name lookup should succeed")
+            .expect("exc_name should be present")
+            .extract()
+            .expect("exc_name should be string");
+        assert_eq!(exc_name, "ValueError");
+    });
+}
+
+#[test]
 fn snail_callables_are_python_callables() {
     pyo3::prepare_freethreaded_python();
     Python::with_gil(|py| {

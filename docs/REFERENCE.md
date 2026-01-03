@@ -104,6 +104,11 @@ Snail mirrors Python's exception handling and adds compact fallbacks:
 - If an exception provides a `__fallback__` method, the fallback expression uses
   it when present.
 
+The postfix `?` binds tightly to the expression on its left, before attributes,
+calls, or other infix operators. For example, `a + risky() ? 5` evaluates as
+`a + (risky() ? 5)`, and `boom()? .args[0]` accesses the exception produced by
+`boom()`.
+
 Examples:
 ```snail
 safe_value = risky()?                # returns exception object on failure

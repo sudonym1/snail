@@ -758,7 +758,6 @@ fn parse_parameter(pair: Pair<'_, Rule>, source: &str) -> Result<Parameter, Pars
 fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match pair.as_rule() {
         Rule::expr
-        | Rule::try_expr
         | Rule::if_expr
         | Rule::or_expr
         | Rule::and_expr
@@ -811,7 +810,6 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
 fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match pair.as_rule() {
         Rule::expr => parse_expr_rule(pair.into_inner().next().unwrap(), source),
-        Rule::try_expr => parse_try_expr(pair, source),
         Rule::if_expr => parse_if_expr(pair, source),
         Rule::or_expr => fold_left_binary(pair, source, BinaryOp::Or),
         Rule::and_expr => fold_left_binary(pair, source, BinaryOp::And),
@@ -831,28 +829,6 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
             source,
         )),
     }
-}
-
-fn parse_try_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let expr_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing expression", span.clone(), source))?;
-    let expr = parse_expr_pair(expr_pair, source)?;
-    let Some(suffix) = inner.next() else {
-        return Ok(expr);
-    };
-    let mut suffix_inner = suffix.into_inner();
-    let fallback = match suffix_inner.next() {
-        Some(fallback_pair) => Some(parse_expr_pair(fallback_pair, source)?),
-        None => None,
-    };
-    Ok(Expr::TryExpr {
-        expr: Box::new(expr),
-        fallback: fallback.map(Box::new),
-        span,
-    })
 }
 
 fn parse_if_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -1194,6 +1170,23 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                 expr = Expr::Index {
                     value: Box::new(expr),
                     index: Box::new(index_expr),
+                    span,
+                };
+            }
+            Rule::try_suffix => {
+                let mut suffix_inner = suffix.into_inner();
+                let fallback = suffix_inner
+                    .next()
+                    .map(|fallback_pair| parse_expr_pair(fallback_pair, source))
+                    .transpose()?;
+                let span = if let Some(ref fallback_expr) = fallback {
+                    merge_span(expr_span(&expr), expr_span(fallback_expr))
+                } else {
+                    merge_span(expr_span(&expr), &suffix_span)
+                };
+                expr = Expr::TryExpr {
+                    expr: Box::new(expr),
+                    fallback: fallback.map(Box::new),
                     span,
                 };
             }

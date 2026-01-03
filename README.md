@@ -134,6 +134,16 @@ Phase 7: Snail Specific semantics
     `examples/all_syntax.snail` and `docs/REFERENCE.md` demonstrating `?`
     interplay.
 
+Follow-up work on `?` operator precedence
+- [x] Tighten precedence so postfix `?` binds to the immediately preceding
+  expression before other infix operators or trailing accessors.
+- [x] Add grammar tests that cover combinations like `a + b?`, `call()?`, and
+  `value? + other` to lock in left-binding behavior.
+- [x] Update the parser and lowering (e.g., `src/snail.pest` and expression
+  lowering) to match the new precedence rules.
+- [x] Refresh documentation and examples once the binding changes land to show
+  the expected parse.
+
 Phase 8: Documentation and utilities
 - [x] Expand documentation, examples, and language reference.
 - [ ] Provide useful utilities to help users adopt Snail.

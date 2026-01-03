@@ -69,9 +69,8 @@ assign_stmt = { assign_target ~ "=" ~ expr }
 assign_target = { identifier ~ (attribute | index)* }
 expr_stmt = { expr }
 
-expr = { try_expr }
-try_expr = { if_expr ~ try_suffix? }
-try_suffix = { "?" ~ expr? }
+expr = { if_expr }
+try_suffix = { "?" ~ (!add_op ~ expr)? }
 if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }
 or_expr = { and_expr ~ ("or" ~ and_expr)* }
 and_expr = { not_expr ~ ("and" ~ not_expr)* }
@@ -89,7 +88,7 @@ unary_op = { "+" | "-" }
 power = { primary ~ (pow_op ~ primary)* }
 pow_op = { "**" }
 
-primary = { atom ~ (call | attribute | index)* }
+primary = { atom ~ (call | attribute | index | try_suffix)* }
 call = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ")" }
 argument = { kw_argument | star_argument | expr }
 kw_argument = { identifier ~ "=" ~ expr }

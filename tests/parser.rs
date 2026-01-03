@@ -399,6 +399,63 @@ fallback = risky() ? $e
 }
 
 #[test]
+fn compact_try_binds_before_infix_and_accessors() {
+    let source = r#"
+result = a + b?
+chained = call()? .attr[0]
+left = value? + other
+"#;
+
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 3);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Binary {
+                left, op, right, ..
+            } => {
+                assert!(matches!(op, BinaryOp::Add));
+                assert!(matches!(left.as_ref(), Expr::Name { name, .. } if name == "a"));
+                assert!(matches!(right.as_ref(), Expr::TryExpr { .. }));
+            }
+            other => panic!("expected binary expression, got {other:?}"),
+        },
+        other => panic!("expected assignment, got {other:?}"),
+    }
+
+    match &program.stmts[1] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Index { value, index, .. } => {
+                assert!(matches!(index.as_ref(), Expr::Number { value, .. } if value == "0"));
+                match value.as_ref() {
+                    Expr::Attribute { value, attr, .. } => {
+                        assert_eq!(attr, "attr");
+                        assert!(matches!(value.as_ref(), Expr::TryExpr { .. }));
+                    }
+                    other => panic!("expected attribute on try result, got {other:?}"),
+                }
+            }
+            other => panic!("expected index expression, got {other:?}"),
+        },
+        other => panic!("expected assignment, got {other:?}"),
+    }
+
+    match &program.stmts[2] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Binary {
+                left, op, right, ..
+            } => {
+                assert!(matches!(op, BinaryOp::Add));
+                assert!(matches!(left.as_ref(), Expr::TryExpr { .. }));
+                assert!(matches!(right.as_ref(), Expr::Name { name, .. } if name == "other"));
+            }
+            other => panic!("expected binary expression, got {other:?}"),
+        },
+        other => panic!("expected assignment, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_subprocess_expressions() {
     let source = r#"
 name = "snail"

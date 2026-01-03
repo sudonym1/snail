@@ -146,9 +146,16 @@ except ValueError as err {
     except { pass }
 }
 
+def boom() {
+    raise ValueError("boom")
+}
+
 safe_value = risky()?
 safe_fallback = risky() ? $e
 safe_details = risky() ? $e.args[0]
+tight_sum = 1 + boom() ? 5
+tight_arg = boom()? .args[0]
+tight_name = boom()? .__class__.__name__
 text = "abc123"
 regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
