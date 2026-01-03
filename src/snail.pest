@@ -70,7 +70,8 @@ assign_target = { identifier ~ (attribute | index)* }
 expr_stmt = { expr }
 
 expr = { if_expr }
-try_suffix = { "?" ~ (!add_op ~ expr)? }
+try_suffix = { "?" ~ (!add_op ~ try_fallback)? }
+try_fallback = { unary }
 if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }
 or_expr = { and_expr ~ ("or" ~ and_expr)* }
 and_expr = { not_expr ~ ("and" ~ not_expr)* }

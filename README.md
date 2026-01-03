@@ -137,6 +137,8 @@ Phase 7: Snail Specific semantics
 Follow-up work on `?` operator precedence
 - [x] Tighten precedence so postfix `?` binds to the immediately preceding
   expression before other infix operators or trailing accessors.
+- [x] Confirm the fallback stops before following infix operators unless
+  parentheses are used (e.g., `a?0 + 1` parses as `(a?0) + 1`).
 - [x] Add grammar tests that cover combinations like `a + b?`, `call()?`, and
   `value? + other` to lock in left-binding behavior.
 - [x] Update the parser and lowering (e.g., `src/snail.pest` and expression

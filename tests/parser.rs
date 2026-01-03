@@ -456,6 +456,36 @@ left = value? + other
 }
 
 #[test]
+fn compact_try_fallback_stops_before_addition() {
+    let program = parse_program("result = a?0 + 1").expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::Binary {
+                left, op, right, ..
+            } => {
+                assert!(matches!(op, BinaryOp::Add));
+                match left.as_ref() {
+                    Expr::TryExpr { expr, fallback, .. } => {
+                        assert!(matches!(expr.as_ref(), Expr::Name { name, .. } if name == "a"));
+                        match fallback.as_deref() {
+                            Some(Expr::Number { value, .. }) => assert_eq!(value, "0"),
+                            other => panic!("expected numeric fallback, got {other:?}"),
+                        }
+                    }
+                    other => panic!("expected try expression on the left, got {other:?}"),
+                }
+
+                assert!(matches!(right.as_ref(), Expr::Number { value, .. } if value == "1"));
+            }
+            other => panic!("expected binary expression, got {other:?}"),
+        },
+        other => panic!("expected assignment, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_subprocess_expressions() {
     let source = r#"
 name = "snail"

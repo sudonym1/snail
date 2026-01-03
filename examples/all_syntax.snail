@@ -156,6 +156,7 @@ safe_details = risky() ? $e.args[0]
 tight_sum = 1 + boom() ? 5
 tight_arg = boom()? .args[0]
 tight_name = boom()? .__class__.__name__
+tight_fallback_boundary = boom()?0 + 1
 text = "abc123"
 regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/

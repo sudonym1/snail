@@ -107,7 +107,8 @@ Snail mirrors Python's exception handling and adds compact fallbacks:
 The postfix `?` binds tightly to the expression on its left, before attributes,
 calls, or other infix operators. For example, `a + risky() ? 5` evaluates as
 `a + (risky() ? 5)`, and `boom()? .args[0]` accesses the exception produced by
-`boom()`.
+`boom()`. To include additional infix operators in the fallback, wrap them in
+parentheses; otherwise `a?0 + 1` parses as `(a?0) + 1`.
 
 Examples:
 ```snail
