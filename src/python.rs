@@ -73,7 +73,7 @@ pub fn compile_snail(py: Python<'_>, source: &str, filename: Option<&str>) -> Py
     compile_to_code(py, source, filename, CompileMode::Snail)
 }
 
-fn internal_exec_snail(
+pub fn internal_exec_snail(
     py: Python<'_>,
     source: &str,
     mode: CompileMode,
