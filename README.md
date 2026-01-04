@@ -158,11 +158,49 @@ Phase 9: Awk-style line processing
   - [x] Define supported `{expr}` interpolation (including awk `$` vars and escaping rules), then update parser/lowering and add tests.
   - [x] Validate end-to-end with `{print("{$1}")}` and refresh docs/examples.
 
-Phase 0 decisions (executed)
-- Implementation language: Rust (2024 edition).
-- Target CPython: 3.12 initially, with a goal to keep 3.11+ compatible.
-- Execution model: Snail -> Python AST -> compile() -> exec() in CPython.
-- Interop: Python import hook for `import foo.snail`, Snail lowers to Python
-  import nodes for direct Python module access.
-- Tooling: Cargo with rustfmt and clippy; GitHub Actions CI.
-- Layout: see `docs/DECISIONS.md` for details.
+Phase 10: Pipeline operator and first-class JSON support with JMESPath
+- [ ] Repurpose bitwise operators for Snail-specific semantics.
+  - [ ] Reserve `|`, `<<`, `>>`, `&`, `^`, `~` operators - remove from Python compatibility.
+  - [ ] Update grammar in `src/snail.pest` to parse these operators but make `<<`, `>>`, `&`, `^`, `~` compilation errors for now (reserved for future use).
+  - [ ] Implement `|` as the pipeline operator with proper precedence (lower than arithmetic/comparison, higher than boolean ops).
+- [ ] Implement generic pipeline operator `|` using `__pipeline__` dunder method.
+  - [ ] Define `x | y` to lower to `y.__pipeline__(x)` in generated Python code.
+  - [ ] This allows any object to define how it consumes pipeline input by implementing `__pipeline__(self, input)`.
+  - [ ] Update AST in `src/ast.rs` to represent pipeline expressions (binary operator with left/right operands).
+  - [ ] Update lowering in `src/lower.rs` to generate `__pipeline__` method calls for pipeline expressions.
+- [ ] Add `@j(<JMESPath expression>)` syntax for JSON querying with four forms:
+  - [ ] `@j(query)` - read JSON from stdin and apply JMESPath query.
+  - [ ] `<file-like object> | @j(query)` - read JSON from file/file-like object via pipeline.
+  - [ ] `<JSON-native object> | @j(query)` - query Python dicts/lists directly via pipeline.
+  - [ ] `@j(query) | @j(query)` - chain JMESPath queries via pipeline.
+  - [ ] Extend grammar to recognize `@j(...)` as special expression form (similar to `@(...)` subprocess syntax).
+  - [ ] Support `{expr}` interpolation within JMESPath expressions for dynamic queries.
+- [ ] Implement JSON query lowering using `__pipeline__` pattern.
+  - [ ] Generate `__SnailJsonQuery` helper class in lowered Python code with `__pipeline__(self, data)` method.
+  - [ ] `@j(query)` lowers to `__SnailJsonQuery(query).__pipeline__(None)` (stdin case).
+  - [ ] `x | @j(query)` lowers to `__SnailJsonQuery(query).__pipeline__(x)` via pipeline operator.
+  - [ ] The `__pipeline__` implementation handles multiple input types:
+    - `None` - read JSON from stdin
+    - `str` - treat as file path, open and read JSON
+    - File-like object (has `read()` method) - read and parse JSON
+    - JSON-native types (dict, list, str, int, float, bool, None) - query directly
+    - Other types - raise `TypeError` (only JSON-native types allowed)
+  - [ ] Use Python's `jmespath` library to apply queries and return results.
+  - [ ] Handle errors gracefully (invalid JSON, JMESPath syntax errors, file not found, non-JSON-native types).
+- [ ] Add comprehensive tests for pipeline operator and JSON queries.
+  - [ ] Parser tests in `tests/parser.rs`: validate `|` operator parsing, `@j(...)` syntax, precedence.
+  - [ ] Lowering tests in `tests/lower.rs`: confirm `__pipeline__` calls generate correctly.
+  - [ ] Integration tests in `tests/python_integration.rs`:
+    - Test `@j(query)` reading from stdin.
+    - Test `file | @j(query)` and `'path' | @j(query)` forms.
+    - Test querying Python dicts/lists directly: `{'a': 1} | @j('a')`.
+    - Test chained queries: `@j('users') | @j('[0].name')`.
+    - Test error cases (malformed JSON, invalid JMESPath, wrong types, missing files).
+    - Test that bitwise operators (`<<`, `>>`, etc.) raise compilation errors.
+- [ ] Update documentation and examples.
+  - [ ] Update `examples/all_syntax.snail` with pipeline operator examples and all four `@j(...)` forms.
+  - [ ] Update `docs/REFERENCE.md` with:
+    - Pipeline operator `|` documentation and `__pipeline__` dunder method pattern.
+    - JSON/JMESPath syntax for all four forms with examples.
+    - Note that bitwise operators are reserved/disabled.
+    - Document dependency on Python's `jmespath` library and installation requirements (`pip install jmespath`).
