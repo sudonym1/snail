@@ -1088,10 +1088,34 @@ fn lower_expr_with_exception(
             if *op == BinaryOp::Pipeline {
                 // Pipeline: x | y becomes y.__pipeline__(x)
                 let left_expr = lower_expr_with_exception(left, exception_name)?;
-                let right_expr = lower_expr_with_exception(right, exception_name)?;
+
+                // Special handling for JsonQuery on RHS: just create the object, don't call __pipeline__(None)
+                let right_obj = match right.as_ref() {
+                    Expr::JsonQuery { query, span: q_span } => {
+                        // Create just the __SnailJsonQuery(query) object
+                        PyExpr::Call {
+                            func: Box::new(PyExpr::Name {
+                                id: SNAIL_JSON_QUERY_CLASS.to_string(),
+                                span: q_span.clone(),
+                            }),
+                            args: vec![PyArgument::Positional {
+                                value: PyExpr::String {
+                                    value: query.clone(),
+                                    raw: false,
+                                    delimiter: StringDelimiter::Double,
+                                    span: q_span.clone(),
+                                },
+                                span: q_span.clone(),
+                            }],
+                            span: q_span.clone(),
+                        }
+                    }
+                    _ => lower_expr_with_exception(right, exception_name)?
+                };
+
                 Ok(PyExpr::Call {
                     func: Box::new(PyExpr::Attribute {
-                        value: Box::new(right_expr),
+                        value: Box::new(right_obj),
                         attr: "__pipeline__".to_string(),
                         span: span.clone(),
                     }),
@@ -2369,13 +2393,19 @@ impl PythonWriter {
         self.indent += 1;
         self.write_line("data = json.load(sys.stdin)");
         self.indent -= 1;
-        self.write_line("# Handle string (file path)");
+        self.write_line("# Handle string (try JSON first, then file path)");
         self.write_line("elif isinstance(data, str):");
+        self.indent += 1;
+        self.write_line("try:");
+        self.indent += 1;
+        self.write_line("data = json.loads(data)");
+        self.indent -= 1;
+        self.write_line("except json.JSONDecodeError:");
         self.indent += 1;
         self.write_line("with open(data, 'r') as f:");
         self.indent += 1;
         self.write_line("data = json.load(f)");
-        self.indent -= 2;
+        self.indent -= 3;
         self.write_line("# Handle file-like object");
         self.write_line("elif hasattr(data, 'read'):");
         self.indent += 1;

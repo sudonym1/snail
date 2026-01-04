@@ -581,8 +581,8 @@ fn json_query_works_with_dict() {
 
     let source = r#"
 data = {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]}
-names = data | @j('users[*].name')
-first_name = data | @j('users[0].name')
+names = data | @j(users[*].name)
+first_name = data | @j(users[0].name)
 "#;
 
     Python::with_gil(|py| {

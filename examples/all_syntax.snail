@@ -230,10 +230,10 @@ class Doubler {
     }
 }
 pipeline_result = 21 | Doubler()
+print("pipeline_result", pipeline_result)
 
-r"{foo: 12}" | @j(.foo)
+print("json pipeline", r'{"foo": 12}' | @j(foo))
 
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
-print("pipeline_result", pipeline_result)
 print(sysmod.version)

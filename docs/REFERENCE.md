@@ -31,6 +31,24 @@ from math import sqrt as root
 - Tuple and set literals plus slicing use Python syntax: `(1, 2)`, `{True, False}`,
   `data[1:3]`, `data[:2]`, and `data[2:]`.
 
+## Pipeline operator
+Snail repurposes the `|` operator for generic data pipelining through the
+`__pipeline__` dunder method. Any object can define how it consumes values from
+the left-hand side:
+
+```snail
+class Doubler {
+    def __pipeline__(self, x) {
+        return x * 2
+    }
+}
+
+result = 21 | Doubler()  # yields 42
+```
+
+The pipeline operator has precedence between boolean operators and comparisons,
+allowing natural chaining of transformations.
+
 ## Functions, parameters, and calls
 Define functions with braces instead of indentation:
 ```snail
@@ -149,6 +167,30 @@ echoed = $(echo {cmd_name})
 status_ok = @(echo ready)
 status_fail = @(false)?           # yields return code because of __fallback__
 ```
+
+## JSON queries
+Snail provides first-class JSON support through JMESPath queries using the
+`@j(<query>)` syntax. The query body is treated as a raw string without
+interpolation:
+
+```snail
+# Query a Python dict directly
+data = {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]}
+names = data | @j(users[*].name)     # yields ["Alice", "Bob"]
+first_name = data | @j(users[0].name)  # yields "Alice"
+
+# Parse JSON from a string
+json_result = "{{\"foo\": 12}}" | @j(foo)  # yields 12
+```
+
+The `@j()` construct implements `__pipeline__` and handles multiple input types:
+- Python dicts and lists: queries them directly
+- Strings: attempts JSON parsing first, falls back to treating as a file path
+- File-like objects: reads and parses JSON content
+- `None`: reads and parses JSON from stdin
+
+This integrates naturally with Snail's pipeline operator for composable data
+transformations.
 
 ## Assertions and deletion
 `assert` and `del` mirror Python. Assertions may include an optional message:
