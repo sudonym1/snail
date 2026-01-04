@@ -1,5 +1,8 @@
+// Top-level program entry points
 program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 awk_program = { SOI ~ stmt_sep* ~ awk_entry_list? ~ stmt_sep* ~ EOI }
+
+// AWK mode: BEGIN blocks, END blocks, and pattern-action rules
 awk_entry_list = { awk_entry ~ (stmt_sep* ~ awk_entry)* ~ stmt_sep* }
 awk_entry = _{ awk_begin | awk_end | awk_rule }
 awk_begin = { "BEGIN" ~ block }
@@ -7,6 +10,7 @@ awk_end = { "END" ~ block }
 awk_rule = { block | awk_pattern ~ block? }
 awk_pattern = { expr }
 
+// Statements: separated by semicolons or newlines
 stmt_list = { stmt ~ (stmt_sep ~ stmt)* ~ stmt_sep? }
 stmt_sep = _{ ";" ~ NEWLINE* | NEWLINE+ }
 
@@ -26,23 +30,32 @@ simple_stmt = _{
   | expr_stmt
 }
 
+// Braced block of statements
 block = { "{" ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ "}" }
 
+// Control flow: if/elif/else, while/else, for/else
 if_stmt = { "if" ~ expr ~ block ~ (stmt_sep* ~ "elif" ~ expr ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
 while_stmt = { "while" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
 for_stmt = { "for" ~ identifier ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
+
+// Function and class definitions
 def_stmt = { "def" ~ identifier ~ parameters ~ block }
 class_stmt = { "class" ~ identifier ~ block }
+
+// Exception handling: try/except/else/finally
 try_stmt = { "try" ~ block ~ (try_except_tail | try_finally_tail) }
 try_except_tail = _{ (stmt_sep* ~ except_clause)+ ~ (stmt_sep* ~ else_clause)? ~ (stmt_sep* ~ finally_clause)? }
 try_finally_tail = _{ stmt_sep* ~ finally_clause }
 except_clause = { "except" ~ (expr ~ ("as" ~ identifier)?)? ~ block }
 else_clause = { "else" ~ block }
 finally_clause = { "finally" ~ block }
+
+// Context managers
 with_stmt = { "with" ~ with_items ~ block }
 with_items = { with_item ~ ("," ~ with_item)* }
 with_item = { expr ~ ("as" ~ assign_target)? }
 
+// Function parameters: regular, *args, **kwargs
 parameters = { "(" ~ param_list? ~ ")" }
 param_list = { parameter ~ ("," ~ parameter)* ~ ","? }
 parameter = _{ regular_param | star_param | kw_param }
@@ -50,6 +63,7 @@ regular_param = { identifier ~ ("=" ~ expr)? }
 star_param = { "*" ~ identifier }
 kw_param = { "**" ~ identifier }
 
+// Simple statements
 return_stmt = { "return" ~ expr? }
 raise_stmt = { "raise" ~ expr? ~ ("from" ~ expr)? }
 assert_stmt = { "assert" ~ expr ~ ("," ~ expr)? }
@@ -58,6 +72,7 @@ break_stmt = { "break" }
 continue_stmt = { "continue" }
 pass_stmt = { "pass" }
 
+// Import statements: from/import and import
 import_stmt = _{ import_from | import_names }
 import_from = { "from" ~ dotted_name ~ "import" ~ import_items }
 import_names = { "import" ~ import_items }
@@ -65,21 +80,32 @@ import_items = { import_item ~ ("," ~ import_item)* }
 import_item = { dotted_name ~ ("as" ~ identifier)? }
 dotted_name = { identifier ~ ("." ~ identifier)* }
 
+// Assignment and expression statements
 assign_stmt = { assign_target ~ "=" ~ expr }
 assign_target = { identifier ~ (attribute | index)* }
 expr_stmt = { expr }
 
+// Expressions: precedence from lowest (if) to highest (power)
 expr = { if_expr }
+
+// Compact try operator: expr? or expr?fallback
 try_suffix = { "?" ~ (!add_op ~ try_fallback)? }
 try_fallback = { unary }
+
+// Ternary conditional
 if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }
+
+// Boolean operators
 or_expr = { and_expr ~ ("or" ~ and_expr)* }
 and_expr = { not_expr ~ ("and" ~ not_expr)* }
 not_expr = { (not_op ~ not_expr) | comparison }
 not_op = { "not" }
+
+// Comparisons
 comparison = { sum ~ (comp_op ~ sum)* }
 comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | "in" | "is" }
 
+// Arithmetic operators
 sum = { product ~ (add_op ~ product)* }
 add_op = { "+" | "-" }
 product = { unary ~ (mul_op ~ unary)* }
@@ -89,13 +115,18 @@ unary_op = { "+" | "-" }
 power = { primary ~ (pow_op ~ primary)* }
 pow_op = { "**" }
 
+// Primary expressions: atoms with postfix operations
 primary = { atom ~ (call | attribute | index | try_suffix)* }
+
+// Function calls with positional, keyword, *args, **kwargs
 call = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ")" }
 argument = { kw_argument | star_argument | expr }
 kw_argument = { identifier ~ "=" ~ expr }
 star_argument = _{ kw_star_arg | star_arg }
 star_arg = { "*" ~ expr }
 kw_star_arg = { "**" ~ expr }
+
+// Attribute access and indexing/slicing
 attribute = { "." ~ identifier }
 index = { "[" ~ slice ~ "]" }
 slice = { slice_expr | expr }
@@ -103,6 +134,7 @@ slice_expr = { slice_start? ~ ":" ~ slice_end? }
 slice_start = { expr }
 slice_end = { expr }
 
+// Atomic expressions: literals, variables, collections, etc.
 atom = _{
   literal
   | regex
@@ -121,8 +153,10 @@ atom = _{
   | "(" ~ expr ~ ")"
 }
 
+// Compound expression: multiple semicolon-separated expressions in parens
 compound_expr = { "(" ~ NEWLINE* ~ expr ~ (";" ~ NEWLINE* ~ expr)+ ~ NEWLINE* ~ ";"? ~ ")" }
 
+// Subprocess invocation: $(cmd) captures output, @(cmd) captures exit status
 subprocess = { subprocess_capture | subprocess_status }
 subprocess_capture = { "$(" ~ subprocess_body ~ ")" }
 subprocess_status = { "@(" ~ subprocess_body ~ ")" }
@@ -131,6 +165,7 @@ subprocess_part = _{ subprocess_expr | subprocess_text }
 subprocess_expr = { "{" ~ expr ~ "}" }
 subprocess_text = @{ ( "{{" | "}}" | (!("{" | ")") ~ ANY) )+ }
 
+// Collection literals and comprehensions
 tuple_literal = { "(" ~ ")" | "(" ~ expr ~ "," ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
 list_comp = { "[" ~ expr ~ comp_for ~ "]" }
 list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
@@ -139,14 +174,21 @@ dict_literal = { "{" ~ (dict_entry ~ ("," ~ dict_entry)*)? ~ "}" }
 set_literal = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
 dict_entry = { expr ~ ":" ~ expr }
 
+// Comprehension clauses
 comp_for = { "for" ~ identifier ~ "in" ~ expr ~ comp_if* }
 comp_if = { "if" ~ expr }
+
+// Literals: numbers, strings, booleans, None
 literal = { number | string | boolean | none }
 boolean = { "True" | "False" }
 none = { "None" }
+
+// Special variables: exception, AWK fields, injected vars
 exception_var = { "$e" }
 field_index_var = @{ "$" ~ ASCII_DIGIT+ }
 injected_var = { "$fn" | "$l" | "$f" | "$n" | "$p" | "$m" }
+
+// Number, string, and regex literals
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 string = @{ raw_prefix? ~ (triple_double | triple_single | double_string | single_string) }
 raw_prefix = { "r" }
@@ -156,6 +198,7 @@ double_string = { "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" }
 single_string = { "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'" }
 regex = @{ "/" ~ ( "\\/" | !"/" ~ ANY )* ~ "/" }
 
+// Identifiers: must not be keywords
 identifier = @{ !keyword ~ ident_start ~ ident_continue* }
 ident_start = { ASCII_ALPHA | "_" }
 ident_continue = { ASCII_ALPHANUMERIC | "_" }
@@ -166,6 +209,7 @@ keyword = _{
   | "True" | "False" | "None") ~ !ident_continue
 }
 
+// Lexical rules: whitespace, newlines, comments
 WHITESPACE = _{ " " | "\t" }
 NEWLINE = _{ "\r\n" | "\n" }
 COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* }

@@ -4,7 +4,7 @@ use std::process::Command;
 use tempfile::NamedTempFile;
 
 #[test]
-fn passes_args_to_script() {
+fn passes_args_to_script_with_code_arg() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
         .args(["import sys; print(sys.argv)", "arg1", "arg2"])
@@ -119,7 +119,7 @@ fn cli_reports_file_not_found() {
 fn cli_reports_parse_errors_with_location() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["if { }"])
+        .args([")"])
         .output()
         .expect("should run");
 
@@ -136,7 +136,10 @@ fn cli_reports_parse_error_in_file() {
     writeln!(file, "x = 1\nif {{ }}").expect("write to temp file");
     let path = file.path().to_str().unwrap();
 
-    let output = Command::new(exe).arg(path).output().expect("should run");
+    let output = Command::new(exe)
+        .args(["-f", path])
+        .output()
+        .expect("should run");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -221,7 +224,7 @@ fn cli_handles_unicode_in_error_messages() {
 fn cli_exits_with_nonzero_on_parse_error() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["if {"])
+        .args(["if { }"])
         .output()
         .expect("should run");
 
@@ -233,7 +236,10 @@ fn cli_exits_with_nonzero_on_parse_error() {
 #[test]
 fn cli_handles_directory_instead_of_file() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let output = Command::new(exe).arg("/tmp").output().expect("should run");
+    let output = Command::new(exe)
+        .args(["-f", "/tmp"])
+        .output()
+        .expect("should run");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
