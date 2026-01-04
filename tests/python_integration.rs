@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 use tempfile::TempDir;
 
-use snail::{exec_snail, register_in_python};
+use snail::{CompileMode, exec_snail, internal_exec_snail, register_in_python};
 
 #[test]
 fn executes_snail_code_via_python_api() {
@@ -199,8 +199,15 @@ fn executes_example_files() {
         sys.setattr("stdin", &stdin).expect("install stdin");
         sys.setattr("stdout", &stdout).expect("install stdout");
 
-        exec_snail(py, &awk_example, Some("examples/awk.snail"), None, None)
-            .expect("awk example should execute");
+        internal_exec_snail(
+            py,
+            &awk_example,
+            CompileMode::Awk,
+            Some("examples/awk.snail"),
+            None,
+            None,
+        )
+        .expect("awk example should execute");
 
         let output: String = stdout
             .call_method0("getvalue")

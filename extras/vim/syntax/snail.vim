@@ -11,7 +11,6 @@ syn case match
 
 " Basic tokens
 syn match snailComment "#.*$"
-syn match snailShebang "^#!snail.*$"
 
 " Strings (simple quoting; use Python syntax highlighting for deeper support)
 syn region snailString start=+'+ skip=+\\'+ end=+'+
@@ -36,7 +35,6 @@ syn match snailOperator "[][{}():.,]"
 syn match snailOperator "==\|!=\|<=\|>=\|[-+*/%<>]"
 
 hi def link snailComment        Comment
-hi def link snailShebang        PreProc
 hi def link snailString         String
 hi def link snailFormat         Special
 hi def link snailKeyword        Keyword

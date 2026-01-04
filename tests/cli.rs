@@ -7,7 +7,7 @@ use tempfile::NamedTempFile;
 fn passes_args_to_script_with_c_flag() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["-c", "import sys; print(sys.argv)", "arg1", "arg2"])
+        .args(["import sys; print(sys.argv)", "arg1", "arg2"])
         .output()
         .expect("run snail");
     assert!(
@@ -16,7 +16,7 @@ fn passes_args_to_script_with_c_flag() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(stdout.trim(), "['-c', 'arg1', 'arg2']");
+    assert_eq!(stdout.trim(), "['--', 'arg1', 'arg2']");
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn passes_args_to_script_with_file() {
     let path = file.path().to_str().unwrap();
 
     let output = Command::new(exe)
-        .args([path, "arg1", "arg2"])
+        .args(["-f", path, "arg1", "arg2"])
         .output()
         .expect("run snail");
     assert!(
@@ -50,7 +50,7 @@ fn passes_hyphen_args_to_script() {
     let path = file.path().to_str().unwrap();
 
     let output = Command::new(exe)
-        .args([path, "-x", "--foo", "bar"])
+        .args(["-f", path, "-x", "--foo", "bar"])
         .output()
         .expect("run snail");
     assert!(
@@ -66,28 +66,10 @@ fn passes_hyphen_args_to_script() {
 }
 
 #[test]
-fn combined_short_flags_work() {
-    let exe = env!("CARGO_BIN_EXE_snail");
-    // -pc should be equivalent to -p -c
-    let output = Command::new(exe)
-        .args(["-pc", "print('hello')"])
-        .output()
-        .expect("run snail");
-    assert!(
-        output.status.success(),
-        "snail failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // -p outputs Python code, so we should see the translated print
-    assert!(stdout.contains("print"), "expected python output: {stdout}");
-}
-
-#[test]
 fn flushes_stdout_on_exit() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["-c", "import sys; sys.stdout.write('hi')"])
+        .args(["import sys; sys.stdout.write('hi')"])
         .output()
         .expect("run snail");
     assert!(
@@ -102,7 +84,7 @@ fn flushes_stdout_on_exit() {
 fn flushes_stderr_on_exit() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["-c", "import sys; sys.stderr.write('oops')"])
+        .args(["import sys; sys.stderr.write('oops')"])
         .output()
         .expect("run snail");
     assert!(
@@ -119,6 +101,7 @@ fn flushes_stderr_on_exit() {
 fn cli_reports_file_not_found() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
+        .arg("-f")
         .arg("/nonexistent/path/to/file.snail")
         .output()
         .expect("should run");
@@ -136,7 +119,7 @@ fn cli_reports_file_not_found() {
 fn cli_reports_parse_errors_with_location() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["-c", "if { }"])
+        .args(["if { }"])
         .output()
         .expect("should run");
 
@@ -161,12 +144,9 @@ fn cli_reports_parse_error_in_file() {
 }
 
 #[test]
-fn cli_handles_empty_input_with_c_flag() {
+fn cli_handles_empty_input() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let output = Command::new(exe)
-        .args(["-c", ""])
-        .output()
-        .expect("should run");
+    let output = Command::new(exe).args([""]).output().expect("should run");
 
     // Empty input should succeed (nothing to execute)
     assert!(output.status.success());
@@ -176,7 +156,7 @@ fn cli_handles_empty_input_with_c_flag() {
 fn cli_reports_runtime_errors() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["-c", "raise ValueError('test error')"])
+        .args(["raise ValueError('test error')"])
         .output()
         .expect("should run");
 
@@ -212,21 +192,11 @@ fn cli_handles_invalid_flag() {
 }
 
 #[test]
-fn cli_handles_missing_argument_for_c_flag() {
-    let exe = env!("CARGO_BIN_EXE_snail");
-    let output = Command::new(exe).arg("-c").output().expect("should run");
-
-    assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!stderr.is_empty());
-}
-
-#[test]
 fn cli_reports_multiline_parse_errors_correctly() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let source = "x = 1\ny = 2\nz = 3\nif {";
     let output = Command::new(exe)
-        .args(["-c", source])
+        .args([source])
         .output()
         .expect("should run");
 

@@ -1,4 +1,4 @@
-#!snail awk
+#!/usr/bin/env snail --awk
 BEGIN { print("demo begin") }
 $l.startswith("d") { print("matched:", $l) }
 /demo/ { print("regex:", $m.group(0)) }

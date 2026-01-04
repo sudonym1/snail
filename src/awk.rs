@@ -2,7 +2,6 @@ use crate::ast::{Expr, SourceSpan, Stmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompileMode {
-    Auto,
     Snail,
     Awk,
 }

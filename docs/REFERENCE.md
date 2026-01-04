@@ -5,8 +5,8 @@ blocks for curly braces. The examples here mirror the runnable tour in
 `examples/all_syntax.snail`.
 
 ## Running Snail code
-- Execute a file: `snail path/to/script.snail`
-- Run a one-liner: `snail -c "print('hi')"`
+- Run a one-liner: `snail "print('hi')"`
+- Execute a file: `snail -f path/to/script.snail`
 - Import from Python: `import demo.snail` works through the provided import hook
   and produces the same module objects as native Python code.
 
@@ -158,11 +158,10 @@ del temp_value
 ```
 
 ## Awk mode
-Invoke Snail's awk mode with `snail --awk` or by starting a file with
-`#!snail awk`. Awk sources are composed of pattern/action pairs evaluated for
-each input line. `BEGIN` and `END` blocks run before and after the line loop, a
-rule with only a pattern prints matching lines by default, and a lone block runs
-for every line.
+Invoke Snail's awk mode with `snail --awk`. Awk sources are composed of
+pattern/action pairs evaluated for each input line. `BEGIN` and `END` blocks
+run before and after the line loop, a rule with only a pattern prints matching
+lines by default, and a lone block runs for every line.
 
 See `examples/awk.snail` for a runnable sample program.
 

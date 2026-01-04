@@ -22,7 +22,7 @@ provide runnable tours that mirror the language features. Both stay current as
 phases are delivered.
 
 Awk mode is available for line-oriented scripts. Enable it with `snail --awk`
-or by starting a file with `#!snail awk`. Awk sources are written as
+or by starting a file with `#!/usr/bin/env snail --awk`. Awk sources are written as
 pattern/action pairs evaluated for each input line. `BEGIN` and `END` blocks run
 before and after the line loop, a lone pattern defaults to printing matching
 lines, and a bare block runs for every line. Built-in variables mirror awk but
@@ -45,10 +45,6 @@ Editor and shell integration
   `~/.config/nvim/syntax/snail.vim` and add either the same ftdetect autocommand
   under `~/.config/nvim/ftdetect/snail.vim` or a Lua rule such as
   `vim.filetype.add({ extension = { snail = "snail" } })` in your config.
-- Shell completions for Bash, Zsh, and Fish live in `extras/completions/`.
-  Source the Bash script in your shell startup, add the Zsh script to your
-  `$fpath`, or place the Fish script in
-  `~/.config/fish/completions/snail.fish`.
 
 Development notes
 
@@ -150,7 +146,6 @@ Phase 8: Documentation and utilities
 - [x] Expand documentation, examples, and language reference.
 - [ ] Provide useful utilities to help users adopt Snail.
   - [x] Syntax highlighting for Vim.
-  - [x] Autocompletion scripts for the `snail` CLI (bash, zsh, fish).
   - [ ] Easy installation path (PyPI package and/or Homebrew formula).
 
 Phase 9: Awk-style line processing

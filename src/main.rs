@@ -5,25 +5,25 @@ use clap::Parser;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
-use snail::{CompileMode, SnailError, compile_snail_source_with_mode, format_snail_error};
+use snail::{CompileMode, SnailError, compile_snail_source, format_snail_error};
 
 #[derive(Parser)]
 #[command(
     name = "snail",
     about = "Snail programming language interpreter",
-    override_usage = "snail [options] <file> [args]...\n       snail [options] -c <code> [args]...",
+    override_usage = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]...",
     trailing_var_arg = true
 )]
 struct Cli {
-    /// Run a one-liner
-    #[arg(short = 'c', value_name = "code")]
-    code: Option<String>,
+    /// Run a source file instead of a oneliner
+    #[arg(short = 'f', value_name = "file")]
+    file: Option<String>,
 
     /// Run code in awk mode (pattern/action over input)
     #[arg(short = 'a', long = "awk")]
     awk: bool,
 
-    /// Output translated Python and exit
+    /// Print generated python
     #[arg(short = 'p', long = "python")]
     python: bool,
 
@@ -54,30 +54,30 @@ fn run() -> Result<(), String> {
     let mode = if cli.awk {
         CompileMode::Awk
     } else {
-        CompileMode::Auto
+        CompileMode::Snail
     };
 
-    let input = if let Some(source) = cli.code {
+    let input = if let Some(fpath) = cli.file {
+        let source = read_source(&fpath)?;
         CliInput {
-            filename: "<cmd>".to_string(),
+            filename: fpath.clone(),
             source,
-            argv: build_argv("-c", cli.args),
+            argv: build_argv(&fpath, cli.args),
             mode,
         }
-    } else if let Some((path, script_args)) = cli.args.split_first() {
-        let source = read_source(path)?;
+    } else if let Some((source, args)) = cli.args.split_first() {
         CliInput {
-            filename: path.clone(),
-            source,
-            argv: build_argv(path, script_args.to_vec()),
+            filename: "<cmd>".to_string(),
+            source: source.to_string(),
+            argv: build_argv("--", args.to_vec()),
             mode,
         }
     } else {
-        return Err("no input provided; use -c <code> or provide a file".to_string());
+        return Err("no input provided".to_string());
     };
 
     if cli.python {
-        let python = match compile_snail_source_with_mode(&input.source, input.mode) {
+        let python = match compile_snail_source(&input.source, input.mode) {
             Ok(python) => python,
             Err(err) => return Err(format_snail_error(&err, &input.filename)),
         };
@@ -112,8 +112,7 @@ enum CliError {
 }
 
 fn run_source(input: &CliInput) -> Result<(), CliError> {
-    let python =
-        compile_snail_source_with_mode(&input.source, input.mode).map_err(CliError::Snail)?;
+    let python = compile_snail_source(&input.source, input.mode).map_err(CliError::Snail)?;
 
     Python::with_gil(|py| -> Result<(), CliError> {
         let builtins = PyModule::import_bound(py, "builtins").map_err(CliError::Python)?;

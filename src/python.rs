@@ -9,19 +9,7 @@ use crate::{
     python_source,
 };
 
-pub fn compile_snail_source(source: &str) -> Result<String, SnailError> {
-    compile_snail_source_with_mode(source, CompileMode::Auto)
-}
-
-pub fn compile_snail_source_with_mode(
-    source: &str,
-    mode: CompileMode,
-) -> Result<String, SnailError> {
-    let mode = match mode {
-        CompileMode::Auto => detect_compile_mode(source),
-        other => other,
-    };
-
+pub fn compile_snail_source(source: &str, mode: CompileMode) -> Result<String, SnailError> {
     match mode {
         CompileMode::Snail => {
             let program = parse_program(source)?;
@@ -33,41 +21,16 @@ pub fn compile_snail_source_with_mode(
             let module = lower_awk_program(&program)?;
             Ok(python_source(&module))
         }
-        CompileMode::Auto => unreachable!("compile mode is resolved above"),
     }
 }
 
-fn detect_compile_mode(source: &str) -> CompileMode {
-    // 1. Check shebang first (explicit override)
-    if let Some(line) = source.lines().next() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("#!snail awk") || trimmed.starts_with("#!snail --awk") {
-            return CompileMode::Awk;
-        }
-    }
-
-    // 2. Empty programs default to Snail mode
-    if source.trim().is_empty() {
-        return CompileMode::Snail;
-    }
-
-    // 3. Try parsing as AWK
-    if try_parse_as_awk(source) {
-        return CompileMode::Awk;
-    }
-
-    // 4. Default to Snail mode
-    CompileMode::Snail
-}
-
-fn try_parse_as_awk(source: &str) -> bool {
-    // Attempt to parse as AWK program
-    // If successful, it's valid AWK code
-    parse_awk_program(source).is_ok()
-}
-
-fn compile_to_code(py: Python<'_>, source: &str, filename: &str) -> PyResult<PyObject> {
-    let python = compile_snail_source(source).map_err(to_py_err)?;
+fn compile_to_code(
+    py: Python<'_>,
+    source: &str,
+    filename: &str,
+    mode: CompileMode,
+) -> PyResult<PyObject> {
+    let python = compile_snail_source(source, mode).map_err(to_py_err)?;
     let builtins = PyModule::import_bound(py, "builtins")?;
     let compiled = builtins
         .getattr("compile")?
@@ -107,20 +70,19 @@ fn ensure_exec_globals(
 #[allow(unsafe_op_in_unsafe_fn)]
 pub fn compile_snail(py: Python<'_>, source: &str, filename: Option<&str>) -> PyResult<PyObject> {
     let filename = filename.unwrap_or("<snail>");
-    compile_to_code(py, source, filename)
+    compile_to_code(py, source, filename, CompileMode::Snail)
 }
 
-#[pyfunction]
-#[allow(unsafe_op_in_unsafe_fn)]
-pub fn exec_snail(
+pub fn internal_exec_snail(
     py: Python<'_>,
     source: &str,
+    mode: CompileMode,
     filename: Option<&str>,
     globals: Option<&Bound<'_, PyDict>>,
     locals: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<PyObject> {
     let filename = filename.unwrap_or("<snail>");
-    let code = compile_to_code(py, source, filename)?;
+    let code = compile_to_code(py, source, filename, mode)?;
     let globals = match globals {
         Some(globals) => globals.clone(),
         None => PyDict::new_bound(py),
@@ -139,8 +101,20 @@ pub fn exec_snail(
 
 #[pyfunction]
 #[allow(unsafe_op_in_unsafe_fn)]
+pub fn exec_snail(
+    py: Python<'_>,
+    source: &str,
+    filename: Option<&str>,
+    globals: Option<&Bound<'_, PyDict>>,
+    locals: Option<&Bound<'_, PyDict>>,
+) -> PyResult<PyObject> {
+    internal_exec_snail(py, source, CompileMode::Snail, filename, globals, locals)
+}
+
+#[pyfunction]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub fn translate_snail(source: &str) -> PyResult<String> {
-    compile_snail_source(source).map_err(to_py_err)
+    compile_snail_source(source, CompileMode::Snail).map_err(to_py_err)
 }
 
 #[pyfunction]
