@@ -4,7 +4,7 @@ use std::process::Command;
 use tempfile::NamedTempFile;
 
 #[test]
-fn passes_args_to_script_with_c_flag() {
+fn passes_args_to_script() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
         .args(["import sys; print(sys.argv)", "arg1", "arg2"])
@@ -170,7 +170,7 @@ fn cli_handles_syntax_error_in_generated_python() {
     let exe = env!("CARGO_BIN_EXE_snail");
     // This should parse correctly in Snail but might have issues
     let output = Command::new(exe)
-        .args(["-c", "x = 1 +"])
+        .args(["x = 1 +"])
         .output()
         .expect("should run");
 
@@ -210,7 +210,7 @@ fn cli_reports_multiline_parse_errors_correctly() {
 fn cli_handles_unicode_in_error_messages() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["-c", "café = 1 +"])
+        .args(["café = 1 +"])
         .output()
         .expect("should run");
 
@@ -221,7 +221,7 @@ fn cli_handles_unicode_in_error_messages() {
 fn cli_exits_with_nonzero_on_parse_error() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["-c", "if {"])
+        .args(["if {"])
         .output()
         .expect("should run");
 
