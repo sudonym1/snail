@@ -668,3 +668,84 @@ fn parser_rejects_invalid_parameter_syntax() {
             || message.contains("parameter")
     );
 }
+
+#[test]
+fn parses_raw_string_with_curly_braces() {
+    let source = r#"x = r"{ \"key\": \"value\" }""#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::String { value, raw, .. } => {
+                assert_eq!(value, r#"{ \"key\": \"value\" }"#);
+                assert_eq!(*raw, true);
+            }
+            other => panic!("Expected String, got {:?}", other),
+        },
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_raw_string_without_interpolation() {
+    let source = r#"x = r"test {expr} more""#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            match value {
+                Expr::String { value, raw, .. } => {
+                    // Raw string should preserve {expr} literally, not treat it as interpolation
+                    assert_eq!(value, "test {expr} more");
+                    assert_eq!(*raw, true);
+                }
+                other => panic!("Expected String, got {:?}", other),
+            }
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_raw_triple_quoted_string_with_json() {
+    let source = r#####"x = r"""
+{
+  "hook_event_name": "Status",
+  "session_id": "abc123"
+}
+""""#####;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::String { raw, .. } => {
+                assert_eq!(*raw, true);
+            }
+            other => panic!("Expected String, got {:?}", other),
+        },
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_regular_string_with_interpolation() {
+    let source = r#"x = "test {y} more""#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            // Non-raw strings should support interpolation and parse as FString
+            match value {
+                Expr::FString { .. } => {
+                    // This is correct - interpolated strings are FStrings
+                }
+                other => panic!("Expected FString, got {:?}", other),
+            }
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}

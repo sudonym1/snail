@@ -118,10 +118,7 @@ fn cli_reports_file_not_found() {
 #[test]
 fn cli_reports_parse_errors_with_location() {
     let exe = env!("CARGO_BIN_EXE_snail");
-    let output = Command::new(exe)
-        .args([")"])
-        .output()
-        .expect("should run");
+    let output = Command::new(exe).args([")"]).output().expect("should run");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);

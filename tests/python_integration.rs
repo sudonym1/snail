@@ -477,3 +477,60 @@ python_value = helper.greeting("python")
         assert_eq!(python_value, "hello python");
     });
 }
+
+#[test]
+fn raw_strings_do_not_interpolate() {
+    pyo3::prepare_freethreaded_python();
+    let source = r#"
+import json
+x = 42
+data = r"""{"key": "{x}", "nested": {"value": 123}}"""
+parsed = json.loads(data)
+result = parsed["key"]
+"#;
+
+    Python::with_gil(|py| {
+        let globals = exec_snail(py, source, Some("<raw-string>"), None, None)
+            .expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+
+        // The raw string should contain the literal text "{x}", not the value 42
+        let result: String = globals
+            .get_item("result")
+            .expect("result lookup should succeed")
+            .expect("result should be present")
+            .extract()
+            .unwrap();
+        assert_eq!(result, "{x}");
+    });
+}
+
+#[test]
+fn regular_strings_do_interpolate() {
+    pyo3::prepare_freethreaded_python();
+    let source = r#"
+x = 42
+result = "The value is {x}"
+"#;
+
+    Python::with_gil(|py| {
+        let globals =
+            exec_snail(py, source, Some("<fstring>"), None, None).expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+
+        // Regular strings should interpolate
+        let result: String = globals
+            .get_item("result")
+            .expect("result lookup should succeed")
+            .expect("result should be present")
+            .extract()
+            .unwrap();
+        assert_eq!(result, "The value is 42");
+    });
+}

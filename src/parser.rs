@@ -1713,6 +1713,17 @@ fn parse_regex_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
 fn parse_string_or_fstring(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let parsed = parse_string_literal(pair)?;
+
+    // Raw strings should not have f-string interpolation
+    if parsed.raw {
+        return Ok(Expr::String {
+            value: parsed.content,
+            raw: true,
+            delimiter: parsed.delimiter,
+            span,
+        });
+    }
+
     let parts = parse_fstring_parts(&parsed.content, parsed.content_offset, source)?;
     let has_expr = parts
         .iter()
