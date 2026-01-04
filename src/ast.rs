@@ -222,6 +222,10 @@ pub enum Expr {
         parts: Vec<SubprocessPart>,
         span: SourceSpan,
     },
+    JsonQuery {
+        query: String,
+        span: SourceSpan,
+    },
     Call {
         func: Box<Expr>,
         args: Vec<Argument>,
@@ -371,6 +375,7 @@ pub enum BinaryOp {
     FloorDiv,
     Mod,
     Pow,
+    Pipeline,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

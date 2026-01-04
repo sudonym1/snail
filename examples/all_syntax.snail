@@ -224,6 +224,16 @@ print("compound_swallowed", compound_swallowed)
 temp_value = 42
 del temp_value
 
+class Doubler {
+    def __pipeline__(self, x) {
+        return x * 2
+    }
+}
+pipeline_result = 21 | Doubler()
+
+r"{foo: 12}" | @j(.foo)
+
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
+print("pipeline_result", pipeline_result)
 print(sysmod.version)

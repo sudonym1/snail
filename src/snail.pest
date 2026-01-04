@@ -98,8 +98,12 @@ if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }
 // Boolean operators
 or_expr = { and_expr ~ ("or" ~ and_expr)* }
 and_expr = { not_expr ~ ("and" ~ not_expr)* }
-not_expr = { (not_op ~ not_expr) | comparison }
+not_expr = { (not_op ~ not_expr) | pipeline }
 not_op = { "not" }
+
+// Pipeline operator
+pipeline = { comparison ~ (pipe_op ~ comparison)* }
+pipe_op = _{ "|" }
 
 // Comparisons
 comparison = { sum ~ (comp_op ~ sum)* }
@@ -139,6 +143,7 @@ atom = _{
   literal
   | regex
   | subprocess
+  | json_query
   | exception_var
   | field_index_var
   | injected_var
@@ -164,6 +169,11 @@ subprocess_body = { subprocess_part* }
 subprocess_part = _{ subprocess_expr | subprocess_text }
 subprocess_expr = { "{" ~ expr ~ "}" }
 subprocess_text = @{ ( "{{" | "}}" | (!("{" | ")") ~ ANY) )+ }
+
+// JSON query: @j(query) reads JSON from stdin/pipeline and applies JMESPath
+// The query is treated as a raw string (no interpolation)
+json_query = { "@j(" ~ json_query_body ~ ")" }
+json_query_body = @{ (!")" ~ ANY)* }
 
 // Collection literals and comprehensions
 tuple_literal = { "(" ~ ")" | "(" ~ expr ~ "," ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }

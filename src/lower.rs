@@ -11,6 +11,7 @@ const SNAIL_SUBPROCESS_CAPTURE: &str = "__snail_subprocess_capture";
 const SNAIL_SUBPROCESS_STATUS: &str = "__snail_subprocess_status";
 const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
 const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
+const SNAIL_JSON_QUERY_CLASS: &str = "__SnailJsonQuery";
 const SNAIL_AWK_LINE: &str = "$l";
 const SNAIL_AWK_FIELDS: &str = "$f";
 const SNAIL_AWK_NR: &str = "$n";
@@ -1083,12 +1084,32 @@ fn lower_expr_with_exception(
             op,
             right,
             span,
-        } => Ok(PyExpr::Binary {
-            left: Box::new(lower_expr_with_exception(left, exception_name)?),
-            op: lower_binary_op(*op),
-            right: Box::new(lower_expr_with_exception(right, exception_name)?),
-            span: span.clone(),
-        }),
+        } => {
+            if *op == BinaryOp::Pipeline {
+                // Pipeline: x | y becomes y.__pipeline__(x)
+                let left_expr = lower_expr_with_exception(left, exception_name)?;
+                let right_expr = lower_expr_with_exception(right, exception_name)?;
+                Ok(PyExpr::Call {
+                    func: Box::new(PyExpr::Attribute {
+                        value: Box::new(right_expr),
+                        attr: "__pipeline__".to_string(),
+                        span: span.clone(),
+                    }),
+                    args: vec![PyArgument::Positional {
+                        value: left_expr,
+                        span: span.clone(),
+                    }],
+                    span: span.clone(),
+                })
+            } else {
+                Ok(PyExpr::Binary {
+                    left: Box::new(lower_expr_with_exception(left, exception_name)?),
+                    op: lower_binary_op(*op),
+                    right: Box::new(lower_expr_with_exception(right, exception_name)?),
+                    span: span.clone(),
+                })
+            }
+        }
         Expr::Compare {
             left,
             ops,
@@ -1223,6 +1244,39 @@ fn lower_expr_with_exception(
                 }),
                 args: vec![PyArgument::Positional {
                     value: command,
+                    span: span.clone(),
+                }],
+                span: span.clone(),
+            })
+        }
+        Expr::JsonQuery { query, span } => {
+            // @j(query) becomes __SnailJsonQuery(query).__pipeline__(None)
+            let query_obj = PyExpr::Call {
+                func: Box::new(PyExpr::Name {
+                    id: SNAIL_JSON_QUERY_CLASS.to_string(),
+                    span: span.clone(),
+                }),
+                args: vec![PyArgument::Positional {
+                    value: PyExpr::String {
+                        value: query.clone(),
+                        raw: false,
+                        delimiter: StringDelimiter::Double,
+                        span: span.clone(),
+                    },
+                    span: span.clone(),
+                }],
+                span: span.clone(),
+            };
+            Ok(PyExpr::Call {
+                func: Box::new(PyExpr::Attribute {
+                    value: Box::new(query_obj),
+                    attr: "__pipeline__".to_string(),
+                    span: span.clone(),
+                }),
+                args: vec![PyArgument::Positional {
+                    value: PyExpr::None {
+                        span: span.clone(),
+                    },
                     span: span.clone(),
                 }],
                 span: span.clone(),
@@ -1475,6 +1529,9 @@ fn lower_binary_op(op: BinaryOp) -> PyBinaryOp {
         BinaryOp::FloorDiv => PyBinaryOp::FloorDiv,
         BinaryOp::Mod => PyBinaryOp::Mod,
         BinaryOp::Pow => PyBinaryOp::Pow,
+        BinaryOp::Pipeline => {
+            panic!("Pipeline operator should be handled specially in lower_expr_with_exception")
+        }
     }
 }
 
@@ -1496,6 +1553,7 @@ pub fn python_source(module: &PyModule) -> String {
     let uses_try = module_uses_snail_try(module);
     let uses_regex = module_uses_snail_regex(module);
     let uses_subprocess = module_uses_snail_subprocess(module);
+    let uses_json = module_uses_snail_json(module);
     if uses_try {
         writer.write_snail_try_helper();
     }
@@ -1511,7 +1569,13 @@ pub fn python_source(module: &PyModule) -> String {
         }
         writer.write_snail_subprocess_helpers();
     }
-    if (uses_try || uses_regex || uses_subprocess) && !module.body.is_empty() {
+    if uses_json {
+        if uses_try || uses_regex || uses_subprocess {
+            writer.write_line("");
+        }
+        writer.write_snail_json_helpers();
+    }
+    if (uses_try || uses_regex || uses_subprocess || uses_json) && !module.body.is_empty() {
         writer.write_line("");
     }
     writer.write_module(module);
@@ -1755,6 +1819,176 @@ fn expr_uses_snail_subprocess(expr: &PyExpr) -> bool {
         PyExpr::Slice { start, end, .. } => {
             start.as_deref().is_some_and(expr_uses_snail_subprocess)
                 || end.as_deref().is_some_and(expr_uses_snail_subprocess)
+        }
+    }
+}
+
+fn module_uses_snail_json(module: &PyModule) -> bool {
+    module.body.iter().any(stmt_uses_snail_json)
+}
+
+fn stmt_uses_snail_json(stmt: &PyStmt) -> bool {
+    match stmt {
+        PyStmt::If {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_json(test)
+                || block_uses_snail_json(body)
+                || block_uses_snail_json(orelse)
+        }
+        PyStmt::While {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_json(test)
+                || block_uses_snail_json(body)
+                || block_uses_snail_json(orelse)
+        }
+        PyStmt::For {
+            target,
+            iter,
+            body,
+            orelse,
+            ..
+        } => {
+            expr_uses_snail_json(target)
+                || expr_uses_snail_json(iter)
+                || block_uses_snail_json(body)
+                || block_uses_snail_json(orelse)
+        }
+        PyStmt::FunctionDef { body, .. } | PyStmt::ClassDef { body, .. } => {
+            block_uses_snail_json(body)
+        }
+        PyStmt::Try {
+            body,
+            handlers,
+            orelse,
+            finalbody,
+            ..
+        } => {
+            block_uses_snail_json(body)
+                || handlers.iter().any(handler_uses_snail_json)
+                || block_uses_snail_json(orelse)
+                || block_uses_snail_json(finalbody)
+        }
+        PyStmt::With { items, body, .. } => {
+            items.iter().any(with_item_uses_snail_json) || block_uses_snail_json(body)
+        }
+        PyStmt::Return { value, .. } => value.as_ref().is_some_and(expr_uses_snail_json),
+        PyStmt::Raise { value, from, .. } => {
+            value.as_ref().is_some_and(expr_uses_snail_json)
+                || from.as_ref().is_some_and(expr_uses_snail_json)
+        }
+        PyStmt::Assert { test, message, .. } => {
+            expr_uses_snail_json(test)
+                || message.as_ref().is_some_and(expr_uses_snail_json)
+        }
+        PyStmt::Delete { targets, .. } => targets.iter().any(expr_uses_snail_json),
+        PyStmt::Import { .. }
+        | PyStmt::ImportFrom { .. }
+        | PyStmt::Break { .. }
+        | PyStmt::Continue { .. }
+        | PyStmt::Pass { .. } => false,
+        PyStmt::Assign { targets, value, .. } => {
+            targets.iter().any(expr_uses_snail_json) || expr_uses_snail_json(value)
+        }
+        PyStmt::Expr { value, .. } => expr_uses_snail_json(value),
+    }
+}
+
+fn block_uses_snail_json(block: &[PyStmt]) -> bool {
+    block.iter().any(stmt_uses_snail_json)
+}
+
+fn handler_uses_snail_json(handler: &PyExceptHandler) -> bool {
+    handler
+        .type_name
+        .as_ref()
+        .is_some_and(expr_uses_snail_json)
+        || block_uses_snail_json(&handler.body)
+}
+
+fn with_item_uses_snail_json(item: &PyWithItem) -> bool {
+    expr_uses_snail_json(&item.context)
+        || item.target.as_ref().is_some_and(expr_uses_snail_json)
+}
+
+fn argument_uses_snail_json(arg: &PyArgument) -> bool {
+    match arg {
+        PyArgument::Positional { value, .. }
+        | PyArgument::Keyword { value, .. }
+        | PyArgument::Star { value, .. }
+        | PyArgument::KwStar { value, .. } => expr_uses_snail_json(value),
+    }
+}
+
+fn expr_uses_snail_json(expr: &PyExpr) -> bool {
+    match expr {
+        PyExpr::Name { .. }
+        | PyExpr::Number { .. }
+        | PyExpr::String { .. }
+        | PyExpr::Bool { .. }
+        | PyExpr::None { .. } => false,
+        PyExpr::FString { parts, .. } => parts.iter().any(|part| match part {
+            PyFStringPart::Text(_) => false,
+            PyFStringPart::Expr(expr) => expr_uses_snail_json(expr),
+        }),
+        PyExpr::Unary { operand, .. } => expr_uses_snail_json(operand),
+        PyExpr::Binary { left, right, .. } => {
+            expr_uses_snail_json(left) || expr_uses_snail_json(right)
+        }
+        PyExpr::Compare {
+            left, comparators, ..
+        } => expr_uses_snail_json(left) || comparators.iter().any(expr_uses_snail_json),
+        PyExpr::IfExpr {
+            test, body, orelse, ..
+        } => {
+            expr_uses_snail_json(test)
+                || expr_uses_snail_json(body)
+                || expr_uses_snail_json(orelse)
+        }
+        PyExpr::Lambda { body, .. } => expr_uses_snail_json(body),
+        PyExpr::Call { func, args, .. } => {
+            if matches!(func.as_ref(), PyExpr::Name { id, .. }
+                if id == SNAIL_JSON_QUERY_CLASS)
+            {
+                return true;
+            }
+            expr_uses_snail_json(func) || args.iter().any(argument_uses_snail_json)
+        }
+        PyExpr::Attribute { value, .. } => expr_uses_snail_json(value),
+        PyExpr::Index { value, index, .. } => {
+            expr_uses_snail_json(value) || expr_uses_snail_json(index)
+        }
+        PyExpr::Paren { expr, .. } => expr_uses_snail_json(expr),
+        PyExpr::List { elements, .. } | PyExpr::Tuple { elements, .. } => {
+            elements.iter().any(expr_uses_snail_json)
+        }
+        PyExpr::Dict { entries, .. } => entries.iter().any(|(key, value)| {
+            expr_uses_snail_json(key) || expr_uses_snail_json(value)
+        }),
+        PyExpr::Set { elements, .. } => elements.iter().any(expr_uses_snail_json),
+        PyExpr::ListComp {
+            element, iter, ifs, ..
+        } => {
+            expr_uses_snail_json(element)
+                || expr_uses_snail_json(iter)
+                || ifs.iter().any(expr_uses_snail_json)
+        }
+        PyExpr::DictComp {
+            key,
+            value,
+            iter,
+            ifs,
+            ..
+        } => {
+            expr_uses_snail_json(key)
+                || expr_uses_snail_json(value)
+                || expr_uses_snail_json(iter)
+                || ifs.iter().any(expr_uses_snail_json)
+        }
+        PyExpr::Slice { start, end, .. } => {
+            start.as_deref().is_some_and(expr_uses_snail_json)
+                || end.as_deref().is_some_and(expr_uses_snail_json)
         }
     }
 }
@@ -2113,6 +2347,52 @@ impl PythonWriter {
         self.indent -= 1;
         self.write_line("exc.__fallback__ = __fallback");
         self.write_line("raise");
+        self.indent -= 2;
+    }
+
+    fn write_snail_json_helpers(&mut self) {
+        self.write_line("import json");
+        self.write_line("import jmespath");
+        self.write_line("import sys");
+        self.write_line("");
+        self.write_line(&format!("class {}:", SNAIL_JSON_QUERY_CLASS));
+        self.indent += 1;
+        self.write_line("def __init__(self, query):");
+        self.indent += 1;
+        self.write_line("self.query = query");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line("def __pipeline__(self, data):");
+        self.indent += 1;
+        self.write_line("# Handle None (stdin case)");
+        self.write_line("if data is None:");
+        self.indent += 1;
+        self.write_line("data = json.load(sys.stdin)");
+        self.indent -= 1;
+        self.write_line("# Handle string (file path)");
+        self.write_line("elif isinstance(data, str):");
+        self.indent += 1;
+        self.write_line("with open(data, 'r') as f:");
+        self.indent += 1;
+        self.write_line("data = json.load(f)");
+        self.indent -= 2;
+        self.write_line("# Handle file-like object");
+        self.write_line("elif hasattr(data, 'read'):");
+        self.indent += 1;
+        self.write_line("content = data.read()");
+        self.write_line("if isinstance(content, bytes):");
+        self.indent += 1;
+        self.write_line("content = content.decode('utf-8')");
+        self.indent -= 1;
+        self.write_line("data = json.loads(content)");
+        self.indent -= 1;
+        self.write_line("# Must be JSON-native type (dict, list, str, int, float, bool, None)");
+        self.write_line("elif not isinstance(data, (dict, list, str, int, float, bool, type(None))):");
+        self.indent += 1;
+        self.write_line("raise TypeError(f\"@j pipeline input must be JSON-native type, got {type(data).__name__}\")");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line("return jmespath.search(self.query, data)");
         self.indent -= 2;
     }
 

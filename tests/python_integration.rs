@@ -534,3 +534,79 @@ result = "The value is {x}"
         assert_eq!(result, "The value is 42");
     });
 }
+
+#[test]
+fn pipeline_operator_calls_dunder_pipeline() {
+    pyo3::prepare_freethreaded_python();
+    let source = r#"
+class Doubler {
+    def __pipeline__(self, x) {
+        return x * 2
+    }
+}
+result = 5 | Doubler()
+"#;
+
+    Python::with_gil(|py| {
+        let globals =
+            exec_snail(py, source, Some("<pipeline>"), None, None).expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+
+        let result: i64 = globals
+            .get_item("result")
+            .expect("result lookup should succeed")
+            .expect("result should be present")
+            .extract()
+            .unwrap();
+        assert_eq!(result, 10);
+    });
+}
+
+#[test]
+fn json_query_works_with_dict() {
+    pyo3::prepare_freethreaded_python();
+
+    // Skip test if jmespath is not installed
+    let has_jmespath = Python::with_gil(|py| {
+        py.run_bound("import jmespath", None, None).is_ok()
+    });
+
+    if !has_jmespath {
+        eprintln!("Skipping JSON test: jmespath not installed (pip install jmespath)");
+        return;
+    }
+
+    let source = r#"
+data = {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]}
+names = data | @j('users[*].name')
+first_name = data | @j('users[0].name')
+"#;
+
+    Python::with_gil(|py| {
+        let globals =
+            exec_snail(py, source, Some("<json>"), None, None).expect("source should execute");
+        let globals = globals
+            .bind(py)
+            .downcast::<PyDict>()
+            .expect("globals should be a dict");
+
+        let names: Vec<String> = globals
+            .get_item("names")
+            .expect("names lookup should succeed")
+            .expect("names should be present")
+            .extract()
+            .unwrap();
+        assert_eq!(names, vec!["Alice", "Bob"]);
+
+        let first_name: String = globals
+            .get_item("first_name")
+            .expect("first_name lookup should succeed")
+            .expect("first_name should be present")
+            .extract()
+            .unwrap();
+        assert_eq!(first_name, "Alice");
+    });
+}

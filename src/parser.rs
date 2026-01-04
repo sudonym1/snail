@@ -762,6 +762,7 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         | Rule::or_expr
         | Rule::and_expr
         | Rule::not_expr
+        | Rule::pipeline
         | Rule::comparison
         | Rule::sum
         | Rule::product
@@ -800,6 +801,7 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::dict_comp => parse_dict_comp(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
         Rule::subprocess => parse_subprocess(pair, source),
+        Rule::json_query => parse_json_query(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -815,6 +817,7 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::or_expr => fold_left_binary(pair, source, BinaryOp::Or),
         Rule::and_expr => fold_left_binary(pair, source, BinaryOp::And),
         Rule::not_expr => parse_not_expr(pair, source),
+        Rule::pipeline => fold_left_binary(pair, source, BinaryOp::Pipeline),
         Rule::comparison => parse_comparison(pair, source),
         Rule::sum => parse_sum(pair, source),
         Rule::product => parse_product(pair, source),
@@ -1602,6 +1605,16 @@ fn match_injected_name(text: &str) -> Option<(&'static str, usize)> {
     None
 }
 
+fn parse_json_query(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let body_pair = pair
+        .into_inner()
+        .next()
+        .ok_or_else(|| error_with_span("missing json query body", span.clone(), source))?;
+    let query = body_pair.as_str().to_string();
+    Ok(Expr::JsonQuery { query, span })
+}
+
 fn parse_dict_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
@@ -2046,6 +2059,7 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Regex { span, .. }
         | Expr::RegexMatch { span, .. }
         | Expr::Subprocess { span, .. }
+        | Expr::JsonQuery { span, .. }
         | Expr::Call { span, .. }
         | Expr::Attribute { span, .. }
         | Expr::Index { span, .. }
@@ -2069,6 +2083,7 @@ fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
         | Expr::Bool { span, .. }
         | Expr::None { span }
         | Expr::Subprocess { span, .. }
+        | Expr::JsonQuery { span, .. }
         | Expr::FieldIndex { span, .. }
         | Expr::List { span, .. }
         | Expr::Tuple { span, .. }
