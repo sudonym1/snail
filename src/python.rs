@@ -38,6 +38,7 @@ pub fn compile_snail_source_with_mode(
 }
 
 fn detect_compile_mode(source: &str) -> CompileMode {
+    // 1. Check shebang first (explicit override)
     if let Some(line) = source.lines().next() {
         let trimmed = line.trim_start();
         if trimmed.starts_with("#!snail awk") || trimmed.starts_with("#!snail --awk") {
@@ -45,7 +46,24 @@ fn detect_compile_mode(source: &str) -> CompileMode {
         }
     }
 
+    // 2. Empty programs default to Snail mode
+    if source.trim().is_empty() {
+        return CompileMode::Snail;
+    }
+
+    // 3. Try parsing as AWK
+    if try_parse_as_awk(source) {
+        return CompileMode::Awk;
+    }
+
+    // 4. Default to Snail mode
     CompileMode::Snail
+}
+
+fn try_parse_as_awk(source: &str) -> bool {
+    // Attempt to parse as AWK program
+    // If successful, it's valid AWK code
+    parse_awk_program(source).is_ok()
 }
 
 fn compile_to_code(py: Python<'_>, source: &str, filename: &str) -> PyResult<PyObject> {

@@ -334,3 +334,284 @@ fn awk_field_index_multiple_lines() {
 
     assert_eq!(String::from_utf8_lossy(&output.stdout), "second\nfourth\n");
 }
+
+// Autodetection tests
+
+#[test]
+fn autodetect_begin_block() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "BEGIN { print('hello') }";
+
+    let mut child = Command::new(exe)
+        .args(["-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "hello\n");
+}
+
+#[test]
+fn autodetect_end_block() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "END { print('goodbye') }";
+
+    let mut child = Command::new(exe)
+        .args(["-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "goodbye\n");
+}
+
+#[test]
+fn autodetect_bare_block() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "{ print($l) }";
+
+    let mut child = Command::new(exe)
+        .args(["-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"test line\n")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "test line\n");
+}
+
+#[test]
+fn autodetect_pattern_action() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "$l.startswith('a') { print('matched:', $l) }";
+
+    let mut child = Command::new(exe)
+        .args(["-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"apple\nbanana\napricot\n")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "matched: apple\nmatched: apricot\n"
+    );
+}
+
+#[test]
+fn autodetect_pattern_only() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "/test/";
+
+    let mut child = Command::new(exe)
+        .args(["-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"testing\nno match\ntest again\n")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "testing\ntest again\n"
+    );
+}
+
+#[test]
+fn autodetect_no_false_positive_if_statement() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "x = True\nif x { print('hello') }";
+
+    let output = Command::new(exe)
+        .args(["-c", source])
+        .output()
+        .expect("spawn snail");
+
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "hello\n");
+}
+
+#[test]
+fn autodetect_no_false_positive_function_def() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "def foo() { return 1 }\nprint(foo())";
+
+    let output = Command::new(exe)
+        .args(["-c", source])
+        .output()
+        .expect("spawn snail");
+
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "1\n");
+}
+
+#[test]
+fn autodetect_combined_awk_patterns() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source =
+        "BEGIN { print('start') }\n$l.endswith('!') { print('found:', $l) }\nEND { print('done') }";
+
+    let mut child = Command::new(exe)
+        .args(["-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"hello\nworld!\ntest\n")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("start"));
+    assert!(stdout.contains("found: world!"));
+    assert!(stdout.contains("done"));
+}
+
+#[test]
+fn autodetect_shebang_still_takes_precedence() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    // This code looks like normal Snail but has awk shebang
+    let source = "#!snail awk\nBEGIN { x = 1 }";
+
+    let mut child = Command::new(exe)
+        .args(["-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn autodetect_empty_program_handled() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let source = "";
+
+    let mut child = Command::new(exe)
+        .args(["-c", source])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin should be present")
+        .write_all(b"")
+        .expect("write input");
+
+    let output = child.wait_with_output().expect("awk mode output");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "");
+}
