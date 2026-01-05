@@ -5,7 +5,10 @@ use clap::Parser;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
-use snail::{CompileMode, SnailError, compile_snail_source, format_snail_error};
+use snail::{
+    CompileMode, SnailError, compile_snail_source, compile_snail_source_with_auto_print,
+    format_snail_error,
+};
 
 #[derive(Parser)]
 #[command(
@@ -112,7 +115,10 @@ enum CliError {
 }
 
 fn run_source(input: &CliInput) -> Result<(), CliError> {
-    let python = compile_snail_source(&input.source, input.mode).map_err(CliError::Snail)?;
+    // Only auto-print for one-liners (CLI mode), not for files
+    let is_one_liner = input.filename == "<cmd>";
+    let python = compile_snail_source_with_auto_print(&input.source, input.mode, is_one_liner)
+        .map_err(CliError::Snail)?;
 
     Python::with_gil(|py| -> Result<(), CliError> {
         let builtins = PyModule::import_bound(py, "builtins").map_err(CliError::Python)?;

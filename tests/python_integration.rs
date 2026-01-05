@@ -570,9 +570,7 @@ fn json_query_works_with_dict() {
     pyo3::prepare_freethreaded_python();
 
     // Skip test if jmespath is not installed
-    let has_jmespath = Python::with_gil(|py| {
-        py.run_bound("import jmespath", None, None).is_ok()
-    });
+    let has_jmespath = Python::with_gil(|py| py.run_bound("import jmespath", None, None).is_ok());
 
     if !has_jmespath {
         eprintln!("Skipping JSON test: jmespath not installed (pip install jmespath)");

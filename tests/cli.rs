@@ -69,7 +69,7 @@ fn passes_hyphen_args_to_script() {
 fn flushes_stdout_on_exit() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let output = Command::new(exe)
-        .args(["import sys; sys.stdout.write('hi')"])
+        .args(["import sys; x = sys.stdout.write('hi')"])
         .output()
         .expect("run snail");
     assert!(
@@ -241,4 +241,159 @@ fn cli_handles_directory_instead_of_file() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!stderr.is_empty());
+}
+
+// ========== Auto-Print Tests ==========
+
+#[test]
+fn auto_prints_last_expression_simple_number() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe).args(["42"]).output().expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "42");
+}
+
+#[test]
+fn auto_prints_last_expression_list() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["[1, 2, 3]"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "[1, 2, 3]");
+}
+
+#[test]
+fn auto_prints_last_expression_dict() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["{'a': 1, 'b': 2}"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("'a'") && stdout.contains("'b'"));
+}
+
+#[test]
+fn auto_prints_expression_after_statements() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["x = 42; x + 1"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "43");
+}
+
+#[test]
+fn does_not_print_none_from_function_call() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["print('hello')"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "hello");
+}
+
+#[test]
+fn does_not_print_when_last_is_statement() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["x = 42; y = x + 1"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn auto_prints_string_expression() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["'hello world'"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "'hello world'");
+}
+
+#[test]
+fn does_not_auto_print_when_running_from_file() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let mut file = NamedTempFile::with_suffix(".snail").expect("create temp file");
+    writeln!(file, "42").expect("write to temp file");
+    let path = file.path().to_str().unwrap();
+
+    let output = Command::new(exe)
+        .args(["-f", path])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // File mode should NOT auto-print the expression
+    assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn does_not_auto_print_file_with_expression_after_statements() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let mut file = NamedTempFile::with_suffix(".snail").expect("create temp file");
+    writeln!(file, "x = 10").expect("write to temp file");
+    writeln!(file, "y = 20").expect("write to temp file");
+    writeln!(file, "x + y").expect("write to temp file");
+    let path = file.path().to_str().unwrap();
+
+    let output = Command::new(exe)
+        .args(["-f", path])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // File mode should NOT auto-print even if last line is expression
+    assert_eq!(stdout.trim(), "");
 }

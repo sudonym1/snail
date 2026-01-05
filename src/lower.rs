@@ -1091,7 +1091,10 @@ fn lower_expr_with_exception(
 
                 // Special handling for JsonQuery on RHS: just create the object, don't call __pipeline__(None)
                 let right_obj = match right.as_ref() {
-                    Expr::JsonQuery { query, span: q_span } => {
+                    Expr::JsonQuery {
+                        query,
+                        span: q_span,
+                    } => {
                         // Create just the __SnailJsonQuery(query) object
                         PyExpr::Call {
                             func: Box::new(PyExpr::Name {
@@ -1110,7 +1113,7 @@ fn lower_expr_with_exception(
                             span: q_span.clone(),
                         }
                     }
-                    _ => lower_expr_with_exception(right, exception_name)?
+                    _ => lower_expr_with_exception(right, exception_name)?,
                 };
 
                 Ok(PyExpr::Call {
@@ -1298,9 +1301,7 @@ fn lower_expr_with_exception(
                     span: span.clone(),
                 }),
                 args: vec![PyArgument::Positional {
-                    value: PyExpr::None {
-                        span: span.clone(),
-                    },
+                    value: PyExpr::None { span: span.clone() },
                     span: span.clone(),
                 }],
                 span: span.clone(),
@@ -1573,6 +1574,10 @@ fn lower_compare_op(op: CompareOp) -> PyCompareOp {
 }
 
 pub fn python_source(module: &PyModule) -> String {
+    python_source_with_auto_print(module, false)
+}
+
+pub fn python_source_with_auto_print(module: &PyModule, auto_print_last: bool) -> String {
     let mut writer = PythonWriter::new();
     let uses_try = module_uses_snail_try(module);
     let uses_regex = module_uses_snail_regex(module);
@@ -1602,7 +1607,34 @@ pub fn python_source(module: &PyModule) -> String {
     if (uses_try || uses_regex || uses_subprocess || uses_json) && !module.body.is_empty() {
         writer.write_line("");
     }
-    writer.write_module(module);
+
+    // Handle auto-print of last expression in CLI mode
+    if auto_print_last && !module.body.is_empty() {
+        let last_idx = module.body.len() - 1;
+
+        // Write all statements except the last
+        for stmt in &module.body[..last_idx] {
+            writer.write_stmt(stmt);
+        }
+
+        // Check if last statement is an expression
+        if let PyStmt::Expr { value, .. } = &module.body[last_idx] {
+            // Generate code to capture and pretty-print the last expression
+            let expr_code = expr_source(value);
+            writer.write_line(&format!("__snail_last_result = {}", expr_code));
+            writer.write_line("if __snail_last_result is not None:");
+            writer.indent += 1;
+            writer.write_line("import pprint");
+            writer.write_line("pprint.pprint(__snail_last_result)");
+            writer.indent -= 1;
+        } else {
+            // Last statement is not an expression, write it normally
+            writer.write_stmt(&module.body[last_idx]);
+        }
+    } else {
+        writer.write_module(module);
+    }
+
     writer.finish()
 }
 
@@ -1903,8 +1935,7 @@ fn stmt_uses_snail_json(stmt: &PyStmt) -> bool {
                 || from.as_ref().is_some_and(expr_uses_snail_json)
         }
         PyStmt::Assert { test, message, .. } => {
-            expr_uses_snail_json(test)
-                || message.as_ref().is_some_and(expr_uses_snail_json)
+            expr_uses_snail_json(test) || message.as_ref().is_some_and(expr_uses_snail_json)
         }
         PyStmt::Delete { targets, .. } => targets.iter().any(expr_uses_snail_json),
         PyStmt::Import { .. }
@@ -1924,16 +1955,12 @@ fn block_uses_snail_json(block: &[PyStmt]) -> bool {
 }
 
 fn handler_uses_snail_json(handler: &PyExceptHandler) -> bool {
-    handler
-        .type_name
-        .as_ref()
-        .is_some_and(expr_uses_snail_json)
+    handler.type_name.as_ref().is_some_and(expr_uses_snail_json)
         || block_uses_snail_json(&handler.body)
 }
 
 fn with_item_uses_snail_json(item: &PyWithItem) -> bool {
-    expr_uses_snail_json(&item.context)
-        || item.target.as_ref().is_some_and(expr_uses_snail_json)
+    expr_uses_snail_json(&item.context) || item.target.as_ref().is_some_and(expr_uses_snail_json)
 }
 
 fn argument_uses_snail_json(arg: &PyArgument) -> bool {
@@ -1966,9 +1993,7 @@ fn expr_uses_snail_json(expr: &PyExpr) -> bool {
         PyExpr::IfExpr {
             test, body, orelse, ..
         } => {
-            expr_uses_snail_json(test)
-                || expr_uses_snail_json(body)
-                || expr_uses_snail_json(orelse)
+            expr_uses_snail_json(test) || expr_uses_snail_json(body) || expr_uses_snail_json(orelse)
         }
         PyExpr::Lambda { body, .. } => expr_uses_snail_json(body),
         PyExpr::Call { func, args, .. } => {
@@ -1987,9 +2012,9 @@ fn expr_uses_snail_json(expr: &PyExpr) -> bool {
         PyExpr::List { elements, .. } | PyExpr::Tuple { elements, .. } => {
             elements.iter().any(expr_uses_snail_json)
         }
-        PyExpr::Dict { entries, .. } => entries.iter().any(|(key, value)| {
-            expr_uses_snail_json(key) || expr_uses_snail_json(value)
-        }),
+        PyExpr::Dict { entries, .. } => entries
+            .iter()
+            .any(|(key, value)| expr_uses_snail_json(key) || expr_uses_snail_json(value)),
         PyExpr::Set { elements, .. } => elements.iter().any(expr_uses_snail_json),
         PyExpr::ListComp {
             element, iter, ifs, ..
@@ -2417,7 +2442,9 @@ impl PythonWriter {
         self.write_line("data = json.loads(content)");
         self.indent -= 1;
         self.write_line("# Must be JSON-native type (dict, list, str, int, float, bool, None)");
-        self.write_line("elif not isinstance(data, (dict, list, str, int, float, bool, type(None))):");
+        self.write_line(
+            "elif not isinstance(data, (dict, list, str, int, float, bool, type(None))):",
+        );
         self.indent += 1;
         self.write_line("raise TypeError(f\"@j pipeline input must be JSON-native type, got {type(data).__name__}\")");
         self.indent -= 1;

@@ -6,20 +6,28 @@ use pyo3::types::{PyDict, PyModule};
 
 use crate::{
     CompileMode, SnailError, lower_awk_program, lower_program, parse_awk_program, parse_program,
-    python_source,
+    python_source_with_auto_print,
 };
 
 pub fn compile_snail_source(source: &str, mode: CompileMode) -> Result<String, SnailError> {
+    compile_snail_source_with_auto_print(source, mode, false)
+}
+
+pub fn compile_snail_source_with_auto_print(
+    source: &str,
+    mode: CompileMode,
+    auto_print_last: bool,
+) -> Result<String, SnailError> {
     match mode {
         CompileMode::Snail => {
             let program = parse_program(source)?;
             let module = lower_program(&program)?;
-            Ok(python_source(&module))
+            Ok(python_source_with_auto_print(&module, auto_print_last))
         }
         CompileMode::Awk => {
             let program = parse_awk_program(source)?;
             let module = lower_awk_program(&program)?;
-            Ok(python_source(&module))
+            Ok(python_source_with_auto_print(&module, auto_print_last))
         }
     }
 }
