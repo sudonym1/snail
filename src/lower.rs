@@ -161,6 +161,7 @@ pub enum PyStmt {
     },
     Expr {
         value: PyExpr,
+        semicolon_terminated: bool,
         span: SourceSpan,
     },
 }
@@ -387,6 +388,13 @@ pub fn lower_program(program: &Program) -> Result<PyModule, LowerError> {
 }
 
 pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
+    lower_awk_program_with_auto_print(program, false)
+}
+
+pub fn lower_awk_program_with_auto_print(
+    program: &AwkProgram,
+    auto_print: bool,
+) -> Result<PyModule, LowerError> {
     let span = program.span.clone();
     let mut body = Vec::new();
 
@@ -401,7 +409,8 @@ pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
 
     let mut main_body = Vec::new();
     for block in &program.begin_blocks {
-        main_body.extend(lower_block(block)?);
+        let lowered = lower_block(block)?;
+        main_body.extend(wrap_block_with_auto_print(lowered, auto_print));
     }
 
     main_body.push(assign_name("__snail_nr", number_expr("0", &span), &span));
@@ -428,7 +437,7 @@ pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
         span: span.clone(),
     };
 
-    let file_loop = lower_awk_file_loop(program, &span)?;
+    let file_loop = lower_awk_file_loop_with_auto_print(program, &span, auto_print)?;
     main_body.push(PyStmt::For {
         target: name_expr("__snail_path", &span),
         iter: files_expr,
@@ -438,7 +447,8 @@ pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
     });
 
     for block in &program.end_blocks {
-        main_body.extend(lower_block(block)?);
+        let lowered = lower_block(block)?;
+        main_body.extend(wrap_block_with_auto_print(lowered, auto_print));
     }
 
     body.extend(main_body);
@@ -610,14 +620,23 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
             value: lower_expr(value)?,
             span: span.clone(),
         }),
-        Stmt::Expr { value, span } => Ok(PyStmt::Expr {
+        Stmt::Expr {
+            value,
+            semicolon_terminated,
+            span,
+        } => Ok(PyStmt::Expr {
             value: lower_expr(value)?,
+            semicolon_terminated: *semicolon_terminated,
             span: span.clone(),
         }),
     }
 }
 
-fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<PyStmt>, LowerError> {
+fn lower_awk_file_loop_with_auto_print(
+    program: &AwkProgram,
+    span: &SourceSpan,
+    auto_print: bool,
+) -> Result<Vec<PyStmt>, LowerError> {
     let mut file_loop = Vec::new();
     file_loop.push(assign_name("__snail_fnr", number_expr("0", span), span));
 
@@ -631,7 +650,12 @@ fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<Py
             },
             span,
         ),
-        lower_awk_line_loop(program, span, name_expr("__snail_file", span))?,
+        lower_awk_line_loop_with_auto_print(
+            program,
+            span,
+            name_expr("__snail_file", span),
+            auto_print,
+        )?,
     ];
 
     let open_call = PyExpr::Call {
@@ -646,10 +670,11 @@ fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<Py
     };
     let with_stmt = PyStmt::With {
         items: vec![with_item],
-        body: vec![lower_awk_line_loop(
+        body: vec![lower_awk_line_loop_with_auto_print(
             program,
             span,
             name_expr("__snail_file", span),
+            auto_print,
         )?],
         span: span.clone(),
     };
@@ -671,10 +696,11 @@ fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<Py
     Ok(file_loop)
 }
 
-fn lower_awk_line_loop(
+fn lower_awk_line_loop_with_auto_print(
     program: &AwkProgram,
     span: &SourceSpan,
     iter: PyExpr,
+    auto_print: bool,
 ) -> Result<PyStmt, LowerError> {
     let mut loop_body = Vec::new();
     loop_body.push(assign_name(
@@ -735,7 +761,7 @@ fn lower_awk_line_loop(
         span,
     ));
 
-    loop_body.extend(lower_awk_rules(&program.rules)?);
+    loop_body.extend(lower_awk_rules_with_auto_print(&program.rules, auto_print)?);
 
     Ok(PyStmt::For {
         target: name_expr("__snail_raw", span),
@@ -746,11 +772,104 @@ fn lower_awk_line_loop(
     })
 }
 
-fn lower_awk_rules(rules: &[AwkRule]) -> Result<Vec<PyStmt>, LowerError> {
+fn wrap_block_with_auto_print(mut block: Vec<PyStmt>, auto_print: bool) -> Vec<PyStmt> {
+    if !auto_print || block.is_empty() {
+        return block;
+    }
+
+    let last_idx = block.len() - 1;
+    if let PyStmt::Expr {
+        value,
+        semicolon_terminated,
+        span,
+    } = &block[last_idx]
+    {
+        // Don't auto-print if the statement was explicitly terminated with a semicolon
+        if *semicolon_terminated {
+            return block;
+        }
+
+        // Clone the data before modifying the block
+        let expr_code = value.clone();
+        let span = span.clone();
+
+        block.pop(); // Remove the original expression statement
+
+        block.push(PyStmt::Assign {
+            targets: vec![PyExpr::Name {
+                id: "__snail_last_result".to_string(),
+                span: span.clone(),
+            }],
+            value: expr_code,
+            span: span.clone(),
+        });
+
+        // Build: not (__snail_last_result is None)
+        let is_not_none = PyExpr::Unary {
+            op: PyUnaryOp::Not,
+            operand: Box::new(PyExpr::Compare {
+                left: Box::new(PyExpr::Name {
+                    id: "__snail_last_result".to_string(),
+                    span: span.clone(),
+                }),
+                ops: vec![PyCompareOp::Is],
+                comparators: vec![PyExpr::None { span: span.clone() }],
+                span: span.clone(),
+            }),
+            span: span.clone(),
+        };
+
+        block.push(PyStmt::If {
+            test: is_not_none,
+            body: vec![
+                PyStmt::Import {
+                    names: vec![PyImportName {
+                        name: vec!["pprint".to_string()],
+                        asname: None,
+                        span: span.clone(),
+                    }],
+                    span: span.clone(),
+                },
+                PyStmt::Expr {
+                    value: PyExpr::Call {
+                        func: Box::new(PyExpr::Attribute {
+                            value: Box::new(PyExpr::Name {
+                                id: "pprint".to_string(),
+                                span: span.clone(),
+                            }),
+                            attr: "pprint".to_string(),
+                            span: span.clone(),
+                        }),
+                        args: vec![PyArgument::Positional {
+                            value: PyExpr::Name {
+                                id: "__snail_last_result".to_string(),
+                                span: span.clone(),
+                            },
+                            span: span.clone(),
+                        }],
+                        span: span.clone(),
+                    },
+                    semicolon_terminated: false,
+                    span: span.clone(),
+                },
+            ],
+            orelse: Vec::new(),
+            span: span.clone(),
+        });
+    }
+
+    block
+}
+
+fn lower_awk_rules_with_auto_print(
+    rules: &[AwkRule],
+    auto_print: bool,
+) -> Result<Vec<PyStmt>, LowerError> {
     let mut stmts = Vec::new();
     for rule in rules {
         let mut action = if rule.has_action() {
-            lower_block(&rule.action)?
+            let lowered = lower_block(&rule.action)?;
+            wrap_block_with_auto_print(lowered, auto_print)
         } else {
             vec![awk_default_print(&rule.span)]
         };
@@ -810,6 +929,7 @@ fn awk_default_print(span: &SourceSpan) -> PyStmt {
             args: vec![pos_arg(name_expr(SNAIL_AWK_LINE_PYVAR, span), span)],
             span: span.clone(),
         },
+        semicolon_terminated: false,
         span: span.clone(),
     }
 }
@@ -1584,6 +1704,10 @@ fn lower_compare_op(op: CompareOp) -> PyCompareOp {
 }
 
 pub fn python_source(module: &PyModule) -> String {
+    python_source_with_auto_print(module, false)
+}
+
+pub fn python_source_with_auto_print(module: &PyModule, auto_print_last: bool) -> String {
     let mut writer = PythonWriter::new();
     let uses_try = module_uses_snail_try(module);
     let uses_regex = module_uses_snail_regex(module);
@@ -1613,7 +1737,44 @@ pub fn python_source(module: &PyModule) -> String {
     if (uses_try || uses_regex || uses_subprocess || uses_json) && !module.body.is_empty() {
         writer.write_line("");
     }
-    writer.write_module(module);
+
+    // Handle auto-print of last expression in CLI mode
+    if auto_print_last && !module.body.is_empty() {
+        let last_idx = module.body.len() - 1;
+
+        // Write all statements except the last
+        for stmt in &module.body[..last_idx] {
+            writer.write_stmt(stmt);
+        }
+
+        // Check if last statement is an expression
+        if let PyStmt::Expr {
+            value,
+            semicolon_terminated,
+            ..
+        } = &module.body[last_idx]
+        {
+            // Don't auto-print if the statement was explicitly terminated with a semicolon
+            if *semicolon_terminated {
+                writer.write_stmt(&module.body[last_idx]);
+            } else {
+                // Generate code to capture and pretty-print the last expression
+                let expr_code = expr_source(value);
+                writer.write_line(&format!("__snail_last_result = {}", expr_code));
+                writer.write_line("if __snail_last_result is not None:");
+                writer.indent += 1;
+                writer.write_line("import pprint");
+                writer.write_line("pprint.pprint(__snail_last_result)");
+                writer.indent -= 1;
+            }
+        } else {
+            // Last statement is not an expression, write it normally
+            writer.write_stmt(&module.body[last_idx]);
+        }
+    } else {
+        writer.write_module(module);
+    }
+
     writer.finish()
 }
 

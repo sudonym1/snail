@@ -22,14 +22,15 @@ provide runnable tours that mirror the language features. Both stay current as
 phases are delivered.
 
 Awk mode is available for line-oriented scripts. Enable it with `snail --awk`
-or by starting a file with `#!/usr/bin/env snail --awk`. Awk sources are written as
-pattern/action pairs evaluated for each input line. `BEGIN` and `END` blocks run
-before and after the line loop, a lone pattern defaults to printing matching
-lines, and a bare block runs for every line. Built-in variables mirror awk but
-use short `$`-prefixed names: the current line as `$l`, whitespace-split fields
-as `$f`, counters `$n` and `$fn` for global and per-file line numbers, the
-current file path as `$p`, and `$m` for the last regex match. These `$` names
-are injected by Snail itself; user-defined identifiers cannot start with `$`.
+or by starting a file with `#!/usr/bin/env -S snail --awk -f`. Awk sources are
+written as pattern/action pairs evaluated for each input line. `BEGIN` and
+`END` blocks run before and after the line loop, a lone pattern defaults to
+printing matching lines, and a bare block runs for every line. Built-in
+variables mirror awk but use short `$`-prefixed names: the current line as
+`$l`, whitespace-split fields as `$f`, counters `$n` and `$fn` for global and
+per-file line numbers, the current file path as `$p`, and `$m` for the last
+regex match. These `$` names are injected by Snail itself; user-defined
+identifiers cannot start with `$`.
 
 The compiler/transpiler will generate Python source and execute it with the
 Python interpreter. The implementation language is still open and should be
@@ -48,8 +49,9 @@ Editor and shell integration
 
 Development notes
 
-- Python integration tests expect a usable CPython on `PATH`. Set `PYO3_PYTHON=
-  python3` (as CI does) if multiple Python versions are installed.
+- Snail uses pyo3 to execute generated Python code. A usable CPython must be on
+  `PATH`. Set `PYO3_PYTHON=python3` (as CI does) if multiple Python versions are
+  installed.
 
 Project plan
 
@@ -74,9 +76,9 @@ Phase 2: Lowering to Python AST
 - [x] Defer new syntax features until core pipeline is working.
 
 Phase 3: CPython integration
-- [x] Implement a Python extension module (Rust + pyo3).
-- [x] Provide a module API for compiling and executing Snail code.
-- [x] Add a Python import hook so `import foo.snail` works.
+- [x] ~~Implement a Python extension module (Rust + pyo3).~~ (Removed - Snail is now CLI-only)
+- [x] ~~Provide a module API for compiling and executing Snail code.~~ (Removed)
+- [x] ~~Add a Python import hook so `import foo.snail` works.~~ (Removed)
 - [x] Ensure Snail code can import Python modules directly.
 
 Phase 4: CLI and tooling
@@ -100,7 +102,7 @@ Phase 6: Interop and runtime features
 - [x] Ensure Snail functions/classes are normal Python callables.
 - [x] Handle globals/locals and module namespaces correctly.
 - [x] Define the standard library boundary and any Snail-specific helpers.
-- [x] Add integration tests that mix Snail and Python modules.
+- [x] ~~Add integration tests that mix Snail and Python modules.~~ (Python API removed)
 
 Phase 7: Snail Specific semantics
 - [x] Add compact exception swallowing expression: `<expr>?` yields the

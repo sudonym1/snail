@@ -672,7 +672,20 @@ fn parse_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseErro
         .next()
         .ok_or_else(|| error_with_span("missing expression", span.clone(), source))?;
     let value = parse_expr_pair(expr_pair, source)?;
-    Ok(Stmt::Expr { value, span })
+
+    // Check if there's a semicolon immediately after this expression statement
+    let semicolon_terminated = check_trailing_semicolon(source, span.end.offset);
+
+    Ok(Stmt::Expr {
+        value,
+        semicolon_terminated,
+        span,
+    })
+}
+
+fn check_trailing_semicolon(source: &str, end_pos: usize) -> bool {
+    // Check if the first non-whitespace character after end_pos is a semicolon
+    source[end_pos..].chars().find(|c| !c.is_whitespace()) == Some(';')
 }
 
 fn parse_parameters(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Parameter>, ParseError> {

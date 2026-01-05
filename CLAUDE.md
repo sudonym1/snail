@@ -16,13 +16,12 @@ Snail is a programming language that compiles to Python, offering terse Perl/awk
 # Build the project
 cargo build
 
-# Run all tests (includes parser, lowering, Python integration, awk mode, CLI tests)
+# Run all tests (includes parser, lowering, awk mode, CLI tests)
 cargo test
 
 # Run tests for a specific module
 cargo test parser
 cargo test awk
-cargo test python_integration
 
 # Run a specific test by name
 cargo test parses_basic_program
@@ -77,16 +76,17 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → CPyth
    - `python_source()` converts Python AST to executable Python source strings
    - Preserves indentation and Python semantics exactly
 
-5. **Python Integration** (`src/python.rs`):
-   - pyo3-based Python extension module
-   - `compile_snail()`: compiles Snail source to Python code object
-   - `exec_snail()`: compiles and executes in one step
-   - Import hook allows `import foo.snail` from Python
-   - Sets up proper module globals (`__builtins__`, `__name__`, `__file__`, etc.)
+5. **Compilation API** (`src/python.rs`):
+   - `compile_snail_source()`: compiles Snail source to Python source code
+   - `compile_snail_source_with_auto_print()`: compiles with optional auto-print of last expression
+   - Used by CLI to generate Python code for execution
 
 6. **CLI** (`src/main.rs`):
    - Handles `-f file.snail`, one-liner execution, and `--awk` mode
-   - Awk mode can be triggered by `#!/usr/bin/env snail --awk` shebang
+   - Uses pyo3 to execute generated Python code via CPython
+   - `--python` flag shows generated Python code for debugging
+   - `-P` flag disables auto-printing of last expression
+   - Awk mode can be triggered by `#!/usr/bin/env -S snail --awk -f` shebang
 
 ### Error Handling
 
@@ -120,10 +120,9 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → CPyth
 ## Testing Strategy
 
 - **Parser tests** (`tests/parser.rs`): Validate AST structure from source
-- **Lowering tests** (`tests/lower.rs`): Verify Python AST generation
-- **Python integration tests** (`tests/python_integration.rs`): End-to-end execution via CPython (requires Python on PATH)
+- **Lowering tests** (`tests/lower.rs`): Verify Python AST generation and code output
 - **Awk mode tests** (`tests/awk.rs`): Pattern matching, BEGIN/END, variables
-- **CLI tests** (`tests/cli.rs`): Command-line interface behavior
+- **CLI tests** (`tests/cli.rs`): End-to-end execution via CLI, command-line interface behavior
 
 Set `PYO3_PYTHON=python3` if you have multiple Python versions installed.
 
