@@ -137,8 +137,8 @@ Set `PYO3_PYTHON=python3` if you have multiple Python versions installed.
 
 ## Phase-Based Development
 
-When implementing a phase from the README plan:
-1. Read the phase definition in README.md carefully
+When implementing a phase from the project plan:
+1. Read the phase definition in `docs/PLANNING.md` carefully
 2. Update `examples/all_syntax.snail` with new syntax examples
 3. Add parser tests, lowering tests, and integration tests
 4. Update `docs/REFERENCE.md` if user-facing syntax changes
