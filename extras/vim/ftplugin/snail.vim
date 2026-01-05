@@ -37,8 +37,8 @@ endif
 " Completion function
 setlocal omnifunc=snail#complete
 
-" Folding based on braces
-setlocal foldmethod=syntax
+" Disable folding by default
+setlocal nofoldenable
 
 " Key mappings for formatting
 nnoremap <buffer> <silent> gq :call snail#format()<CR>
