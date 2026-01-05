@@ -2,62 +2,153 @@
   <img src="logo.png" alt="Snail logo" width="200">
 </p>
 
-What do you get when you shove a snake in a shell?
+<h1 align="center">Snail</h1>
+<p align="center"><em>What do you get when you shove a snake in a shell?</em></p>
 
-Snail is a new programming language that compiles to Python. The goal is to
-keep Python's core semantics and runtime model while offering a syntax that
-feels closer to Perl or awk for quick, incremental one-liners. It should be
-comfortable for small text-processing tasks that grow into scripts, without
-becoming whitespace sensitive.
+---
 
-Snail aims to:
-- Preserve Python's behavior for data types, control flow, and evaluation.
-- Provide concise syntax for one-liners and pipelines, inspired by Perl and awk.
-- Favor terse, script-friendly syntax without introducing whitespace coupling.
+**Snail** is a programming language that compiles to Python, combining Python's power with Perl/awk-inspired syntax for quick scripts and one-liners. No more whitespace sensitivity—just curly braces and concise expressions.
 
-Documentation and examples live in `docs/REFERENCE.md`,
-`examples/all_syntax.snail`, and `examples/awk.snail`. The reference walks
-through the syntax surface and runtime behaviors, while the example files
-provide runnable tours that mirror the language features. Both stay current as
-phases are delivered.
+## ✨ What Makes Snail Unique
 
-Awk mode is available for line-oriented scripts. Enable it with `snail --awk`
-or by starting a file with `#!/usr/bin/env -S snail --awk -f`. Awk sources are
-written as pattern/action pairs evaluated for each input line. `BEGIN` and
-`END` blocks run before and after the line loop, a lone pattern defaults to
-printing matching lines, and a bare block runs for every line. Built-in
-variables mirror awk but use short `$`-prefixed names: the current line as
-`$l`, whitespace-split fields as `$f`, counters `$n` and `$fn` for global and
-per-file line numbers, the current file path as `$p`, and `$m` for the last
-regex match. These `$` names are injected by Snail itself; user-defined
-identifiers cannot start with `$`.
+### Curly Braces, Not Indentation
 
-The compiler/transpiler will generate Python source and execute it with the
-Python interpreter. The implementation language is still open and should be
-chosen based on parser ergonomics, ease of AST manipulation, and maintenance
-cost.
+Write Python logic without worrying about tabs vs spaces:
 
-Editor and shell integration
+```snail
+def process(items) {
+    for item in items {
+        if item > 0 { print(item) }
+        else { continue }
+    }
+}
+```
 
-A comprehensive Vim/Neovim plugin is available in `extras/vim/` providing:
-- Syntax highlighting for all Snail constructs
-- Code formatting (`:SnailFormat`)
-- Commands to run Snail code (`:SnailRun`) and view generated Python (`:SnailShowPython`)
-- Filetype detection, indentation, and folding
-- Tree-sitter grammar for Neovim (`extras/tree-sitter-snail/`)
+### Built-in Subprocess Pipelines
 
-Installation with vim-plug: `Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }`
+Shell commands are first-class citizens with `$()` capture and `|` piping:
 
-For manual installation, copy `extras/vim/` to `~/.vim/` (Vim) or
-`~/.config/nvim/` (Neovim). See `extras/vim/README.md` for full details.
+```snail
+# Capture command output with interpolation
+name = "world"
+greeting = $(echo hello {name})
 
-Development notes
+# Pipe data through commands
+result = "foo\nbar\nbaz" | $(grep bar) | $(cat -n)
 
-- Snail uses pyo3 to execute generated Python code. A usable CPython must be on
-  `PATH`. Set `PYO3_PYTHON=python3` (as CI does) if multiple Python versions are
-  installed.
+# Check command status
+@(make build)?  # returns exit code on failure instead of raising
+```
 
-Project planning
+### Compact Error Handling
 
-The detailed project roadmap and development phases are documented in
-`docs/PLANNING.md`.
+The `?` operator makes error handling terse yet expressive:
+
+```snail
+# Swallow exception, get the error object
+err = risky_operation()?
+
+# Provide a fallback value (exception available as $e)
+value = parse_json(data) ? {}
+details = fetch_url(url) ? "Error: {$e}"
+
+# Chain safely
+config = load_config()? .get("key") ? "default"
+```
+
+### Regex Literals
+
+Pattern matching without `import re`:
+
+```snail
+if email in /^[\w.]+@[\w.]+$/ {
+    print("Valid email")
+}
+
+# Compiled regex for reuse
+pattern = /\d{3}-\d{4}/
+match = pattern.search(phone)
+```
+
+### Awk Mode
+
+Process files line-by-line with familiar awk semantics:
+
+```snail
+#!/usr/bin/env -S snail --awk -f
+BEGIN { total = 0 }
+/^[0-9]+/ { total = total + int($f[0]) }
+END { print("Sum:", total) }
+```
+
+Built-in variables: `$l` (line), `$f` (fields), `$n` (line number), `$m` (last match).
+
+### JSON Queries with JMESPath
+
+Query JSON data directly in the pipeline:
+
+```snail
+data = $(curl -s api.example.com/users)
+names = data | @j(users[*].name)
+first_email = data | @j(users[0].email)
+```
+
+### Full Python Interoperability
+
+Snail compiles to Python AST—import any Python module, use any library:
+
+```snail
+import pandas as pd
+from pathlib import Path
+
+df = pd.read_csv(Path("data.csv"))
+filtered = df[df["value"] > 100]
+```
+
+## 🚀 Quick Start
+
+```bash
+# Run a one-liner
+snail "print('Hello, Snail!')"
+
+# Execute a script
+snail -f script.snail
+
+# Awk mode for text processing
+cat data.txt | snail --awk '/error/ { print($l) }'
+
+# See the generated Python
+snail --python "x = risky()? ; print(x)"
+```
+
+## 📚 Documentation
+
+- **[Language Reference](docs/REFERENCE.md)** — Complete syntax and semantics
+- **[examples/all_syntax.snail](examples/all_syntax.snail)** — Every feature in one file
+- **[examples/awk.snail](examples/awk.snail)** — Awk mode examples
+
+## 🔌 Editor Support
+
+Vim/Neovim plugin with syntax highlighting, formatting, and run commands:
+
+```vim
+Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }
+```
+
+See [extras/vim/README.md](extras/vim/README.md) for details. Tree-sitter grammar available in `extras/tree-sitter-snail/`.
+
+## 🛠️ Building
+
+Snail is written in Rust and uses pyo3 to execute generated Python:
+
+```bash
+cargo build
+cargo test
+
+# Requires Python 3 on PATH
+export PYO3_PYTHON=python3
+```
+
+## 📋 Project Status
+
+See [docs/PLANNING.md](docs/PLANNING.md) for the development roadmap.
