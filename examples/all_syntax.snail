@@ -147,8 +147,8 @@ finally { cleanup() }
 
 try { raise ValueError("bad") }
 except ValueError as err {
-    try { raise RuntimeError("wrapped") from err }
-    except { pass }
+        try { raise RuntimeError("wrapped") from err }
+except { pass }
 }
 
 def boom() {

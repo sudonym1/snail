@@ -22,6 +22,17 @@ if !exists('g:snail_highlight_interpolation')
   let g:snail_highlight_interpolation = 1
 endif
 
+" Ensure filetype detection is enabled
+if has('autocmd')
+  filetype plugin indent on
+endif
+
+" Register snail filetype (fallback if ftdetect wasn't loaded)
+augroup snail_filetype
+  autocmd!
+  autocmd BufRead,BufNewFile *.snail setfiletype snail
+augroup END
+
 " Global commands
 command! -nargs=0 SnailVersion echo "Snail Vim plugin v1.0.0"
 
@@ -35,4 +46,3 @@ augroup END
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
-
