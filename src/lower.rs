@@ -2824,7 +2824,7 @@ impl PythonWriter {
         self.write_line("");
         self.write_line("def __repr__(self):");
         self.indent += 1;
-        self.write_line("return f\"__SnailJsonObject({self.data!r})\"");
+        self.write_line("return _json.dumps(self.data, indent=2)");
         self.indent -= 2;
         self.write_line("");
 
