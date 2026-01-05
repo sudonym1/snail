@@ -55,9 +55,10 @@ This document contains the project roadmap and development phases for Snail.
 
 ### Phase 7: Snail Specific semantics
 - [x] Add compact exception swallowing expression: `<expr>?` yields the
-  exception object when `<expr>` raises. `<expr> ? <fallback expr>` evaluates
-  the fallback when `<expr>` raises; the exception object is available as
-  `$e`. Example: `value = risky()?`, `fallback = risky() ? $e`.
+  exception object when `<expr>` raises (or calls `__fallback__` if present).
+  `<expr>:<fallback expr>?` evaluates the fallback when `<expr>` raises; the
+  exception object is available as `$e`. Example: `value = risky()?`,
+  `fallback = risky():$e?`.
 - [x] Add first-class syntax for subprocess calls using `$(<command>)` and `@(<command>)`.
   The `<command>` body is treated as an implicit f-string (no quotes required), so
   `$(echo {name})` is valid. `$(<command>)` captures stdout and returns a string,

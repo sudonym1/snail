@@ -392,8 +392,8 @@ fn renders_if_expression() {
 fn renders_compact_exception_expression() {
     let source = r#"
 value = risky()?
-fallback = risky() ? $e
-details = risky() ? $e.args[0]
+fallback = risky():$e?
+details = risky():$e.args[0]?
 "#;
     let python = snail_to_python(source);
     assert_python_compiles(&python);

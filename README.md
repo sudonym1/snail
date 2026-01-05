@@ -49,11 +49,11 @@ The `?` operator makes error handling terse yet expressive:
 err = risky_operation()?
 
 # Provide a fallback value (exception available as $e)
-value = parse_json(data) ? {}
-details = fetch_url(url) ? "Error: {$e}"
+value = parse_json(data):{}?
+details = fetch_url(url):"Error: {$e}"?
 
 # Chain safely
-config = load_config()? .get("key") ? "default"
+config = load_config()? .get("key"):"default"?
 ```
 
 ### Regex Literals

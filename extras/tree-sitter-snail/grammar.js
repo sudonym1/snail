@@ -396,13 +396,33 @@ module.exports = grammar({
       )),
     )),
 
-    // Compact try operator: expr? or expr?fallback
+    // Compact try operator: expr? or expr:fallback?
     try_suffix: $ => prec(PREC.TRY, seq(
-      '?',
       optional($.try_fallback),
+      '?',
     )),
 
-    try_fallback: $ => $.unary,
+    try_fallback: $ => seq(':', $.try_fallback_unary),
+
+    // Fallback expression grammar (mirrors unary/power/primary but without try_suffix)
+    try_fallback_unary: $ => choice(
+      prec(PREC.UNARY, seq($.unary_op, $.try_fallback_unary)),
+      $.try_fallback_power,
+    ),
+
+    try_fallback_power: $ => choice(
+      prec.right(PREC.POWER, seq($.try_fallback_primary, '**', $.try_fallback_power)),
+      $.try_fallback_primary,
+    ),
+
+    try_fallback_primary: $ => prec.left(PREC.CALL, seq(
+      $._atom,
+      repeat(choice(
+        $.call,
+        $.attribute,
+        $.index,
+      )),
+    )),
 
     // Function calls
     call: $ => seq(

@@ -392,7 +392,7 @@ fn parses_if_expression() {
 fn parses_compact_exception_expression() {
     let source = r#"
 value = risky()?
-fallback = risky() ? $e
+fallback = risky():$e?
 "#;
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 2);
@@ -457,7 +457,7 @@ left = value? + other
 
 #[test]
 fn compact_try_fallback_stops_before_addition() {
-    let program = parse_program("result = a?0 + 1").expect("program should parse");
+    let program = parse_program("result = a:0? + 1").expect("program should parse");
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {

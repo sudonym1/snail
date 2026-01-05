@@ -784,6 +784,9 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         | Rule::primary
         | Rule::atom
         | Rule::try_fallback
+        | Rule::try_fallback_unary
+        | Rule::try_fallback_power
+        | Rule::try_fallback_primary
         | Rule::compound_expr => parse_expr_rule(pair, source),
         Rule::literal => parse_literal(pair, source),
         Rule::exception_var => Ok(Expr::Name {
@@ -839,6 +842,9 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::primary => parse_primary(pair, source),
         Rule::atom => parse_atom(pair, source),
         Rule::try_fallback => parse_expr_rule(pair.into_inner().next().unwrap(), source),
+        Rule::try_fallback_unary => parse_unary(pair, source),
+        Rule::try_fallback_power => parse_power(pair, source),
+        Rule::try_fallback_primary => parse_primary(pair, source),
         Rule::compound_expr => parse_compound_expr(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
         _ => Err(error_with_span(

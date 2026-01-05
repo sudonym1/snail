@@ -88,9 +88,14 @@ expr_stmt = { expr }
 // Expressions: precedence from lowest (if) to highest (power)
 expr = { if_expr }
 
-// Compact try operator: expr? or expr?fallback
-try_suffix = { "?" ~ (!add_op ~ try_fallback)? }
-try_fallback = { unary }
+// Compact try operator: expr? or expr:fallback?
+try_suffix = { try_fallback? ~ "?" }
+try_fallback = { ":" ~ try_fallback_unary }
+
+// Fallback expression grammar (mirrors unary/power/primary but without try_suffix)
+try_fallback_unary = { unary_op* ~ try_fallback_power }
+try_fallback_power = { try_fallback_primary ~ (pow_op ~ try_fallback_primary)* }
+try_fallback_primary = { atom ~ (call | attribute | index)* }
 
 // Ternary conditional
 if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }

@@ -86,7 +86,7 @@ echoed = $(echo {cmd_name})
 try {
     echoed = $(false)? # it is required to provide a default value for this form.
 } except Exception as e {
-    echoed = $(false) ? "default"
+    echoed = $(false):"default"?
 }
 assert echoed == "default"
 status_ok = @(echo ready)
@@ -156,12 +156,12 @@ def boom() {
 }
 
 safe_value = risky()?
-safe_fallback = risky() ? $e
-safe_details = risky() ? $e.args[0]
-tight_sum = 1 + boom() ? 5
+safe_fallback = risky():$e?
+safe_details = risky():$e.args[0]?
+tight_sum = 1 + boom():5?
 tight_arg = boom()? .args[0]
 tight_name = boom()? .__class__.__name__
-tight_fallback_boundary = boom()?0 + 1
+tight_fallback_boundary = boom():0? + 1
 text = "abc123"
 regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
@@ -177,10 +177,10 @@ def risky_fallback() {
     raise err
 }
 
-prefer_lambda = risky_fallback() ? "lambda"
+prefer_lambda = risky_fallback():"lambda"?
 dunder_only = risky_fallback()?
 compound_value = (counter.inc(1); counter.inc(2); counter.inc(3))
-compound_recovered = (risky_fallback(); counter.inc(4)) ? "rescued"
+compound_recovered = (risky_fallback(); counter.inc(4)):"rescued"?
 compound_swallowed = (risky_fallback(); counter.inc(5))?
 
 with SimpleCtx() as message { ctx_msg = message }
