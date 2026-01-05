@@ -804,56 +804,105 @@ fn wrap_block_with_auto_print(mut block: Vec<PyStmt>, auto_print: bool) -> Vec<P
             span: span.clone(),
         });
 
-        // Build: not (__snail_last_result is None)
-        let is_not_none = PyExpr::Unary {
-            op: PyUnaryOp::Not,
-            operand: Box::new(PyExpr::Compare {
-                left: Box::new(PyExpr::Name {
-                    id: "__snail_last_result".to_string(),
-                    span: span.clone(),
-                }),
-                ops: vec![PyCompareOp::Is],
-                comparators: vec![PyExpr::None { span: span.clone() }],
+        // Build: isinstance(__snail_last_result, str)
+        let is_string = PyExpr::Call {
+            func: Box::new(PyExpr::Name {
+                id: "isinstance".to_string(),
                 span: span.clone(),
             }),
+            args: vec![
+                PyArgument::Positional {
+                    value: PyExpr::Name {
+                        id: "__snail_last_result".to_string(),
+                        span: span.clone(),
+                    },
+                    span: span.clone(),
+                },
+                PyArgument::Positional {
+                    value: PyExpr::Name {
+                        id: "str".to_string(),
+                        span: span.clone(),
+                    },
+                    span: span.clone(),
+                },
+            ],
             span: span.clone(),
         };
 
+        // Build: __snail_last_result is not None
+        let is_not_none = PyExpr::Compare {
+            left: Box::new(PyExpr::Name {
+                id: "__snail_last_result".to_string(),
+                span: span.clone(),
+            }),
+            ops: vec![PyCompareOp::Is],
+            comparators: vec![PyExpr::Unary {
+                op: PyUnaryOp::Not,
+                operand: Box::new(PyExpr::None { span: span.clone() }),
+                span: span.clone(),
+            }],
+            span: span.clone(),
+        };
+
+        // if isinstance(__snail_last_result, str): print(__snail_last_result)
+        // elif __snail_last_result is not None: pprint.pprint(__snail_last_result)
         block.push(PyStmt::If {
-            test: is_not_none,
-            body: vec![
-                PyStmt::Import {
-                    names: vec![PyImportName {
-                        name: vec!["pprint".to_string()],
-                        asname: None,
+            test: is_string,
+            body: vec![PyStmt::Expr {
+                value: PyExpr::Call {
+                    func: Box::new(PyExpr::Name {
+                        id: "print".to_string(),
+                        span: span.clone(),
+                    }),
+                    args: vec![PyArgument::Positional {
+                        value: PyExpr::Name {
+                            id: "__snail_last_result".to_string(),
+                            span: span.clone(),
+                        },
                         span: span.clone(),
                     }],
                     span: span.clone(),
                 },
-                PyStmt::Expr {
-                    value: PyExpr::Call {
-                        func: Box::new(PyExpr::Attribute {
-                            value: Box::new(PyExpr::Name {
-                                id: "pprint".to_string(),
-                                span: span.clone(),
-                            }),
-                            attr: "pprint".to_string(),
-                            span: span.clone(),
-                        }),
-                        args: vec![PyArgument::Positional {
-                            value: PyExpr::Name {
-                                id: "__snail_last_result".to_string(),
-                                span: span.clone(),
-                            },
+                semicolon_terminated: false,
+                span: span.clone(),
+            }],
+            orelse: vec![PyStmt::If {
+                test: is_not_none,
+                body: vec![
+                    PyStmt::Import {
+                        names: vec![PyImportName {
+                            name: vec!["pprint".to_string()],
+                            asname: None,
                             span: span.clone(),
                         }],
                         span: span.clone(),
                     },
-                    semicolon_terminated: false,
-                    span: span.clone(),
-                },
-            ],
-            orelse: Vec::new(),
+                    PyStmt::Expr {
+                        value: PyExpr::Call {
+                            func: Box::new(PyExpr::Attribute {
+                                value: Box::new(PyExpr::Name {
+                                    id: "pprint".to_string(),
+                                    span: span.clone(),
+                                }),
+                                attr: "pprint".to_string(),
+                                span: span.clone(),
+                            }),
+                            args: vec![PyArgument::Positional {
+                                value: PyExpr::Name {
+                                    id: "__snail_last_result".to_string(),
+                                    span: span.clone(),
+                                },
+                                span: span.clone(),
+                            }],
+                            span: span.clone(),
+                        },
+                        semicolon_terminated: false,
+                        span: span.clone(),
+                    },
+                ],
+                orelse: Vec::new(),
+                span: span.clone(),
+            }],
             span: span.clone(),
         });
     }
