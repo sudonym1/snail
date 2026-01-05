@@ -15,7 +15,8 @@ const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"),
     version = VERSION,
     about = "Snail programming language interpreter",
     override_usage = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]...",
-    trailing_var_arg = true
+    trailing_var_arg = true,
+    disable_version_flag = true
 )]
 struct Cli {
     /// Run a source file instead of a oneliner
@@ -33,6 +34,10 @@ struct Cli {
     /// Disable auto-printing of last expression result
     #[arg(short = 'P')]
     no_auto_print: bool,
+
+    /// Print version
+    #[arg(short = 'v', long = "version")]
+    version: bool,
 
     /// Input file and arguments passed to the script
     #[arg(allow_hyphen_values = true)]
@@ -57,6 +62,11 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let cli = Cli::parse();
+
+    if cli.version {
+        println!("{VERSION}");
+        return Ok(());
+    }
 
     let mode = if cli.awk {
         CompileMode::Awk
