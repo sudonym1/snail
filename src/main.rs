@@ -253,16 +253,18 @@ fn self_update() -> Result<(), String> {
         .map_err(|e| format!("Failed to download binary: {}", e))?;
 
     // Get the current executable path
-    let current_exe = env::current_exe()
-        .map_err(|e| format!("Failed to get current executable path: {}", e))?;
+    let current_exe =
+        env::current_exe().map_err(|e| format!("Failed to get current executable path: {}", e))?;
 
     // Create a temporary file
     let temp_path = current_exe.with_extension("tmp");
-    let mut temp_file = File::create(&temp_path)
-        .map_err(|e| format!("Failed to create temporary file: {}", e))?;
+    let mut temp_file =
+        File::create(&temp_path).map_err(|e| format!("Failed to create temporary file: {}", e))?;
 
     // Write the downloaded binary to the temp file
-    let content = response.bytes().map_err(|e| format!("Failed to read response: {}", e))?;
+    let content = response
+        .bytes()
+        .map_err(|e| format!("Failed to read response: {}", e))?;
     copy(&mut content.as_ref(), &mut temp_file)
         .map_err(|e| format!("Failed to write binary: {}", e))?;
 
