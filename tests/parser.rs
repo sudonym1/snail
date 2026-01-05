@@ -749,3 +749,21 @@ fn parses_regular_string_with_interpolation() {
         other => panic!("Expected assignment, got {:?}", other),
     }
 }
+
+#[test]
+fn parses_structured_accessor() {
+    let program = parse_program("result = $[foo.bar]").expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn parses_structured_accessor_with_pipeline() {
+    let program = parse_program("result = json() | $[users[0].name]").expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn parses_empty_structured_accessor() {
+    let program = parse_program("result = $[]").expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+}

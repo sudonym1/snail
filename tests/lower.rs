@@ -478,3 +478,25 @@ fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, colum
         other => panic!("expected name expression, got {other:?}"),
     }
 }
+
+#[test]
+fn lowers_structured_accessor() {
+    let source = r#"result = $[foo.bar]"#;
+    let python = snail_to_python(source);
+
+    assert!(python.contains("__SnailStructuredAccessor"));
+    assert!(python.contains("__SnailStructuredAccessor(\"foo.bar\")"));
+}
+
+#[test]
+fn lowers_json_with_structured_accessor() {
+    let source = r#"result = json() | $[users[0]]"#;
+    let python = snail_to_python(source);
+
+    assert!(python.contains("def json("));
+    assert!(python.contains("class __SnailJsonObject"));
+    assert!(python.contains("def __structured__"));
+    assert!(python.contains("__SnailStructuredAccessor(\"users[0]\")"));
+    // Should NOT contain old __SnailJsonQuery
+    assert!(!python.contains("__SnailJsonQuery"));
+}

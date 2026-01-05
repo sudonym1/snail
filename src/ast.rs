@@ -223,7 +223,7 @@ pub enum Expr {
         parts: Vec<SubprocessPart>,
         span: SourceSpan,
     },
-    JsonQuery {
+    StructuredAccessor {
         query: String,
         span: SourceSpan,
     },

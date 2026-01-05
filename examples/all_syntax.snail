@@ -237,7 +237,21 @@ class Doubler {
 pipeline_result = 21 | Doubler()
 print("pipeline_result", pipeline_result)
 
-print("json pipeline", r'{"foo": 12}' | @j(foo))
+# Structured pipeline accessor with JSON
+# json() parses immediately and returns a queryable object
+json_obj = json(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}')
+first_name = json_obj | $[users[0].name]
+assert first_name == "Alice"
+
+# Can also inline the json() call
+names = json(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}') | $[users[*].name]
+assert names == ["Alice", "Bob"]
+
+# Simple extraction
+simple = json(r'{"foo": 12}') | $[foo]
+assert simple == 12
+
+print("structured pipeline", first_name, names, simple)
 
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)

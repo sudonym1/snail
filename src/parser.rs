@@ -814,7 +814,7 @@ fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::dict_comp => parse_dict_comp(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
         Rule::subprocess => parse_subprocess(pair, source),
-        Rule::json_query => parse_json_query(pair, source),
+        Rule::structured_accessor => parse_structured_accessor(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -1618,14 +1618,14 @@ fn match_injected_name(text: &str) -> Option<(&'static str, usize)> {
     None
 }
 
-fn parse_json_query(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+fn parse_structured_accessor(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let body_pair = pair
         .into_inner()
         .next()
-        .ok_or_else(|| error_with_span("missing json query body", span.clone(), source))?;
+        .ok_or_else(|| error_with_span("missing structured query body", span.clone(), source))?;
     let query = body_pair.as_str().to_string();
-    Ok(Expr::JsonQuery { query, span })
+    Ok(Expr::StructuredAccessor { query, span })
 }
 
 fn parse_dict_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -2072,7 +2072,7 @@ fn expr_span(expr: &Expr) -> &SourceSpan {
         | Expr::Regex { span, .. }
         | Expr::RegexMatch { span, .. }
         | Expr::Subprocess { span, .. }
-        | Expr::JsonQuery { span, .. }
+        | Expr::StructuredAccessor { span, .. }
         | Expr::Call { span, .. }
         | Expr::Attribute { span, .. }
         | Expr::Index { span, .. }
@@ -2096,7 +2096,7 @@ fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
         | Expr::Bool { span, .. }
         | Expr::None { span }
         | Expr::Subprocess { span, .. }
-        | Expr::JsonQuery { span, .. }
+        | Expr::StructuredAccessor { span, .. }
         | Expr::FieldIndex { span, .. }
         | Expr::List { span, .. }
         | Expr::Tuple { span, .. }

@@ -11,7 +11,8 @@ const SNAIL_SUBPROCESS_CAPTURE_CLASS: &str = "__SnailSubprocessCapture";
 const SNAIL_SUBPROCESS_STATUS_CLASS: &str = "__SnailSubprocessStatus";
 const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
 const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
-const SNAIL_JSON_QUERY_CLASS: &str = "__SnailJsonQuery";
+const SNAIL_STRUCTURED_ACCESSOR_CLASS: &str = "__SnailStructuredAccessor";
+const SNAIL_JSON_OBJECT_CLASS: &str = "__SnailJsonObject";
 const SNAIL_AWK_LINE: &str = "$l";
 const SNAIL_AWK_FIELDS: &str = "$f";
 const SNAIL_AWK_NR: &str = "$n";
@@ -1269,30 +1270,8 @@ fn lower_expr_with_exception(
                 // Pipeline: x | y becomes y.__pipeline__(x)
                 let left_expr = lower_expr_with_exception(left, exception_name)?;
 
-                // Special handling for JsonQuery and Subprocess on RHS: just create the object, don't call __pipeline__(None)
+                // Special handling for Subprocess on RHS: just create the object, don't call __pipeline__(None)
                 let right_obj = match right.as_ref() {
-                    Expr::JsonQuery {
-                        query,
-                        span: q_span,
-                    } => {
-                        // Create just the __SnailJsonQuery(query) object
-                        PyExpr::Call {
-                            func: Box::new(PyExpr::Name {
-                                id: SNAIL_JSON_QUERY_CLASS.to_string(),
-                                span: q_span.clone(),
-                            }),
-                            args: vec![PyArgument::Positional {
-                                value: PyExpr::String {
-                                    value: query.clone(),
-                                    raw: false,
-                                    delimiter: StringDelimiter::Double,
-                                    span: q_span.clone(),
-                                },
-                                span: q_span.clone(),
-                            }],
-                            span: q_span.clone(),
-                        }
-                    }
                     Expr::Subprocess {
                         kind,
                         parts,
@@ -1508,11 +1487,11 @@ fn lower_expr_with_exception(
                 span: span.clone(),
             })
         }
-        Expr::JsonQuery { query, span } => {
-            // @j(query) becomes __SnailJsonQuery(query).__pipeline__(None)
-            let query_obj = PyExpr::Call {
+        Expr::StructuredAccessor { query, span } => {
+            // $[query] becomes __SnailStructuredAccessor(query)
+            Ok(PyExpr::Call {
                 func: Box::new(PyExpr::Name {
-                    id: SNAIL_JSON_QUERY_CLASS.to_string(),
+                    id: SNAIL_STRUCTURED_ACCESSOR_CLASS.to_string(),
                     span: span.clone(),
                 }),
                 args: vec![PyArgument::Positional {
@@ -1522,18 +1501,6 @@ fn lower_expr_with_exception(
                         delimiter: StringDelimiter::Double,
                         span: span.clone(),
                     },
-                    span: span.clone(),
-                }],
-                span: span.clone(),
-            };
-            Ok(PyExpr::Call {
-                func: Box::new(PyExpr::Attribute {
-                    value: Box::new(query_obj),
-                    attr: "__pipeline__".to_string(),
-                    span: span.clone(),
-                }),
-                args: vec![PyArgument::Positional {
-                    value: PyExpr::None { span: span.clone() },
                     span: span.clone(),
                 }],
                 span: span.clone(),
@@ -1814,7 +1781,7 @@ pub fn python_source_with_auto_print(module: &PyModule, auto_print_last: bool) -
     let uses_try = module_uses_snail_try(module);
     let uses_regex = module_uses_snail_regex(module);
     let uses_subprocess = module_uses_snail_subprocess(module);
-    let uses_json = module_uses_snail_json(module);
+    let uses_structured = module_uses_structured_accessor(module);
     if uses_try {
         writer.write_snail_try_helper();
     }
@@ -1830,13 +1797,13 @@ pub fn python_source_with_auto_print(module: &PyModule, auto_print_last: bool) -
         }
         writer.write_snail_subprocess_helpers();
     }
-    if uses_json {
+    if uses_structured {
         if uses_try || uses_regex || uses_subprocess {
             writer.write_line("");
         }
-        writer.write_snail_json_helpers();
+        writer.write_structured_accessor_helpers();
     }
-    if (uses_try || uses_regex || uses_subprocess || uses_json) && !module.body.is_empty() {
+    if (uses_try || uses_regex || uses_subprocess || uses_structured) && !module.body.is_empty() {
         writer.write_line("");
     }
 
@@ -2125,25 +2092,25 @@ fn expr_uses_snail_subprocess(expr: &PyExpr) -> bool {
     }
 }
 
-fn module_uses_snail_json(module: &PyModule) -> bool {
-    module.body.iter().any(stmt_uses_snail_json)
+fn module_uses_structured_accessor(module: &PyModule) -> bool {
+    module.body.iter().any(stmt_uses_structured_accessor)
 }
 
-fn stmt_uses_snail_json(stmt: &PyStmt) -> bool {
+fn stmt_uses_structured_accessor(stmt: &PyStmt) -> bool {
     match stmt {
         PyStmt::If {
             test, body, orelse, ..
         } => {
-            expr_uses_snail_json(test)
-                || block_uses_snail_json(body)
-                || block_uses_snail_json(orelse)
+            expr_uses_structured_accessor(test)
+                || block_uses_structured_accessor(body)
+                || block_uses_structured_accessor(orelse)
         }
         PyStmt::While {
             test, body, orelse, ..
         } => {
-            expr_uses_snail_json(test)
-                || block_uses_snail_json(body)
-                || block_uses_snail_json(orelse)
+            expr_uses_structured_accessor(test)
+                || block_uses_structured_accessor(body)
+                || block_uses_structured_accessor(orelse)
         }
         PyStmt::For {
             target,
@@ -2152,13 +2119,13 @@ fn stmt_uses_snail_json(stmt: &PyStmt) -> bool {
             orelse,
             ..
         } => {
-            expr_uses_snail_json(target)
-                || expr_uses_snail_json(iter)
-                || block_uses_snail_json(body)
-                || block_uses_snail_json(orelse)
+            expr_uses_structured_accessor(target)
+                || expr_uses_structured_accessor(iter)
+                || block_uses_structured_accessor(body)
+                || block_uses_structured_accessor(orelse)
         }
         PyStmt::FunctionDef { body, .. } | PyStmt::ClassDef { body, .. } => {
-            block_uses_snail_json(body)
+            block_uses_structured_accessor(body)
         }
         PyStmt::Try {
             body,
@@ -2167,58 +2134,68 @@ fn stmt_uses_snail_json(stmt: &PyStmt) -> bool {
             finalbody,
             ..
         } => {
-            block_uses_snail_json(body)
-                || handlers.iter().any(handler_uses_snail_json)
-                || block_uses_snail_json(orelse)
-                || block_uses_snail_json(finalbody)
+            block_uses_structured_accessor(body)
+                || handlers.iter().any(handler_uses_structured_accessor)
+                || block_uses_structured_accessor(orelse)
+                || block_uses_structured_accessor(finalbody)
         }
         PyStmt::With { items, body, .. } => {
-            items.iter().any(with_item_uses_snail_json) || block_uses_snail_json(body)
+            items.iter().any(with_item_uses_structured_accessor)
+                || block_uses_structured_accessor(body)
         }
-        PyStmt::Return { value, .. } => value.as_ref().is_some_and(expr_uses_snail_json),
+        PyStmt::Return { value, .. } => value.as_ref().is_some_and(expr_uses_structured_accessor),
         PyStmt::Raise { value, from, .. } => {
-            value.as_ref().is_some_and(expr_uses_snail_json)
-                || from.as_ref().is_some_and(expr_uses_snail_json)
+            value.as_ref().is_some_and(expr_uses_structured_accessor)
+                || from.as_ref().is_some_and(expr_uses_structured_accessor)
         }
         PyStmt::Assert { test, message, .. } => {
-            expr_uses_snail_json(test) || message.as_ref().is_some_and(expr_uses_snail_json)
+            expr_uses_structured_accessor(test)
+                || message.as_ref().is_some_and(expr_uses_structured_accessor)
         }
-        PyStmt::Delete { targets, .. } => targets.iter().any(expr_uses_snail_json),
+        PyStmt::Delete { targets, .. } => targets.iter().any(expr_uses_structured_accessor),
         PyStmt::Import { .. }
         | PyStmt::ImportFrom { .. }
         | PyStmt::Break { .. }
         | PyStmt::Continue { .. }
         | PyStmt::Pass { .. } => false,
         PyStmt::Assign { targets, value, .. } => {
-            targets.iter().any(expr_uses_snail_json) || expr_uses_snail_json(value)
+            targets.iter().any(expr_uses_structured_accessor)
+                || expr_uses_structured_accessor(value)
         }
-        PyStmt::Expr { value, .. } => expr_uses_snail_json(value),
+        PyStmt::Expr { value, .. } => expr_uses_structured_accessor(value),
     }
 }
 
-fn block_uses_snail_json(block: &[PyStmt]) -> bool {
-    block.iter().any(stmt_uses_snail_json)
+fn block_uses_structured_accessor(block: &[PyStmt]) -> bool {
+    block.iter().any(stmt_uses_structured_accessor)
 }
 
-fn handler_uses_snail_json(handler: &PyExceptHandler) -> bool {
-    handler.type_name.as_ref().is_some_and(expr_uses_snail_json)
-        || block_uses_snail_json(&handler.body)
+fn handler_uses_structured_accessor(handler: &PyExceptHandler) -> bool {
+    handler
+        .type_name
+        .as_ref()
+        .is_some_and(expr_uses_structured_accessor)
+        || block_uses_structured_accessor(&handler.body)
 }
 
-fn with_item_uses_snail_json(item: &PyWithItem) -> bool {
-    expr_uses_snail_json(&item.context) || item.target.as_ref().is_some_and(expr_uses_snail_json)
+fn with_item_uses_structured_accessor(item: &PyWithItem) -> bool {
+    expr_uses_structured_accessor(&item.context)
+        || item
+            .target
+            .as_ref()
+            .is_some_and(expr_uses_structured_accessor)
 }
 
-fn argument_uses_snail_json(arg: &PyArgument) -> bool {
+fn argument_uses_structured_accessor(arg: &PyArgument) -> bool {
     match arg {
         PyArgument::Positional { value, .. }
         | PyArgument::Keyword { value, .. }
         | PyArgument::Star { value, .. }
-        | PyArgument::KwStar { value, .. } => expr_uses_snail_json(value),
+        | PyArgument::KwStar { value, .. } => expr_uses_structured_accessor(value),
     }
 }
 
-fn expr_uses_snail_json(expr: &PyExpr) -> bool {
+fn expr_uses_structured_accessor(expr: &PyExpr) -> bool {
     match expr {
         PyExpr::Name { .. }
         | PyExpr::Number { .. }
@@ -2227,47 +2204,53 @@ fn expr_uses_snail_json(expr: &PyExpr) -> bool {
         | PyExpr::None { .. } => false,
         PyExpr::FString { parts, .. } => parts.iter().any(|part| match part {
             PyFStringPart::Text(_) => false,
-            PyFStringPart::Expr(expr) => expr_uses_snail_json(expr),
+            PyFStringPart::Expr(expr) => expr_uses_structured_accessor(expr),
         }),
-        PyExpr::Unary { operand, .. } => expr_uses_snail_json(operand),
+        PyExpr::Unary { operand, .. } => expr_uses_structured_accessor(operand),
         PyExpr::Binary { left, right, .. } => {
-            expr_uses_snail_json(left) || expr_uses_snail_json(right)
+            expr_uses_structured_accessor(left) || expr_uses_structured_accessor(right)
         }
         PyExpr::Compare {
             left, comparators, ..
-        } => expr_uses_snail_json(left) || comparators.iter().any(expr_uses_snail_json),
+        } => {
+            expr_uses_structured_accessor(left)
+                || comparators.iter().any(expr_uses_structured_accessor)
+        }
         PyExpr::IfExpr {
             test, body, orelse, ..
         } => {
-            expr_uses_snail_json(test) || expr_uses_snail_json(body) || expr_uses_snail_json(orelse)
+            expr_uses_structured_accessor(test)
+                || expr_uses_structured_accessor(body)
+                || expr_uses_structured_accessor(orelse)
         }
-        PyExpr::Lambda { body, .. } => expr_uses_snail_json(body),
+        PyExpr::Lambda { body, .. } => expr_uses_structured_accessor(body),
         PyExpr::Call { func, args, .. } => {
             if matches!(func.as_ref(), PyExpr::Name { id, .. }
-                if id == SNAIL_JSON_QUERY_CLASS)
+                if id == SNAIL_STRUCTURED_ACCESSOR_CLASS)
             {
                 return true;
             }
-            expr_uses_snail_json(func) || args.iter().any(argument_uses_snail_json)
+            expr_uses_structured_accessor(func)
+                || args.iter().any(argument_uses_structured_accessor)
         }
-        PyExpr::Attribute { value, .. } => expr_uses_snail_json(value),
+        PyExpr::Attribute { value, .. } => expr_uses_structured_accessor(value),
         PyExpr::Index { value, index, .. } => {
-            expr_uses_snail_json(value) || expr_uses_snail_json(index)
+            expr_uses_structured_accessor(value) || expr_uses_structured_accessor(index)
         }
-        PyExpr::Paren { expr, .. } => expr_uses_snail_json(expr),
+        PyExpr::Paren { expr, .. } => expr_uses_structured_accessor(expr),
         PyExpr::List { elements, .. } | PyExpr::Tuple { elements, .. } => {
-            elements.iter().any(expr_uses_snail_json)
+            elements.iter().any(expr_uses_structured_accessor)
         }
-        PyExpr::Dict { entries, .. } => entries
-            .iter()
-            .any(|(key, value)| expr_uses_snail_json(key) || expr_uses_snail_json(value)),
-        PyExpr::Set { elements, .. } => elements.iter().any(expr_uses_snail_json),
+        PyExpr::Dict { entries, .. } => entries.iter().any(|(key, value)| {
+            expr_uses_structured_accessor(key) || expr_uses_structured_accessor(value)
+        }),
+        PyExpr::Set { elements, .. } => elements.iter().any(expr_uses_structured_accessor),
         PyExpr::ListComp {
             element, iter, ifs, ..
         } => {
-            expr_uses_snail_json(element)
-                || expr_uses_snail_json(iter)
-                || ifs.iter().any(expr_uses_snail_json)
+            expr_uses_structured_accessor(element)
+                || expr_uses_structured_accessor(iter)
+                || ifs.iter().any(expr_uses_structured_accessor)
         }
         PyExpr::DictComp {
             key,
@@ -2276,14 +2259,14 @@ fn expr_uses_snail_json(expr: &PyExpr) -> bool {
             ifs,
             ..
         } => {
-            expr_uses_snail_json(key)
-                || expr_uses_snail_json(value)
-                || expr_uses_snail_json(iter)
-                || ifs.iter().any(expr_uses_snail_json)
+            expr_uses_structured_accessor(key)
+                || expr_uses_structured_accessor(value)
+                || expr_uses_structured_accessor(iter)
+                || ifs.iter().any(expr_uses_structured_accessor)
         }
         PyExpr::Slice { start, end, .. } => {
-            start.as_deref().is_some_and(expr_uses_snail_json)
-                || end.as_deref().is_some_and(expr_uses_snail_json)
+            start.as_deref().is_some_and(expr_uses_structured_accessor)
+                || end.as_deref().is_some_and(expr_uses_structured_accessor)
         }
     }
 }
@@ -2801,59 +2784,91 @@ impl PythonWriter {
         self.write_line("");
     }
 
-    fn write_snail_json_helpers(&mut self) {
+    fn write_structured_accessor_helpers(&mut self) {
         self.write_vendored_jmespath();
         self.write_line("import jmespath");
-        self.write_line("import json");
-        self.write_line("import sys");
+        self.write_line("import json as _json");
+        self.write_line("import sys as _sys");
         self.write_line("");
-        self.write_line(&format!("class {}:", SNAIL_JSON_QUERY_CLASS));
+
+        // Write __SnailStructuredAccessor class
+        self.write_line(&format!("class {}:", SNAIL_STRUCTURED_ACCESSOR_CLASS));
         self.indent += 1;
         self.write_line("def __init__(self, query):");
         self.indent += 1;
         self.write_line("self.query = query");
         self.indent -= 1;
         self.write_line("");
-        self.write_line("def __pipeline__(self, data):");
+        self.write_line("def __pipeline__(self, obj):");
         self.indent += 1;
-        self.write_line("# Handle None (stdin case)");
-        self.write_line("if data is None:");
+        self.write_line("if not hasattr(obj, '__structured__'):");
         self.indent += 1;
-        self.write_line("data = json.load(sys.stdin)");
+        self.write_line("raise TypeError(f\"Pipeline target must implement __structured__, got {type(obj).__name__}\")");
         self.indent -= 1;
-        self.write_line("# Handle string (try JSON first, then file path)");
-        self.write_line("elif isinstance(data, str):");
+        self.write_line("return obj.__structured__(self.query)");
+        self.indent -= 2;
+        self.write_line("");
+
+        // Write __SnailJsonObject class
+        self.write_line(&format!("class {}:", SNAIL_JSON_OBJECT_CLASS));
         self.indent += 1;
+        self.write_line("def __init__(self, data):");
+        self.indent += 1;
+        self.write_line("self.data = data");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line("def __structured__(self, query):");
+        self.indent += 1;
+        self.write_line("return jmespath.search(query, self.data)");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line("def __repr__(self):");
+        self.indent += 1;
+        self.write_line("return f\"__SnailJsonObject({self.data!r})\"");
+        self.indent -= 2;
+        self.write_line("");
+
+        // Write json() function
+        self.write_line("def json(input=_sys.stdin):");
+        self.indent += 1;
+        self.write_line("\"\"\"Parse JSON from various input sources.\"\"\"");
+        self.write_line("# Handle different input types");
+        self.write_line("if isinstance(input, str):");
+        self.indent += 1;
+        self.write_line("# Try parsing as JSON string first");
         self.write_line("try:");
         self.indent += 1;
-        self.write_line("data = json.loads(data)");
+        self.write_line("data = _json.loads(input)");
         self.indent -= 1;
-        self.write_line("except json.JSONDecodeError:");
+        self.write_line("except _json.JSONDecodeError:");
         self.indent += 1;
-        self.write_line("with open(data, 'r') as f:");
+        self.write_line("# Fall back to file path");
+        self.write_line("with open(input, 'r') as f:");
         self.indent += 1;
-        self.write_line("data = json.load(f)");
+        self.write_line("data = _json.load(f)");
         self.indent -= 3;
-        self.write_line("# Handle file-like object");
-        self.write_line("elif hasattr(data, 'read'):");
+        self.write_line("elif hasattr(input, 'read'):");
         self.indent += 1;
-        self.write_line("content = data.read()");
+        self.write_line("# File-like object (including sys.stdin)");
+        self.write_line("content = input.read()");
         self.write_line("if isinstance(content, bytes):");
         self.indent += 1;
         self.write_line("content = content.decode('utf-8')");
         self.indent -= 1;
-        self.write_line("data = json.loads(content)");
+        self.write_line("data = _json.loads(content)");
         self.indent -= 1;
-        self.write_line("# Must be JSON-native type (dict, list, str, int, float, bool, None)");
-        self.write_line(
-            "elif not isinstance(data, (dict, list, str, int, float, bool, type(None))):",
-        );
+        self.write_line("elif isinstance(input, (dict, list, int, float, bool, type(None))):");
         self.indent += 1;
-        self.write_line("raise TypeError(f\"@j pipeline input must be JSON-native type, got {type(data).__name__}\")");
+        self.write_line("# Already JSON-native type");
+        self.write_line("data = input");
+        self.indent -= 1;
+        self.write_line("else:");
+        self.indent += 1;
+        self.write_line("raise TypeError(f\"json() input must be JSON-compatible, got {type(input).__name__}\")");
         self.indent -= 1;
         self.write_line("");
-        self.write_line("return jmespath.search(self.query, data)");
-        self.indent -= 2;
+        self.write_line(&format!("return {}(data)", SNAIL_JSON_OBJECT_CLASS));
+        self.indent -= 1;
     }
 
     fn write_stmt(&mut self, stmt: &PyStmt) {

@@ -594,3 +594,43 @@ fn subprocess_without_pipeline_still_works() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout.trim(), "test");
 }
+
+#[test]
+fn structured_accessor_with_json() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#"result = json("{{\"foo\": 12}}") | $[foo]; print(result)"#])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "12");
+}
+
+#[test]
+fn structured_accessor_with_jmespath_query() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#"result = json("{{\"users\": [{{\"name\": \"Alice\"}}, {{\"name\": \"Bob\"}}]}}") | $[users[*].name]; print(result)"#])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Alice"));
+    assert!(stdout.contains("Bob"));
+}
+
+#[test]
+fn structured_accessor_requires_structured_method() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#"result = "plain string" | $[foo]"#])
+        .output()
+        .expect("run snail");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("must implement __structured__"));
+}
