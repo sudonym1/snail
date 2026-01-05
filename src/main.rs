@@ -7,9 +7,12 @@ use pyo3::types::{PyDict, PyList, PyModule};
 
 use snail::{CompileMode, SnailError, compile_snail_source_with_auto_print, format_snail_error};
 
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")");
+
 #[derive(Parser)]
 #[command(
     name = "snail",
+    version = VERSION,
     about = "Snail programming language interpreter",
     override_usage = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]...",
     trailing_var_arg = true
