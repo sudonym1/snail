@@ -17,12 +17,12 @@ pub struct AwkProgram {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AwkRule {
     pub pattern: Option<Expr>,
-    pub action: Vec<Stmt>,
+    pub action: Option<Vec<Stmt>>,
     pub span: SourceSpan,
 }
 
 impl AwkRule {
-    pub fn has_action(&self) -> bool {
-        !self.action.is_empty()
+    pub fn has_explicit_action(&self) -> bool {
+        self.action.is_some()
     }
 }

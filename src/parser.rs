@@ -146,7 +146,7 @@ fn parse_awk_rule(pair: Pair<'_, Rule>, source: &str) -> Result<AwkRule, ParseEr
 
     Ok(AwkRule {
         pattern,
-        action: action.unwrap_or_default(),
+        action,
         span,
     })
 }

@@ -916,10 +916,11 @@ fn lower_awk_rules_with_auto_print(
 ) -> Result<Vec<PyStmt>, LowerError> {
     let mut stmts = Vec::new();
     for rule in rules {
-        let mut action = if rule.has_action() {
-            let lowered = lower_block(&rule.action)?;
+        let mut action = if rule.has_explicit_action() {
+            let lowered = lower_block(rule.action.as_ref().unwrap())?;
             wrap_block_with_auto_print(lowered, auto_print)
         } else {
+            // Bare pattern with no action - default to printing the line
             vec![awk_default_print(&rule.span)]
         };
 
