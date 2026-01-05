@@ -1,0 +1,196 @@
+*snail.txt*  Snail programming language support for Vim
+
+==============================================================================
+CONTENTS                                                       *snail-contents*
+
+    1. Introduction ................................ |snail-intro|
+    2. Installation ................................ |snail-installation|
+    3. Configuration ............................... |snail-config|
+    4. Syntax Highlighting ......................... |snail-syntax|
+    5. Commands .................................... |snail-commands|
+    6. Mappings .................................... |snail-mappings|
+    7. Formatting .................................. |snail-formatting|
+    8. Tree-sitter ................................. |snail-treesitter|
+    9. AWK Mode .................................... |snail-awk|
+
+==============================================================================
+1. INTRODUCTION                                                   *snail-intro*
+
+This plugin provides comprehensive support for the Snail programming language
+in Vim and Neovim. Snail compiles to Python while offering terse, Perl/awk-like
+syntax for quick scripts.
+
+Features:
+- Syntax highlighting for all Snail constructs
+- Code formatting and indentation
+- Filetype detection for .snail files
+- Commands for running and debugging Snail code
+- Tree-sitter integration for Neovim
+- Support for both regular and AWK modes
+
+==============================================================================
+2. INSTALLATION                                                *snail-installation*
+
+Using vim-plug: >
+    Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }
+<
+Using packer.nvim: >
+    use { 'sudonym1/snail', rtp = 'extras/vim' }
+<
+Using lazy.nvim: >
+    { 'sudonym1/snail', config = function()
+        vim.opt.rtp:append('extras/vim')
+      end
+    }
+<
+Manual installation:
+    Copy the contents of `extras/vim/` to your Vim runtime directory:
+    - Vim: ~/.vim/
+    - Neovim: ~/.config/nvim/
+
+Tree-sitter (Neovim only):
+    1. Build the grammar: >
+        cd extras/tree-sitter-snail
+        npm install
+        npm run build
+<
+    2. Configure nvim-treesitter to use the parser
+
+==============================================================================
+3. CONFIGURATION                                                  *snail-config*
+
+                                                        *g:snail_format_on_save*
+g:snail_format_on_save~
+    Enable automatic formatting when saving .snail files.
+    Default: 0 (disabled)
+>
+    let g:snail_format_on_save = 1
+<
+                                                    *g:snail_highlight_awk_vars*
+g:snail_highlight_awk_vars~
+    Enable highlighting of AWK special variables ($l, $f, $n, etc.).
+    Default: 1 (enabled)
+>
+    let g:snail_highlight_awk_vars = 1
+<
+                                                *g:snail_highlight_interpolation*
+g:snail_highlight_interpolation~
+    Enable highlighting of string interpolation {expr} blocks.
+    Default: 1 (enabled)
+>
+    let g:snail_highlight_interpolation = 1
+<
+==============================================================================
+4. SYNTAX HIGHLIGHTING                                            *snail-syntax*
+
+The syntax file provides highlighting for:
+
+Keywords~
+    if, elif, else, while, for, def, class, try, except, finally,
+    with, return, break, continue, pass, raise, assert, del,
+    import, from, as, and, or, not, in, is, True, False, None
+
+AWK Keywords~
+    BEGIN, END
+
+Snail-specific Syntax~
+    - Subprocess capture: $(command)
+    - Subprocess status: @(command)
+    - Compact try operator: expr? or expr?fallback
+    - Regex literals: /pattern/
+    - Special variables: $e, $l, $f, $n, $fn, $p, $m
+    - Field variables: $0, $1, $2, ...
+    - Structured accessor: $[query]
+    - Pipeline operator: |
+    - String interpolation: "text {expr}"
+
+Strings~
+    Single, double, and triple-quoted strings are supported, including
+    raw strings with the 'r' prefix.
+
+==============================================================================
+5. COMMANDS                                                     *snail-commands*
+
+                                                                  *:SnailFormat*
+:SnailFormat            Format the current buffer using Snail conventions.
+
+                                                                     *:SnailRun*
+:SnailRun               Execute the current buffer as Snail code and display
+                        the output.
+
+                                                              *:SnailShowPython*
+:SnailShowPython        Show the generated Python code in a new split buffer.
+                        Useful for debugging and understanding compilation.
+
+                                                                 *:SnailVersion*
+:SnailVersion           Display the plugin version.
+
+==============================================================================
+6. MAPPINGS                                                     *snail-mappings*
+
+The following mappings are set in snail buffers:
+
+gq                      Format the current buffer (normal mode) or
+                        selected lines (visual mode).
+
+==============================================================================
+7. FORMATTING                                                 *snail-formatting*
+
+The formatter handles:
+- Brace-based indentation (increase after {, decrease before })
+- Proper alignment of elif, else, except, finally clauses
+- Preservation of string literals including triple-quoted strings
+- Comment handling
+
+To format programmatically: >
+    call snail#format()
+<
+To format a range: >
+    '<,'>call snail#format_range()
+<
+==============================================================================
+8. TREE-SITTER                                                *snail-treesitter*
+
+For Neovim users, a Tree-sitter grammar is provided for enhanced parsing
+and highlighting. The grammar is located in `extras/tree-sitter-snail/`.
+
+Benefits of Tree-sitter:
+- More accurate syntax highlighting
+- Better code folding
+- Improved indentation
+- Structural text objects
+
+Query files are provided:
+- highlights.scm: Syntax highlighting
+- folds.scm: Code folding
+- indents.scm: Smart indentation
+
+==============================================================================
+9. AWK MODE                                                         *snail-awk*
+
+Snail supports an AWK-like mode for line-oriented processing. The syntax
+highlighter recognizes:
+
+BEGIN/END blocks~
+>
+    BEGIN { print("start") }
+    END { print("done") }
+<
+Pattern-action rules~
+>
+    /pattern/ { print($l) }
+    $l.startswith("x") { process() }
+<
+Built-in Variables~
+    $l      Current line (trailing newline removed)
+    $f      Fields array ($l.split())
+    $n      Global line number
+    $fn     Per-file line number
+    $p      Current file path
+    $m      Last regex match object
+    $e      Exception in ? fallback expressions
+    $0-$9   AWK-style field access
+
+==============================================================================
+ vim:tw=78:ts=8:ft=help:norl:
+

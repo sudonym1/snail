@@ -39,13 +39,17 @@ cost.
 
 Editor and shell integration
 
-- Vim syntax highlighting lives in `extras/vim/syntax/snail.vim`. Copy it into
-  your Vim runtime (e.g., `~/.vim/syntax/`) and add a simple ftdetect rule such
-  as `au BufRead,BufNewFile *.snail setfiletype snail`.
-- Neovim uses the same syntax file; drop it into
-  `~/.config/nvim/syntax/snail.vim` and add either the same ftdetect autocommand
-  under `~/.config/nvim/ftdetect/snail.vim` or a Lua rule such as
-  `vim.filetype.add({ extension = { snail = "snail" } })` in your config.
+A comprehensive Vim/Neovim plugin is available in `extras/vim/` providing:
+- Syntax highlighting for all Snail constructs
+- Code formatting (`:SnailFormat`)
+- Commands to run Snail code (`:SnailRun`) and view generated Python (`:SnailShowPython`)
+- Filetype detection, indentation, and folding
+- Tree-sitter grammar for Neovim (`extras/tree-sitter-snail/`)
+
+Installation with vim-plug: `Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }`
+
+For manual installation, copy `extras/vim/` to `~/.vim/` (Vim) or
+`~/.config/nvim/` (Neovim). See `extras/vim/README.md` for full details.
 
 Development notes
 

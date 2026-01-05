@@ -1,0 +1,45 @@
+{
+  "name": "tree-sitter-snail",
+  "version": "1.0.0",
+  "description": "Tree-sitter grammar for the Snail programming language",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sudonym1/snail"
+  },
+  "license": "MIT",
+  "main": "bindings/node",
+  "keywords": [
+    "parser",
+    "tree-sitter",
+    "snail",
+    "syntax-highlighting"
+  ],
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "bindings/node/*",
+    "src/**"
+  ],
+  "dependencies": {
+    "nan": "^2.17.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.20.8"
+  },
+  "scripts": {
+    "build": "tree-sitter generate",
+    "test": "tree-sitter test",
+    "parse": "tree-sitter parse"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.snail",
+      "injection-regex": "snail",
+      "file-types": [
+        "snail"
+      ],
+      "highlights": "queries/highlights.scm"
+    }
+  ]
+}
+
