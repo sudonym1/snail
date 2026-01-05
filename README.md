@@ -49,8 +49,9 @@ Editor and shell integration
 
 Development notes
 
-- Python integration tests expect a usable CPython on `PATH`. Set `PYO3_PYTHON=
-  python3` (as CI does) if multiple Python versions are installed.
+- Snail uses pyo3 to execute generated Python code. A usable CPython must be on
+  `PATH`. Set `PYO3_PYTHON=python3` (as CI does) if multiple Python versions are
+  installed.
 
 Project plan
 
@@ -75,9 +76,9 @@ Phase 2: Lowering to Python AST
 - [x] Defer new syntax features until core pipeline is working.
 
 Phase 3: CPython integration
-- [x] Implement a Python extension module (Rust + pyo3).
-- [x] Provide a module API for compiling and executing Snail code.
-- [x] Add a Python import hook so `import foo.snail` works.
+- [x] ~~Implement a Python extension module (Rust + pyo3).~~ (Removed - Snail is now CLI-only)
+- [x] ~~Provide a module API for compiling and executing Snail code.~~ (Removed)
+- [x] ~~Add a Python import hook so `import foo.snail` works.~~ (Removed)
 - [x] Ensure Snail code can import Python modules directly.
 
 Phase 4: CLI and tooling
@@ -101,7 +102,7 @@ Phase 6: Interop and runtime features
 - [x] Ensure Snail functions/classes are normal Python callables.
 - [x] Handle globals/locals and module namespaces correctly.
 - [x] Define the standard library boundary and any Snail-specific helpers.
-- [x] Add integration tests that mix Snail and Python modules.
+- [x] ~~Add integration tests that mix Snail and Python modules.~~ (Python API removed)
 
 Phase 7: Snail Specific semantics
 - [x] Add compact exception swallowing expression: `<expr>?` yields the

@@ -7,8 +7,7 @@ blocks for curly braces. The examples here mirror the runnable tour in
 ## Running Snail code
 - Run a one-liner: `snail "print('hi')"`
 - Execute a file: `snail -f path/to/script.snail`
-- Import from Python: `import demo.snail` works through the provided import hook
-  and produces the same module objects as native Python code.
+- View generated Python: `snail --python "print('hi')"` shows the Python code that would be executed
 
 ## Modules and imports
 Snail uses Python's import semantics and exposes the same namespaces:
