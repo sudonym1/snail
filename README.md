@@ -22,14 +22,15 @@ provide runnable tours that mirror the language features. Both stay current as
 phases are delivered.
 
 Awk mode is available for line-oriented scripts. Enable it with `snail --awk`
-or by starting a file with `#!/usr/bin/env snail --awk`. Awk sources are written as
-pattern/action pairs evaluated for each input line. `BEGIN` and `END` blocks run
-before and after the line loop, a lone pattern defaults to printing matching
-lines, and a bare block runs for every line. Built-in variables mirror awk but
-use short `$`-prefixed names: the current line as `$l`, whitespace-split fields
-as `$f`, counters `$n` and `$fn` for global and per-file line numbers, the
-current file path as `$p`, and `$m` for the last regex match. These `$` names
-are injected by Snail itself; user-defined identifiers cannot start with `$`.
+or by starting a file with `#!/usr/bin/env -S snail --awk -f`. Awk sources are
+written as pattern/action pairs evaluated for each input line. `BEGIN` and
+`END` blocks run before and after the line loop, a lone pattern defaults to
+printing matching lines, and a bare block runs for every line. Built-in
+variables mirror awk but use short `$`-prefixed names: the current line as
+`$l`, whitespace-split fields as `$f`, counters `$n` and `$fn` for global and
+per-file line numbers, the current file path as `$p`, and `$m` for the last
+regex match. These `$` names are injected by Snail itself; user-defined
+identifiers cannot start with `$`.
 
 The compiler/transpiler will generate Python source and execute it with the
 Python interpreter. The implementation language is still open and should be

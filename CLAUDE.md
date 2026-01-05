@@ -86,7 +86,7 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → CPyth
 
 6. **CLI** (`src/main.rs`):
    - Handles `-f file.snail`, one-liner execution, and `--awk` mode
-   - Awk mode can be triggered by `#!/usr/bin/env snail --awk` shebang
+   - Awk mode can be triggered by `#!/usr/bin/env -S snail --awk -f` shebang
 
 ### Error Handling
 

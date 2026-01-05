@@ -5,8 +5,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 
 use crate::{
-    CompileMode, SnailError, lower_awk_program, lower_program, parse_awk_program, parse_program,
-    python_source_with_auto_print,
+    CompileMode, SnailError, lower_awk_program_with_auto_print, lower_program, parse_awk_program,
+    parse_program, python_source_with_auto_print,
 };
 
 pub fn compile_snail_source(source: &str, mode: CompileMode) -> Result<String, SnailError> {
@@ -26,8 +26,10 @@ pub fn compile_snail_source_with_auto_print(
         }
         CompileMode::Awk => {
             let program = parse_awk_program(source)?;
-            let module = lower_awk_program(&program)?;
-            Ok(python_source_with_auto_print(&module, auto_print_last))
+            // For awk mode, auto-print is handled at the block level during lowering
+            let module = lower_awk_program_with_auto_print(&program, auto_print_last)?;
+            // Use python_source without module-level auto-print since it's already in the AST
+            Ok(crate::python_source(&module))
         }
     }
 }

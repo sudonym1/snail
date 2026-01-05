@@ -377,6 +377,13 @@ pub fn lower_program(program: &Program) -> Result<PyModule, LowerError> {
 }
 
 pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
+    lower_awk_program_with_auto_print(program, false)
+}
+
+pub fn lower_awk_program_with_auto_print(
+    program: &AwkProgram,
+    auto_print: bool,
+) -> Result<PyModule, LowerError> {
     let span = program.span.clone();
     let mut body = Vec::new();
 
@@ -391,7 +398,8 @@ pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
 
     let mut main_body = Vec::new();
     for block in &program.begin_blocks {
-        main_body.extend(lower_block(block)?);
+        let lowered = lower_block(block)?;
+        main_body.extend(wrap_block_with_auto_print(lowered, auto_print));
     }
 
     main_body.push(assign_name("__snail_nr", number_expr("0", &span), &span));
@@ -418,7 +426,7 @@ pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
         span: span.clone(),
     };
 
-    let file_loop = lower_awk_file_loop(program, &span)?;
+    let file_loop = lower_awk_file_loop_with_auto_print(program, &span, auto_print)?;
     main_body.push(PyStmt::For {
         target: name_expr("__snail_path", &span),
         iter: files_expr,
@@ -428,7 +436,8 @@ pub fn lower_awk_program(program: &AwkProgram) -> Result<PyModule, LowerError> {
     });
 
     for block in &program.end_blocks {
-        main_body.extend(lower_block(block)?);
+        let lowered = lower_block(block)?;
+        main_body.extend(wrap_block_with_auto_print(lowered, auto_print));
     }
 
     body.extend(main_body);
@@ -607,7 +616,11 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
     }
 }
 
-fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<PyStmt>, LowerError> {
+fn lower_awk_file_loop_with_auto_print(
+    program: &AwkProgram,
+    span: &SourceSpan,
+    auto_print: bool,
+) -> Result<Vec<PyStmt>, LowerError> {
     let mut file_loop = Vec::new();
     file_loop.push(assign_name("__snail_fnr", number_expr("0", span), span));
 
@@ -621,7 +634,12 @@ fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<Py
             },
             span,
         ),
-        lower_awk_line_loop(program, span, name_expr("__snail_file", span))?,
+        lower_awk_line_loop_with_auto_print(
+            program,
+            span,
+            name_expr("__snail_file", span),
+            auto_print,
+        )?,
     ];
 
     let open_call = PyExpr::Call {
@@ -636,10 +654,11 @@ fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<Py
     };
     let with_stmt = PyStmt::With {
         items: vec![with_item],
-        body: vec![lower_awk_line_loop(
+        body: vec![lower_awk_line_loop_with_auto_print(
             program,
             span,
             name_expr("__snail_file", span),
+            auto_print,
         )?],
         span: span.clone(),
     };
@@ -661,10 +680,11 @@ fn lower_awk_file_loop(program: &AwkProgram, span: &SourceSpan) -> Result<Vec<Py
     Ok(file_loop)
 }
 
-fn lower_awk_line_loop(
+fn lower_awk_line_loop_with_auto_print(
     program: &AwkProgram,
     span: &SourceSpan,
     iter: PyExpr,
+    auto_print: bool,
 ) -> Result<PyStmt, LowerError> {
     let mut loop_body = Vec::new();
     loop_body.push(assign_name(
@@ -725,7 +745,7 @@ fn lower_awk_line_loop(
         span,
     ));
 
-    loop_body.extend(lower_awk_rules(&program.rules)?);
+    loop_body.extend(lower_awk_rules_with_auto_print(&program.rules, auto_print)?);
 
     Ok(PyStmt::For {
         target: name_expr("__snail_raw", span),
@@ -736,11 +756,93 @@ fn lower_awk_line_loop(
     })
 }
 
-fn lower_awk_rules(rules: &[AwkRule]) -> Result<Vec<PyStmt>, LowerError> {
+fn wrap_block_with_auto_print(mut block: Vec<PyStmt>, auto_print: bool) -> Vec<PyStmt> {
+    if !auto_print || block.is_empty() {
+        return block;
+    }
+
+    let last_idx = block.len() - 1;
+    if let PyStmt::Expr { value, span } = &block[last_idx] {
+        // Clone the data before modifying the block
+        let expr_code = value.clone();
+        let span = span.clone();
+
+        block.pop(); // Remove the original expression statement
+
+        block.push(PyStmt::Assign {
+            targets: vec![PyExpr::Name {
+                id: "__snail_last_result".to_string(),
+                span: span.clone(),
+            }],
+            value: expr_code,
+            span: span.clone(),
+        });
+
+        // Build: not (__snail_last_result is None)
+        let is_not_none = PyExpr::Unary {
+            op: PyUnaryOp::Not,
+            operand: Box::new(PyExpr::Compare {
+                left: Box::new(PyExpr::Name {
+                    id: "__snail_last_result".to_string(),
+                    span: span.clone(),
+                }),
+                ops: vec![PyCompareOp::Is],
+                comparators: vec![PyExpr::None { span: span.clone() }],
+                span: span.clone(),
+            }),
+            span: span.clone(),
+        };
+
+        block.push(PyStmt::If {
+            test: is_not_none,
+            body: vec![
+                PyStmt::Import {
+                    names: vec![PyImportName {
+                        name: vec!["pprint".to_string()],
+                        asname: None,
+                        span: span.clone(),
+                    }],
+                    span: span.clone(),
+                },
+                PyStmt::Expr {
+                    value: PyExpr::Call {
+                        func: Box::new(PyExpr::Attribute {
+                            value: Box::new(PyExpr::Name {
+                                id: "pprint".to_string(),
+                                span: span.clone(),
+                            }),
+                            attr: "pprint".to_string(),
+                            span: span.clone(),
+                        }),
+                        args: vec![PyArgument::Positional {
+                            value: PyExpr::Name {
+                                id: "__snail_last_result".to_string(),
+                                span: span.clone(),
+                            },
+                            span: span.clone(),
+                        }],
+                        span: span.clone(),
+                    },
+                    span: span.clone(),
+                },
+            ],
+            orelse: Vec::new(),
+            span: span.clone(),
+        });
+    }
+
+    block
+}
+
+fn lower_awk_rules_with_auto_print(
+    rules: &[AwkRule],
+    auto_print: bool,
+) -> Result<Vec<PyStmt>, LowerError> {
     let mut stmts = Vec::new();
     for rule in rules {
         let mut action = if rule.has_action() {
-            lower_block(&rule.action)?
+            let lowered = lower_block(&rule.action)?;
+            wrap_block_with_auto_print(lowered, auto_print)
         } else {
             vec![awk_default_print(&rule.span)]
         };
