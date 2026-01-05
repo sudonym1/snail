@@ -5,10 +5,7 @@ use clap::Parser;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
-use snail::{
-    CompileMode, SnailError, compile_snail_source, compile_snail_source_with_auto_print,
-    format_snail_error,
-};
+use snail::{CompileMode, SnailError, compile_snail_source_with_auto_print, format_snail_error};
 
 #[derive(Parser)]
 #[command(
@@ -84,7 +81,11 @@ fn run() -> Result<(), String> {
     };
 
     if cli.python {
-        let python = match compile_snail_source(&input.source, input.mode) {
+        let python = match compile_snail_source_with_auto_print(
+            &input.source,
+            input.mode,
+            !cli.no_auto_print,
+        ) {
             Ok(python) => python,
             Err(err) => return Err(format_snail_error(&err, &input.filename)),
         };

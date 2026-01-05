@@ -237,3 +237,6 @@ print("json pipeline", r'{"foo": 12}' | @j(foo))
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
 print(sysmod.version)
+
+# The last expression is always pretty printed to stdout, unless -P is specified
+"automatically printed"
