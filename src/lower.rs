@@ -7,8 +7,8 @@ use crate::awk::{AwkProgram, AwkRule};
 
 const SNAIL_TRY_HELPER: &str = "__snail_compact_try";
 const SNAIL_EXCEPTION_VAR: &str = "__snail_compact_exc";
-const SNAIL_SUBPROCESS_CAPTURE: &str = "__snail_subprocess_capture";
-const SNAIL_SUBPROCESS_STATUS: &str = "__snail_subprocess_status";
+const SNAIL_SUBPROCESS_CAPTURE_CLASS: &str = "__SnailSubprocessCapture";
+const SNAIL_SUBPROCESS_STATUS_CLASS: &str = "__SnailSubprocessStatus";
 const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
 const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
 const SNAIL_JSON_QUERY_CLASS: &str = "__SnailJsonQuery";
@@ -1219,7 +1219,7 @@ fn lower_expr_with_exception(
                 // Pipeline: x | y becomes y.__pipeline__(x)
                 let left_expr = lower_expr_with_exception(left, exception_name)?;
 
-                // Special handling for JsonQuery on RHS: just create the object, don't call __pipeline__(None)
+                // Special handling for JsonQuery and Subprocess on RHS: just create the object, don't call __pipeline__(None)
                 let right_obj = match right.as_ref() {
                     Expr::JsonQuery {
                         query,
@@ -1241,6 +1241,45 @@ fn lower_expr_with_exception(
                                 span: q_span.clone(),
                             }],
                             span: q_span.clone(),
+                        }
+                    }
+                    Expr::Subprocess {
+                        kind,
+                        parts,
+                        span: s_span,
+                    } => {
+                        // Create just the __SnailSubprocess{Capture|Status}(cmd) object
+                        let mut lowered_parts = Vec::with_capacity(parts.len());
+                        for part in parts {
+                            match part {
+                                SubprocessPart::Text(text) => {
+                                    lowered_parts.push(PyFStringPart::Text(text.clone()));
+                                }
+                                SubprocessPart::Expr(expr) => {
+                                    lowered_parts.push(PyFStringPart::Expr(
+                                        lower_expr_with_exception(expr, exception_name)?,
+                                    ));
+                                }
+                            }
+                        }
+                        let command = PyExpr::FString {
+                            parts: lowered_parts,
+                            span: s_span.clone(),
+                        };
+                        let class_name = match kind {
+                            SubprocessKind::Capture => SNAIL_SUBPROCESS_CAPTURE_CLASS,
+                            SubprocessKind::Status => SNAIL_SUBPROCESS_STATUS_CLASS,
+                        };
+                        PyExpr::Call {
+                            func: Box::new(PyExpr::Name {
+                                id: class_name.to_string(),
+                                span: s_span.clone(),
+                            }),
+                            args: vec![PyArgument::Positional {
+                                value: command,
+                                span: s_span.clone(),
+                            }],
+                            span: s_span.clone(),
                         }
                     }
                     _ => lower_expr_with_exception(right, exception_name)?,
@@ -1390,17 +1429,30 @@ fn lower_expr_with_exception(
                 parts: lowered_parts,
                 span: span.clone(),
             };
-            let helper = match kind {
-                SubprocessKind::Capture => SNAIL_SUBPROCESS_CAPTURE,
-                SubprocessKind::Status => SNAIL_SUBPROCESS_STATUS,
+            let class_name = match kind {
+                SubprocessKind::Capture => SNAIL_SUBPROCESS_CAPTURE_CLASS,
+                SubprocessKind::Status => SNAIL_SUBPROCESS_STATUS_CLASS,
             };
-            Ok(PyExpr::Call {
+            // $(cmd) becomes __SnailSubprocessCapture(cmd).__pipeline__(None)
+            let subprocess_obj = PyExpr::Call {
                 func: Box::new(PyExpr::Name {
-                    id: helper.to_string(),
+                    id: class_name.to_string(),
                     span: span.clone(),
                 }),
                 args: vec![PyArgument::Positional {
                     value: command,
+                    span: span.clone(),
+                }],
+                span: span.clone(),
+            };
+            Ok(PyExpr::Call {
+                func: Box::new(PyExpr::Attribute {
+                    value: Box::new(subprocess_obj),
+                    attr: "__pipeline__".to_string(),
+                    span: span.clone(),
+                }),
+                args: vec![PyArgument::Positional {
+                    value: PyExpr::None { span: span.clone() },
                     span: span.clone(),
                 }],
                 span: span.clone(),
@@ -1761,7 +1813,11 @@ pub fn python_source_with_auto_print(module: &PyModule, auto_print_last: bool) -
                 // Generate code to capture and pretty-print the last expression
                 let expr_code = expr_source(value);
                 writer.write_line(&format!("__snail_last_result = {}", expr_code));
-                writer.write_line("if __snail_last_result is not None:");
+                writer.write_line("if isinstance(__snail_last_result, str):");
+                writer.indent += 1;
+                writer.write_line("print(__snail_last_result)");
+                writer.indent -= 1;
+                writer.write_line("elif __snail_last_result is not None:");
                 writer.indent += 1;
                 writer.write_line("import pprint");
                 writer.write_line("pprint.pprint(__snail_last_result)");
@@ -1975,7 +2031,7 @@ fn expr_uses_snail_subprocess(expr: &PyExpr) -> bool {
         PyExpr::Lambda { body, .. } => expr_uses_snail_subprocess(body),
         PyExpr::Call { func, args, .. } => {
             if matches!(func.as_ref(), PyExpr::Name { id, .. }
-                if id == SNAIL_SUBPROCESS_CAPTURE || id == SNAIL_SUBPROCESS_STATUS)
+                if id == SNAIL_SUBPROCESS_CAPTURE_CLASS || id == SNAIL_SUBPROCESS_STATUS_CLASS)
             {
                 return true;
             }
@@ -2502,14 +2558,34 @@ impl PythonWriter {
     fn write_snail_subprocess_helpers(&mut self) {
         self.write_line("import subprocess");
         self.write_line("");
-        self.write_line(&format!("def {}(cmd):", SNAIL_SUBPROCESS_CAPTURE));
+
+        // Write __SnailSubprocessCapture class
+        self.write_line(&format!("class {}:", SNAIL_SUBPROCESS_CAPTURE_CLASS));
+        self.indent += 1;
+        self.write_line("def __init__(self, cmd):");
+        self.indent += 1;
+        self.write_line("self.cmd = cmd");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line("def __pipeline__(self, input_data):");
         self.indent += 1;
         self.write_line("try:");
         self.indent += 1;
-        self.write_line(
-            "completed = subprocess.run(cmd, shell=True, check=True, text=True, stdout=subprocess.PIPE)",
-        );
-        self.write_line("return completed.stdout.strip()");
+        self.write_line("if input_data is None:");
+        self.indent += 1;
+        self.write_line("# No stdin - run normally");
+        self.write_line("completed = subprocess.run(self.cmd, shell=True, check=True, text=True, stdout=subprocess.PIPE)");
+        self.indent -= 1;
+        self.write_line("else:");
+        self.indent += 1;
+        self.write_line("# Pipe input to stdin");
+        self.write_line("if not isinstance(input_data, (str, bytes)):");
+        self.indent += 1;
+        self.write_line("input_data = str(input_data)");
+        self.indent -= 1;
+        self.write_line("completed = subprocess.run(self.cmd, shell=True, check=True, text=True, input=input_data, stdout=subprocess.PIPE)");
+        self.indent -= 1;
+        self.write_line("return completed.stdout.rstrip('\\n')");
         self.indent -= 1;
         self.write_line("except subprocess.CalledProcessError as exc:");
         self.indent += 1;
@@ -2519,13 +2595,37 @@ impl PythonWriter {
         self.indent -= 1;
         self.write_line("exc.__fallback__ = __fallback");
         self.write_line("raise");
-        self.indent -= 2;
+        self.indent -= 3;
         self.write_line("");
-        self.write_line(&format!("def {}(cmd):", SNAIL_SUBPROCESS_STATUS));
+
+        // Write __SnailSubprocessStatus class
+        self.write_line(&format!("class {}:", SNAIL_SUBPROCESS_STATUS_CLASS));
+        self.indent += 1;
+        self.write_line("def __init__(self, cmd):");
+        self.indent += 1;
+        self.write_line("self.cmd = cmd");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line("def __pipeline__(self, input_data):");
         self.indent += 1;
         self.write_line("try:");
         self.indent += 1;
-        self.write_line("subprocess.run(cmd, shell=True, check=True)");
+        self.write_line("if input_data is None:");
+        self.indent += 1;
+        self.write_line("# No stdin - run normally");
+        self.write_line("subprocess.run(self.cmd, shell=True, check=True)");
+        self.indent -= 1;
+        self.write_line("else:");
+        self.indent += 1;
+        self.write_line("# Pipe input to stdin");
+        self.write_line("if not isinstance(input_data, (str, bytes)):");
+        self.indent += 1;
+        self.write_line("input_data = str(input_data)");
+        self.indent -= 1;
+        self.write_line(
+            "subprocess.run(self.cmd, shell=True, check=True, text=True, input=input_data)",
+        );
+        self.indent -= 1;
         self.write_line("return 0");
         self.indent -= 1;
         self.write_line("except subprocess.CalledProcessError as exc:");
@@ -2536,7 +2636,7 @@ impl PythonWriter {
         self.indent -= 1;
         self.write_line("exc.__fallback__ = __fallback");
         self.write_line("raise");
-        self.indent -= 2;
+        self.indent -= 3;
     }
 
     fn write_vendored_jmespath(&mut self) {

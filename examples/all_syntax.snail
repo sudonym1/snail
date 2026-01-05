@@ -91,6 +91,11 @@ try {
 assert echoed == "default"
 status_ok = @(echo ready)
 status_fail = @(false)?
+# Subprocess pipelines
+piped = "test" | $(cat)
+assert piped == "test"
+chained = "a\nb" | $(grep a) | $(cat)
+assert chained == "a"
 first = data[0]
 mid = data[1:3]
 head = data[:2]

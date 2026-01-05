@@ -93,7 +93,7 @@ fn awk_subprocess_interpolates_field_vars_in_string_literals() {
     let module = lower_awk_program(&program).expect("awk program should lower");
     let python = python_source(&module);
 
-    assert!(python.contains("__snail_subprocess_capture"));
+    assert!(python.contains("__SnailSubprocessCapture"));
     assert!(python.contains("__snail_fields[1]"));
 }
 

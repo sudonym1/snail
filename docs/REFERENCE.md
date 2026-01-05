@@ -151,7 +151,8 @@ In awk mode, regex patterns can stand alone. A bare `/pattern/` matches against
 block.
 
 ## Subprocess expressions
-Snail provides succinct subprocess helpers:
+Snail provides succinct subprocess helpers that work seamlessly with the pipeline
+operator:
 - `$(<command>)` runs the command, captures stdout, and returns it as a string.
   It raises on non-zero exit unless a fallback is provided.
 - `@(<command>)` runs the command without capturing output and returns `0` on
@@ -166,6 +167,27 @@ echoed = $(echo {cmd_name})
 status_ok = @(echo ready)
 status_fail = @(false)?           # yields return code because of __fallback__
 ```
+
+### Subprocess pipelines
+Subprocess expressions implement `__pipeline__`, enabling data to be piped to
+their stdin:
+```snail
+# Pipe string to command
+result = "hello" | $(cat)         # "hello"
+
+# Chain multiple commands
+output = "foo\nbar" | $(grep foo) | $(wc -w)  # "1"
+
+# Pipe any data type (auto-converted to string)
+number = 42 | $(cat)              # "42"
+
+# Works with @() too
+"data" | @(cat > /tmp/file)       # writes to file, returns 0
+```
+
+When used standalone, subprocess expressions run with no stdin (current behavior).
+When used on the right side of `|`, the left-hand value is piped to the command's
+stdin.
 
 ## JSON queries
 Snail provides first-class JSON support through JMESPath queries using the

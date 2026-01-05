@@ -351,7 +351,7 @@ fn auto_prints_string_expression() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(stdout.trim(), "'hello world'");
+    assert_eq!(stdout.trim(), "hello world");
 }
 
 #[test]
@@ -513,4 +513,84 @@ fn multiple_statements_last_with_semicolon() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn subprocess_pipeline_pipes_string_to_stdin() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#"result = "hello world" | $(cat); print(result)"#])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "hello world");
+}
+
+#[test]
+fn subprocess_pipeline_chains_multiple_commands() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#"result = "foo\nbar\nfoo" | $(grep foo) | $(wc -w); print(result)"#])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "2");
+}
+
+#[test]
+fn subprocess_pipeline_works_with_status_operator() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#""test" | @(cat > /dev/null); print("done")"#])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "done");
+}
+
+#[test]
+fn subprocess_pipeline_converts_non_string_types() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#"result = 42 | $(cat); print(result)"#])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "42");
+}
+
+#[test]
+fn subprocess_without_pipeline_still_works() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#"result = $(echo "test"); print(result)"#])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "test");
 }

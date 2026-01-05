@@ -429,10 +429,11 @@ code = @(echo ok)
     let python = snail_to_python(source);
     assert_python_compiles(&python);
 
-    // Verify helper functions are generated
+    // Verify helper classes are generated
     assert!(python.contains("import subprocess"));
-    assert!(python.contains("def __snail_subprocess_capture"));
-    assert!(python.contains("def __snail_subprocess_status"));
+    assert!(python.contains("class __SnailSubprocessCapture"));
+    assert!(python.contains("class __SnailSubprocessStatus"));
+    assert!(python.contains("def __pipeline__"));
     assert!(python.contains("shell=True"));
 }
 
