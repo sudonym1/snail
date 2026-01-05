@@ -14,7 +14,7 @@ const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"),
     name = "snail",
     version = VERSION,
     about = "Snail programming language interpreter",
-    override_usage = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]...\n       snail update",
+    override_usage = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]...",
     trailing_var_arg = true,
     disable_version_flag = true
 )]
@@ -73,11 +73,6 @@ fn run() -> Result<(), String> {
     }
 
     if cli.update {
-        return self_update();
-    }
-
-    // Also check if first arg is "update" for convenience
-    if cli.args.first().map(|s| s.as_str()) == Some("update") {
         return self_update();
     }
 
