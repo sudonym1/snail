@@ -25,6 +25,16 @@ const SNAIL_AWK_FNR_PYVAR: &str = "__snail_fnr_user";
 const SNAIL_AWK_PATH_PYVAR: &str = "__snail_path_user";
 const SNAIL_AWK_MATCH_PYVAR: &str = "__snail_match";
 
+// Vendored jmespath library
+const JMESPATH_EXCEPTIONS: &str = include_str!("../vendored/jmespath/exceptions.py");
+const JMESPATH_COMPAT: &str = include_str!("../vendored/jmespath/compat.py");
+const JMESPATH_AST: &str = include_str!("../vendored/jmespath/ast.py");
+const JMESPATH_LEXER: &str = include_str!("../vendored/jmespath/lexer.py");
+const JMESPATH_FUNCTIONS: &str = include_str!("../vendored/jmespath/functions.py");
+const JMESPATH_VISITOR: &str = include_str!("../vendored/jmespath/visitor.py");
+const JMESPATH_PARSER: &str = include_str!("../vendored/jmespath/parser.py");
+const JMESPATH_INIT: &str = include_str!("../vendored/jmespath/__init__.py");
+
 fn injected_py_name(name: &str) -> Option<&'static str> {
     match name {
         SNAIL_AWK_LINE => Some(SNAIL_AWK_LINE_PYVAR),
@@ -1091,7 +1101,10 @@ fn lower_expr_with_exception(
 
                 // Special handling for JsonQuery on RHS: just create the object, don't call __pipeline__(None)
                 let right_obj = match right.as_ref() {
-                    Expr::JsonQuery { query, span: q_span } => {
+                    Expr::JsonQuery {
+                        query,
+                        span: q_span,
+                    } => {
                         // Create just the __SnailJsonQuery(query) object
                         PyExpr::Call {
                             func: Box::new(PyExpr::Name {
@@ -1110,7 +1123,7 @@ fn lower_expr_with_exception(
                             span: q_span.clone(),
                         }
                     }
-                    _ => lower_expr_with_exception(right, exception_name)?
+                    _ => lower_expr_with_exception(right, exception_name)?,
                 };
 
                 Ok(PyExpr::Call {
@@ -1298,9 +1311,7 @@ fn lower_expr_with_exception(
                     span: span.clone(),
                 }),
                 args: vec![PyArgument::Positional {
-                    value: PyExpr::None {
-                        span: span.clone(),
-                    },
+                    value: PyExpr::None { span: span.clone() },
                     span: span.clone(),
                 }],
                 span: span.clone(),
@@ -1903,8 +1914,7 @@ fn stmt_uses_snail_json(stmt: &PyStmt) -> bool {
                 || from.as_ref().is_some_and(expr_uses_snail_json)
         }
         PyStmt::Assert { test, message, .. } => {
-            expr_uses_snail_json(test)
-                || message.as_ref().is_some_and(expr_uses_snail_json)
+            expr_uses_snail_json(test) || message.as_ref().is_some_and(expr_uses_snail_json)
         }
         PyStmt::Delete { targets, .. } => targets.iter().any(expr_uses_snail_json),
         PyStmt::Import { .. }
@@ -1924,16 +1934,12 @@ fn block_uses_snail_json(block: &[PyStmt]) -> bool {
 }
 
 fn handler_uses_snail_json(handler: &PyExceptHandler) -> bool {
-    handler
-        .type_name
-        .as_ref()
-        .is_some_and(expr_uses_snail_json)
+    handler.type_name.as_ref().is_some_and(expr_uses_snail_json)
         || block_uses_snail_json(&handler.body)
 }
 
 fn with_item_uses_snail_json(item: &PyWithItem) -> bool {
-    expr_uses_snail_json(&item.context)
-        || item.target.as_ref().is_some_and(expr_uses_snail_json)
+    expr_uses_snail_json(&item.context) || item.target.as_ref().is_some_and(expr_uses_snail_json)
 }
 
 fn argument_uses_snail_json(arg: &PyArgument) -> bool {
@@ -1966,9 +1972,7 @@ fn expr_uses_snail_json(expr: &PyExpr) -> bool {
         PyExpr::IfExpr {
             test, body, orelse, ..
         } => {
-            expr_uses_snail_json(test)
-                || expr_uses_snail_json(body)
-                || expr_uses_snail_json(orelse)
+            expr_uses_snail_json(test) || expr_uses_snail_json(body) || expr_uses_snail_json(orelse)
         }
         PyExpr::Lambda { body, .. } => expr_uses_snail_json(body),
         PyExpr::Call { func, args, .. } => {
@@ -1987,9 +1991,9 @@ fn expr_uses_snail_json(expr: &PyExpr) -> bool {
         PyExpr::List { elements, .. } | PyExpr::Tuple { elements, .. } => {
             elements.iter().any(expr_uses_snail_json)
         }
-        PyExpr::Dict { entries, .. } => entries.iter().any(|(key, value)| {
-            expr_uses_snail_json(key) || expr_uses_snail_json(value)
-        }),
+        PyExpr::Dict { entries, .. } => entries
+            .iter()
+            .any(|(key, value)| expr_uses_snail_json(key) || expr_uses_snail_json(value)),
         PyExpr::Set { elements, .. } => elements.iter().any(expr_uses_snail_json),
         PyExpr::ListComp {
             element, iter, ifs, ..
@@ -2374,9 +2378,122 @@ impl PythonWriter {
         self.indent -= 2;
     }
 
+    fn write_vendored_jmespath(&mut self) {
+        // Helper to escape Python source for embedding in a string
+        fn escape_py_source(source: &str) -> String {
+            source
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+        }
+
+        self.write_line("# Vendored jmespath library (embedded to avoid external dependency)");
+        self.write_line("import sys");
+        self.write_line("if 'jmespath' not in sys.modules:");
+        self.indent += 1;
+        self.write_line("import types");
+        self.write_line("");
+
+        // Create jmespath package
+        self.write_line("__jmespath = types.ModuleType('jmespath')");
+        self.write_line("__jmespath.__package__ = 'jmespath'");
+        self.write_line("__jmespath.__path__ = []");
+        self.write_line("sys.modules['jmespath'] = __jmespath");
+        self.write_line("");
+
+        // Inject each submodule using compile+exec (in dependency order)
+        self.write_line("# Inject jmespath.compat (base module)");
+        self.write_line("__mod = types.ModuleType('jmespath.compat')");
+        self.write_line("__mod.__package__ = 'jmespath'");
+        self.write_line(&format!(
+            "exec(compile(\"{}\", 'jmespath/compat.py', 'exec'), __mod.__dict__)",
+            escape_py_source(JMESPATH_COMPAT)
+        ));
+        self.write_line("sys.modules['jmespath.compat'] = __mod");
+        self.write_line("__jmespath.compat = __mod");
+        self.write_line("");
+
+        self.write_line("# Inject jmespath.exceptions");
+        self.write_line("__mod = types.ModuleType('jmespath.exceptions')");
+        self.write_line("__mod.__package__ = 'jmespath'");
+        self.write_line(&format!(
+            "exec(compile(\"{}\", 'jmespath/exceptions.py', 'exec'), __mod.__dict__)",
+            escape_py_source(JMESPATH_EXCEPTIONS)
+        ));
+        self.write_line("sys.modules['jmespath.exceptions'] = __mod");
+        self.write_line("__jmespath.exceptions = __mod");
+        self.write_line("");
+
+        self.write_line("# Inject jmespath.ast");
+        self.write_line("__mod = types.ModuleType('jmespath.ast')");
+        self.write_line("__mod.__package__ = 'jmespath'");
+        self.write_line(&format!(
+            "exec(compile(\"{}\", 'jmespath/ast.py', 'exec'), __mod.__dict__)",
+            escape_py_source(JMESPATH_AST)
+        ));
+        self.write_line("sys.modules['jmespath.ast'] = __mod");
+        self.write_line("__jmespath.ast = __mod");
+        self.write_line("");
+
+        self.write_line("# Inject jmespath.lexer");
+        self.write_line("__mod = types.ModuleType('jmespath.lexer')");
+        self.write_line("__mod.__package__ = 'jmespath'");
+        self.write_line(&format!(
+            "exec(compile(\"{}\", 'jmespath/lexer.py', 'exec'), __mod.__dict__)",
+            escape_py_source(JMESPATH_LEXER)
+        ));
+        self.write_line("sys.modules['jmespath.lexer'] = __mod");
+        self.write_line("__jmespath.lexer = __mod");
+        self.write_line("");
+
+        self.write_line("# Inject jmespath.functions");
+        self.write_line("__mod = types.ModuleType('jmespath.functions')");
+        self.write_line("__mod.__package__ = 'jmespath'");
+        self.write_line(&format!(
+            "exec(compile(\"{}\", 'jmespath/functions.py', 'exec'), __mod.__dict__)",
+            escape_py_source(JMESPATH_FUNCTIONS)
+        ));
+        self.write_line("sys.modules['jmespath.functions'] = __mod");
+        self.write_line("__jmespath.functions = __mod");
+        self.write_line("");
+
+        self.write_line("# Inject jmespath.visitor");
+        self.write_line("__mod = types.ModuleType('jmespath.visitor')");
+        self.write_line("__mod.__package__ = 'jmespath'");
+        self.write_line(&format!(
+            "exec(compile(\"{}\", 'jmespath/visitor.py', 'exec'), __mod.__dict__)",
+            escape_py_source(JMESPATH_VISITOR)
+        ));
+        self.write_line("sys.modules['jmespath.visitor'] = __mod");
+        self.write_line("__jmespath.visitor = __mod");
+        self.write_line("");
+
+        self.write_line("# Inject jmespath.parser");
+        self.write_line("__mod = types.ModuleType('jmespath.parser')");
+        self.write_line("__mod.__package__ = 'jmespath'");
+        self.write_line(&format!(
+            "exec(compile(\"{}\", 'jmespath/parser.py', 'exec'), __mod.__dict__)",
+            escape_py_source(JMESPATH_PARSER)
+        ));
+        self.write_line("sys.modules['jmespath.parser'] = __mod");
+        self.write_line("__jmespath.parser = __mod");
+        self.write_line("");
+
+        self.write_line("# Inject jmespath main module");
+        self.write_line(&format!(
+            "exec(compile(\"{}\", 'jmespath/__init__.py', 'exec'), __jmespath.__dict__)",
+            escape_py_source(JMESPATH_INIT)
+        ));
+        self.write_line("");
+
+        self.indent -= 1;
+        self.write_line("");
+    }
+
     fn write_snail_json_helpers(&mut self) {
-        self.write_line("import json");
+        self.write_vendored_jmespath();
         self.write_line("import jmespath");
+        self.write_line("import json");
         self.write_line("import sys");
         self.write_line("");
         self.write_line(&format!("class {}:", SNAIL_JSON_QUERY_CLASS));
@@ -2417,7 +2534,9 @@ impl PythonWriter {
         self.write_line("data = json.loads(content)");
         self.indent -= 1;
         self.write_line("# Must be JSON-native type (dict, list, str, int, float, bool, None)");
-        self.write_line("elif not isinstance(data, (dict, list, str, int, float, bool, type(None))):");
+        self.write_line(
+            "elif not isinstance(data, (dict, list, str, int, float, bool, type(None))):",
+        );
         self.indent += 1;
         self.write_line("raise TypeError(f\"@j pipeline input must be JSON-native type, got {type(data).__name__}\")");
         self.indent -= 1;

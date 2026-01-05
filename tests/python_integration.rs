@@ -569,16 +569,6 @@ result = 5 | Doubler()
 fn json_query_works_with_dict() {
     pyo3::prepare_freethreaded_python();
 
-    // Skip test if jmespath is not installed
-    let has_jmespath = Python::with_gil(|py| {
-        py.run_bound("import jmespath", None, None).is_ok()
-    });
-
-    if !has_jmespath {
-        eprintln!("Skipping JSON test: jmespath not installed (pip install jmespath)");
-        return;
-    }
-
     let source = r#"
 data = {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]}
 names = data | @j(users[*].name)
