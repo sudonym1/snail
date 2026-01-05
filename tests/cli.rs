@@ -433,3 +433,84 @@ fn flag_p_disables_auto_print_for_file() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout.trim(), "");
 }
+
+#[test]
+fn semicolon_suppresses_auto_print_one_liner() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe).args(["42;"]).output().expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn semicolon_suppresses_auto_print_in_file() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let mut file = NamedTempFile::with_suffix(".snail").expect("create temp file");
+    writeln!(file, "[1, 2, 3];").expect("write to temp file");
+    let path = file.path().to_str().unwrap();
+
+    let output = Command::new(exe)
+        .args(["-f", path])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn semicolon_with_newline_suppresses_auto_print() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["42 ; "])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn multiple_statements_last_without_semicolon() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["x = 10; y = 20; x + y"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "30");
+}
+
+#[test]
+fn multiple_statements_last_with_semicolon() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["x = 10; y = 20; x + y;"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "");
+}

@@ -151,6 +151,7 @@ pub enum PyStmt {
     },
     Expr {
         value: PyExpr,
+        semicolon_terminated: bool,
         span: SourceSpan,
     },
 }
@@ -609,8 +610,13 @@ fn lower_stmt(stmt: &Stmt) -> Result<PyStmt, LowerError> {
             value: lower_expr(value)?,
             span: span.clone(),
         }),
-        Stmt::Expr { value, span } => Ok(PyStmt::Expr {
+        Stmt::Expr {
+            value,
+            semicolon_terminated,
+            span,
+        } => Ok(PyStmt::Expr {
             value: lower_expr(value)?,
+            semicolon_terminated: *semicolon_terminated,
             span: span.clone(),
         }),
     }
@@ -762,7 +768,17 @@ fn wrap_block_with_auto_print(mut block: Vec<PyStmt>, auto_print: bool) -> Vec<P
     }
 
     let last_idx = block.len() - 1;
-    if let PyStmt::Expr { value, span } = &block[last_idx] {
+    if let PyStmt::Expr {
+        value,
+        semicolon_terminated,
+        span,
+    } = &block[last_idx]
+    {
+        // Don't auto-print if the statement was explicitly terminated with a semicolon
+        if *semicolon_terminated {
+            return block;
+        }
+
         // Clone the data before modifying the block
         let expr_code = value.clone();
         let span = span.clone();
@@ -823,6 +839,7 @@ fn wrap_block_with_auto_print(mut block: Vec<PyStmt>, auto_print: bool) -> Vec<P
                         }],
                         span: span.clone(),
                     },
+                    semicolon_terminated: false,
                     span: span.clone(),
                 },
             ],
@@ -902,6 +919,7 @@ fn awk_default_print(span: &SourceSpan) -> PyStmt {
             args: vec![pos_arg(name_expr(SNAIL_AWK_LINE_PYVAR, span), span)],
             span: span.clone(),
         },
+        semicolon_terminated: false,
         span: span.clone(),
     }
 }
@@ -1720,15 +1738,25 @@ pub fn python_source_with_auto_print(module: &PyModule, auto_print_last: bool) -
         }
 
         // Check if last statement is an expression
-        if let PyStmt::Expr { value, .. } = &module.body[last_idx] {
-            // Generate code to capture and pretty-print the last expression
-            let expr_code = expr_source(value);
-            writer.write_line(&format!("__snail_last_result = {}", expr_code));
-            writer.write_line("if __snail_last_result is not None:");
-            writer.indent += 1;
-            writer.write_line("import pprint");
-            writer.write_line("pprint.pprint(__snail_last_result)");
-            writer.indent -= 1;
+        if let PyStmt::Expr {
+            value,
+            semicolon_terminated,
+            ..
+        } = &module.body[last_idx]
+        {
+            // Don't auto-print if the statement was explicitly terminated with a semicolon
+            if *semicolon_terminated {
+                writer.write_stmt(&module.body[last_idx]);
+            } else {
+                // Generate code to capture and pretty-print the last expression
+                let expr_code = expr_source(value);
+                writer.write_line(&format!("__snail_last_result = {}", expr_code));
+                writer.write_line("if __snail_last_result is not None:");
+                writer.indent += 1;
+                writer.write_line("import pprint");
+                writer.write_line("pprint.pprint(__snail_last_result)");
+                writer.indent -= 1;
+            }
         } else {
             // Last statement is not an expression, write it normally
             writer.write_stmt(&module.body[last_idx]);

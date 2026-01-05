@@ -105,6 +105,7 @@ pub enum Stmt {
     },
     Expr {
         value: Expr,
+        semicolon_terminated: bool,
         span: SourceSpan,
     },
 }
