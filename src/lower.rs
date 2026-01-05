@@ -2226,7 +2226,7 @@ fn expr_uses_structured_accessor(expr: &PyExpr) -> bool {
         PyExpr::Lambda { body, .. } => expr_uses_structured_accessor(body),
         PyExpr::Call { func, args, .. } => {
             if matches!(func.as_ref(), PyExpr::Name { id, .. }
-                if id == SNAIL_STRUCTURED_ACCESSOR_CLASS)
+                if id == SNAIL_STRUCTURED_ACCESSOR_CLASS || id == "json")
             {
                 return true;
             }

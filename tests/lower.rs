@@ -500,3 +500,14 @@ fn lowers_json_with_structured_accessor() {
     // Should NOT contain old __SnailJsonQuery
     assert!(!python.contains("__SnailJsonQuery"));
 }
+
+#[test]
+fn lowers_json_call_without_structured_accessor() {
+    let source = r#"json()"#;
+    let python = snail_to_python(source);
+
+    assert!(python.contains("def json("));
+    assert!(python.contains("class __SnailJsonObject"));
+    assert!(python.contains("def __structured__"));
+    assert!(python.contains("class __SnailStructuredAccessor"));
+}
