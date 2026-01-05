@@ -355,7 +355,7 @@ fn auto_prints_string_expression() {
 }
 
 #[test]
-fn does_not_auto_print_when_running_from_file() {
+fn auto_prints_when_running_from_file() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let mut file = NamedTempFile::with_suffix(".snail").expect("create temp file");
     writeln!(file, "42").expect("write to temp file");
@@ -371,12 +371,12 @@ fn does_not_auto_print_when_running_from_file() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // File mode should NOT auto-print the expression
-    assert_eq!(stdout.trim(), "");
+    // File mode should auto-print by default
+    assert_eq!(stdout.trim(), "42");
 }
 
 #[test]
-fn does_not_auto_print_file_with_expression_after_statements() {
+fn auto_prints_file_with_expression_after_statements() {
     let exe = env!("CARGO_BIN_EXE_snail");
     let mut file = NamedTempFile::with_suffix(".snail").expect("create temp file");
     writeln!(file, "x = 10").expect("write to temp file");
@@ -394,6 +394,42 @@ fn does_not_auto_print_file_with_expression_after_statements() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // File mode should NOT auto-print even if last line is expression
+    // File mode should auto-print by default
+    assert_eq!(stdout.trim(), "30");
+}
+
+#[test]
+fn flag_p_disables_auto_print_for_one_liner() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["-P", "42"])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "");
+}
+
+#[test]
+fn flag_p_disables_auto_print_for_file() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let mut file = NamedTempFile::with_suffix(".snail").expect("create temp file");
+    writeln!(file, "42").expect("write to temp file");
+    let path = file.path().to_str().unwrap();
+
+    let output = Command::new(exe)
+        .args(["-P", "-f", path])
+        .output()
+        .expect("run snail");
+    assert!(
+        output.status.success(),
+        "snail failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(stdout.trim(), "");
 }

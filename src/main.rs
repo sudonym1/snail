@@ -30,6 +30,10 @@ struct Cli {
     #[arg(short = 'p', long = "python")]
     python: bool,
 
+    /// Disable auto-printing of last expression result
+    #[arg(short = 'P')]
+    no_auto_print: bool,
+
     /// Input file and arguments passed to the script
     #[arg(allow_hyphen_values = true)]
     args: Vec<String>,
@@ -88,7 +92,7 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
 
-    match run_source(&input) {
+    match run_source(&input, !cli.no_auto_print) {
         Ok(()) => Ok(()),
         Err(CliError::Snail(err)) => Err(format_snail_error(&err, &input.filename)),
         Err(CliError::Python(err)) => {
@@ -114,10 +118,8 @@ enum CliError {
     Python(PyErr),
 }
 
-fn run_source(input: &CliInput) -> Result<(), CliError> {
-    // Only auto-print for one-liners (CLI mode), not for files
-    let is_one_liner = input.filename == "<cmd>";
-    let python = compile_snail_source_with_auto_print(&input.source, input.mode, is_one_liner)
+fn run_source(input: &CliInput, auto_print: bool) -> Result<(), CliError> {
+    let python = compile_snail_source_with_auto_print(&input.source, input.mode, auto_print)
         .map_err(CliError::Snail)?;
 
     Python::with_gil(|py| -> Result<(), CliError> {
