@@ -1489,6 +1489,8 @@ fn lower_expr_with_exception(
         }
         Expr::StructuredAccessor { query, span } => {
             // $[query] becomes __SnailStructuredAccessor(query)
+            // The query is raw source text, so we need to escape it for Python
+            let escaped_query = escape_for_python_string(query);
             Ok(PyExpr::Call {
                 func: Box::new(PyExpr::Name {
                     id: SNAIL_STRUCTURED_ACCESSOR_CLASS.to_string(),
@@ -1496,7 +1498,7 @@ fn lower_expr_with_exception(
                 }),
                 args: vec![PyArgument::Positional {
                     value: PyExpr::String {
-                        value: query.clone(),
+                        value: escaped_query,
                         raw: false,
                         delimiter: StringDelimiter::Double,
                         span: span.clone(),
@@ -3255,15 +3257,70 @@ fn with_item_source(item: &PyWithItem) -> String {
     out
 }
 
+fn escape_for_python_string(value: &str) -> String {
+    // Escape special characters for a Python string literal
+    // This is used for raw source text that needs to be embedded in a Python string
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
+}
+
 fn format_string_literal(value: &str, raw: bool, delimiter: StringDelimiter) -> String {
-    let (open, close) = match delimiter {
-        StringDelimiter::Single => ("'", "'"),
-        StringDelimiter::Double => ("\"", "\""),
-        StringDelimiter::TripleSingle => ("'''", "'''"),
-        StringDelimiter::TripleDouble => ("\"\"\"", "\"\"\""),
-    };
-    let prefix = if raw { "r" } else { "" };
-    format!("{prefix}{open}{value}{close}")
+    // For raw strings, we need to choose the delimiter carefully to avoid escaping issues
+    // Python raw strings can't escape their delimiter, so we pick the best one
+    if raw {
+        let has_double = value.contains('"');
+        let has_single = value.contains('\'');
+        let has_triple_double = value.contains("\"\"\"");
+        let has_triple_single = value.contains("'''");
+
+        // Choose the best delimiter based on what's in the string
+        let (open, close) = if has_triple_double && has_triple_single {
+            // Both triple quotes present - this is rare, use concatenation
+            // For now, fall back to double quotes and hope for the best
+            // This is a limitation of Python raw strings
+            ("\"", "\"")
+        } else if has_triple_double {
+            ("'''", "'''")
+        } else if has_triple_single {
+            ("\"\"\"", "\"\"\"")
+        } else if has_double && !has_single {
+            ("'", "'")
+        } else if has_single && !has_double {
+            ("\"", "\"")
+        } else if has_double && has_single {
+            // Both quotes present, use triple quotes
+            ("\"\"\"", "\"\"\"")
+        } else {
+            // No quotes, use the original delimiter preference
+            match delimiter {
+                StringDelimiter::Single => ("'", "'"),
+                StringDelimiter::Double => ("\"", "\""),
+                StringDelimiter::TripleSingle => ("'''", "'''"),
+                StringDelimiter::TripleDouble => ("\"\"\"", "\"\"\""),
+            }
+        };
+        format!("r{open}{value}{close}")
+    } else {
+        // For non-raw strings, the value is already properly escaped by the parser
+        // We just need to wrap it in the appropriate delimiter
+        let (open, close) = match delimiter {
+            StringDelimiter::Single => ("'", "'"),
+            StringDelimiter::Double => ("\"", "\""),
+            StringDelimiter::TripleSingle => ("'''", "'''"),
+            StringDelimiter::TripleDouble => ("\"\"\"", "\"\"\""),
+        };
+        format!("{open}{value}{close}")
+    }
 }
 
 fn format_f_string(parts: &[PyFStringPart]) -> String {

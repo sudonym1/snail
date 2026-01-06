@@ -32,7 +32,7 @@ struct Cli {
     python: bool,
 
     /// Disable auto-printing of last expression result
-    #[arg(short = 'P')]
+    #[arg(short = 'P', long = "no-print")]
     no_auto_print: bool,
 
     /// Print version
