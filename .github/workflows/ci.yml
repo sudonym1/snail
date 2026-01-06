@@ -21,12 +21,5 @@ jobs:
         run: cargo fmt --check
       - name: clippy
         run: cargo clippy -- -D warnings
-      - name: Discover libpython path
-        id: libpython
-        run: |
-          LIBPYTHON=$(python3 -c "import sysconfig, os; print(os.path.join(sysconfig.get_config_var('LIBDIR'), sysconfig.get_config_var('LDLIBRARY')))")
-          echo "path=$LIBPYTHON" >> $GITHUB_OUTPUT
       - name: test
         run: cargo test
-        env:
-          LD_PRELOAD: ${{ steps.libpython.outputs.path }}

@@ -2,24 +2,15 @@
 name = "snail"
 version = "0.1.0"
 edition = "2024"
-default-run = "snail"
 
 [lib]
 crate-type = ["rlib"]
-
-[[bin]]
-name = "snail-core"
-path = "src/main.rs"
-
-[[bin]]
-name = "snail"
-path = "src/launcher.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 pest = "2.7"
 pest_derive = "2.7"
-pyo3 = { version = "0.21", features = ["auto-initialize", "abi3-py310", "extension-module"] }
+pyo3 = { version = "0.21", features = ["auto-initialize"] }
 
 [dev-dependencies]
 tempfile = "3"
