@@ -1,2 +1,10 @@
 [env]
 PYO3_USE_ABI3_FORWARD_COMPATIBILITY = "1"
+
+# Allow undefined symbols at link time - they will be resolved at runtime
+# via LD_PRELOAD set by the snail launcher binary
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-args=-Wl,--unresolved-symbols=ignore-all"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "link-args=-Wl,--unresolved-symbols=ignore-all"]
