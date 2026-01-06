@@ -106,33 +106,9 @@ class Doubler {
 doubled = 21 | Doubler()  # yields 42
 ```
 
-#### Callable Pipeline Pattern
-
-To create an object that works both as a callable function and in pipelines, implement
-both `__call__` and `__pipeline__`. This pattern is used by Snail's built-in `json`:
-
-```snail
-class Parser {
-    def __call__(self, input) {
-        # Called when used as: parser("data")
-        return self._parse(input)
-    }
-    def __pipeline__(self, input) {
-        # Called when used as: "data" | parser
-        return self.__call__(input)
-    }
-    def _parse(self, input) { ... }
-}
-parser = Parser()
-
-# Both of these work:
-result = parser("data")   # direct call
-result = "data" | parser  # pipeline
-```
-
 ### JSON Queries with JMESPath
 
-Parse and query JSON data with the `json` parser and structured pipeline accessor:
+Parse and query JSON data with the `json()` function and structured pipeline accessor:
 
 ```snail
 # Parse JSON and query with $[jmespath]
@@ -140,11 +116,8 @@ data = json($(curl -s api.example.com/users))
 names = data | $[users[*].name]
 first_email = data | $[users[0].email]
 
-# json works in pipelines - data flows via __pipeline__
-result = r'{"foo": 12}' | json | $[foo]
-
-# Read JSON from stdin
-data = json()
+# Inline parsing and querying
+result = json('{"foo": 12}') | $[foo]
 ```
 
 ### Full Python Interoperability
