@@ -493,7 +493,10 @@ fn lowers_json_with_structured_accessor() {
     let source = r#"result = json() | $[users[0]]"#;
     let python = snail_to_python(source);
 
-    assert!(python.contains("def json("));
+    assert!(python.contains("class __SnailJsonParser"));
+    assert!(python.contains("def __call__(self, input=_sys.stdin)"));
+    assert!(python.contains("def __pipeline__(self, input)"));
+    assert!(python.contains("json = __SnailJsonParser()"));
     assert!(python.contains("class __SnailJsonObject"));
     assert!(python.contains("def __structured__"));
     assert!(python.contains("__SnailStructuredAccessor(\"users[0]\")"));
@@ -506,8 +509,23 @@ fn lowers_json_call_without_structured_accessor() {
     let source = r#"json()"#;
     let python = snail_to_python(source);
 
-    assert!(python.contains("def json("));
+    assert!(python.contains("class __SnailJsonParser"));
+    assert!(python.contains("def __call__(self, input=_sys.stdin)"));
+    assert!(python.contains("def __pipeline__(self, input)"));
+    assert!(python.contains("json = __SnailJsonParser()"));
     assert!(python.contains("class __SnailJsonObject"));
     assert!(python.contains("def __structured__"));
     assert!(python.contains("class __SnailStructuredAccessor"));
+}
+
+#[test]
+fn lowers_json_in_pipeline() {
+    // Test that json can be used directly in a pipeline: string | json
+    let source = r#"result = r'{"key": "value"}' | json"#;
+    let python = snail_to_python(source);
+
+    // The pipeline should call json.__pipeline__ with the string
+    assert!(python.contains("json.__pipeline__"));
+    assert!(python.contains("class __SnailJsonParser"));
+    assert!(python.contains("def __pipeline__(self, input)"));
 }

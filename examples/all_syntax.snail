@@ -251,7 +251,15 @@ assert names == ["Alice", "Bob"]
 simple = json(r'{"foo": 12}') | $[foo]
 assert simple == 12
 
-print("structured pipeline", first_name, names, simple)
+# json can also be used in a pipeline - the data flows to json via __pipeline__
+piped_json = r'{"key": "piped_value"}' | json
+assert piped_json.data["key"] == "piped_value"
+
+# Pipeline with query
+piped_with_query = r'{"items": [1, 2, 3]}' | json | $[items[1]]
+assert piped_with_query == 2
+
+print("structured pipeline", first_name, names, simple, piped_json, piped_with_query)
 
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)

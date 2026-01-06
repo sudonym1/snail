@@ -190,7 +190,7 @@ stdin.
 
 ## JSON queries
 Snail provides first-class JSON support through JMESPath queries using the
-`json()` function and `$[query]` structured pipeline accessor syntax:
+`json` parser and `$[query]` structured pipeline accessor syntax:
 
 ```snail
 # Parse JSON and query with $[jmespath]
@@ -202,7 +202,19 @@ names = json_obj | $[users[*].name]       # yields ["Alice", "Bob"]
 result = json(r'{"foo": 12}') | $[foo]    # yields 12
 ```
 
-The `json()` function parses a JSON string and returns a queryable object. The
+The `json` object can be called directly like a function, or used in a pipeline:
+
+```snail
+# Use json in a pipeline - data flows via __pipeline__
+data = r'{"key": "value"}' | json
+value = r'{"items": [1, 2, 3]}' | json | $[items[0]]  # yields 1
+
+# Read from stdin when called with no arguments
+data = json()  # reads JSON from stdin
+```
+
+The `json` object implements both `__call__` and `__pipeline__`, making it a
+callable that integrates seamlessly with Snail's pipeline operator. The
 `$[query]` accessor implements `__pipeline__` to apply JMESPath queries to the
 input data.
 

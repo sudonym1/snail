@@ -13,6 +13,7 @@ const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
 const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
 const SNAIL_STRUCTURED_ACCESSOR_CLASS: &str = "__SnailStructuredAccessor";
 const SNAIL_JSON_OBJECT_CLASS: &str = "__SnailJsonObject";
+const SNAIL_JSON_PARSER_CLASS: &str = "__SnailJsonParser";
 const SNAIL_AWK_LINE: &str = "$l";
 const SNAIL_AWK_FIELDS: &str = "$f";
 const SNAIL_AWK_NR: &str = "$n";
@@ -2830,8 +2831,13 @@ impl PythonWriter {
         self.indent -= 2;
         self.write_line("");
 
-        // Write json() function
-        self.write_line("def json(input=_sys.stdin):");
+        // Write __SnailJsonParser class - a callable that also supports __pipeline__
+        // This pattern allows `json('...')` and `'...' | json` to both work
+        self.write_line(&format!("class {}:", SNAIL_JSON_PARSER_CLASS));
+        self.indent += 1;
+        self.write_line("\"\"\"Parser that can be called directly or used in a pipeline.\"\"\"");
+        self.write_line("");
+        self.write_line("def __call__(self, input=_sys.stdin):");
         self.indent += 1;
         self.write_line("\"\"\"Parse JSON from various input sources.\"\"\"");
         self.write_line("# Handle different input types");
@@ -2871,6 +2877,16 @@ impl PythonWriter {
         self.write_line("");
         self.write_line(&format!("return {}(data)", SNAIL_JSON_OBJECT_CLASS));
         self.indent -= 1;
+        self.write_line("");
+        self.write_line("def __pipeline__(self, input):");
+        self.indent += 1;
+        self.write_line("\"\"\"Receive input from pipeline and parse as JSON.\"\"\"");
+        self.write_line("return self.__call__(input)");
+        self.indent -= 2;
+        self.write_line("");
+
+        // Create the json instance
+        self.write_line(&format!("json = {}()", SNAIL_JSON_PARSER_CLASS));
     }
 
     fn write_stmt(&mut self, stmt: &PyStmt) {
