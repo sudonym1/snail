@@ -190,27 +190,21 @@ stdin.
 
 ## JSON queries
 Snail provides first-class JSON support through JMESPath queries using the
-`@j(<query>)` syntax. The query body is treated as a raw string without
-interpolation:
+`json()` function and `$[query]` structured pipeline accessor syntax:
 
 ```snail
-# Query a Python dict directly
-data = {"users": [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]}
-names = data | @j(users[*].name)     # yields ["Alice", "Bob"]
-first_name = data | @j(users[0].name)  # yields "Alice"
+# Parse JSON and query with $[jmespath]
+json_obj = json(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}')
+first_name = json_obj | $[users[0].name]  # yields "Alice"
+names = json_obj | $[users[*].name]       # yields ["Alice", "Bob"]
 
-# Parse JSON from a string
-json_result = "{{\"foo\": 12}}" | @j(foo)  # yields 12
+# Inline parsing and querying
+result = json(r'{"foo": 12}') | $[foo]    # yields 12
 ```
 
-The `@j()` construct implements `__pipeline__` and handles multiple input types:
-- Python dicts and lists: queries them directly
-- Strings: attempts JSON parsing first, falls back to treating as a file path
-- File-like objects: reads and parses JSON content
-- `None`: reads and parses JSON from stdin
-
-This integrates naturally with Snail's pipeline operator for composable data
-transformations.
+The `json()` function parses a JSON string and returns a queryable object. The
+`$[query]` accessor implements `__pipeline__` to apply JMESPath queries to the
+input data.
 
 ## Assertions and deletion
 `assert` and `del` mirror Python. Assertions may include an optional message:

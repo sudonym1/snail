@@ -5,6 +5,10 @@
 <h1 align="center">Snail</h1>
 <p align="center"><em>What do you get when you shove a snake in a shell?</em></p>
 
+<h1>Snail, while I hope it is useful to myself and others, is my attempt at
+improving my knowledge of AI code developement. Things are probably broken
+in interesting and horrible ways.</h1>
+
 ---
 
 **Snail** is a programming language that compiles to Python, combining Python's power with Perl/awk-inspired syntax for quick scripts and one-liners. No more whitespace sensitivity—just curly braces and concise expressions.
@@ -37,8 +41,7 @@ greeting = $(echo hello {name})
 result = "foo\nbar\nbaz" | $(grep bar) | $(cat -n)
 
 # Check command status
-@(make build)?  # returns exit code on failure instead of raising
-```
+@(make build)?  # returns exit code on failure instead of raising ```
 
 ### Compact Error Handling
 
@@ -52,8 +55,9 @@ err = risky_operation()?
 value = parse_json(data):{}?
 details = fetch_url(url):"Error: {$e}"?
 
-# Chain safely
-config = load_config()? .get("key"):"default"?
+# Access attributes directly
+name = risky()?.__class__.__name__
+args = risky()?.args[0]
 ```
 
 ### Regex Literals
@@ -81,16 +85,38 @@ BEGIN { total = 0 }
 END { print("Sum:", total) }
 ```
 
-Built-in variables: `$l` (line), `$f` (fields), `$n` (line number), `$m` (last match).
+Built-in variables: `$l` (line), `$f` (fields), `$n` (line number), `$fn` (per-file line number), `$p` (file path), `$m` (last match).
+
+### Pipeline Operator
+
+The `|` operator enables data pipelining through objects that implement `__pipeline__`:
+
+```snail
+# Pipe data to subprocess stdin
+result = "hello\nworld" | $(grep hello)
+
+# Chain multiple transformations
+output = "foo\nbar" | $(grep foo) | $(wc -l)
+
+# Custom pipeline handlers
+class Doubler {
+    def __pipeline__(self, x) { return x * 2 }
+}
+doubled = 21 | Doubler()  # yields 42
+```
 
 ### JSON Queries with JMESPath
 
-Query JSON data directly in the pipeline:
+Parse and query JSON data with the `json()` function and structured pipeline accessor:
 
 ```snail
-data = $(curl -s api.example.com/users)
-names = data | @j(users[*].name)
-first_email = data | @j(users[0].email)
+# Parse JSON and query with $[jmespath]
+data = json($(curl -s api.example.com/users))
+names = data | $[users[*].name]
+first_email = data | $[users[0].email]
+
+# Inline parsing and querying
+result = json('{"foo": 12}') | $[foo]
 ```
 
 ### Full Python Interoperability
@@ -119,6 +145,9 @@ cat data.txt | snail --awk '/error/ { print($l) }'
 
 # See the generated Python
 snail --python "x = risky()? ; print(x)"
+
+# Self-update to latest release
+snail --update
 ```
 
 ## 📚 Documentation
