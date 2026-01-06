@@ -167,16 +167,103 @@ Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }
 
 See [extras/vim/README.md](extras/vim/README.md) for details. Tree-sitter grammar available in `extras/tree-sitter-snail/`.
 
-## 🛠️ Building
+## 🛠️ Building from Source
 
-Snail is written in Rust and uses pyo3 to execute generated Python:
+### Prerequisites
+
+**Python 3.10+** (required at build and runtime)
+
+Snail uses [pyo3](https://pyo3.rs) to execute generated Python code via CPython. You need Python 3.10 or later installed and available on your PATH.
+
+- **Ubuntu/Debian**: `sudo apt install python3 python3-dev`
+- **Fedora/RHEL**: `sudo dnf install python3 python3-devel`
+- **macOS**: `brew install python@3.12` (or use the system Python 3)
+- **Windows**: Download from [python.org](https://www.python.org/downloads/)
+
+**No Python packages required**: Snail vendors all necessary Python libraries (jmespath) directly into the compiled binary.
+
+**Rust toolchain** (cargo and rustc)
+
+Install Rust using [rustup](https://rustup.rs):
 
 ```bash
-cargo build
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+This installs `cargo` (Rust's package manager) and `rustc` (the Rust compiler). After installation, restart your shell or run:
+
+```bash
+source $HOME/.cargo/env
+```
+
+Verify installation:
+
+```bash
+cargo --version  # Should show cargo 1.70+
+rustc --version  # Should show rustc 1.70+
+python3 --version  # Should show Python 3.10+
+```
+
+### Build and Install
+
+```bash
+# Clone the repository
+git clone https://github.com/sudonym1/snail.git
+cd snail
+
+# Build the release binary
+cargo build --release
+
+# Install to ~/.local/bin (make sure it's in your PATH)
+cp target/release/snail ~/.local/bin/
+cp target/release/snail-core ~/.local/bin/
+
+# Or use the Makefile (runs tests, builds, and installs)
+make install
+```
+
+Add `~/.local/bin` to your PATH if it's not already there:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Running Tests
+
+```bash
+# Run all tests (parser, lowering, awk mode, CLI)
 cargo test
 
-# Requires Python 3 on PATH
+# Run specific test suites
+cargo test parser
+cargo test awk
+cargo test cli
+
+# Check code formatting and linting
+cargo fmt --check
+cargo clippy -- -D warnings
+```
+
+### Troubleshooting
+
+**If you see "PYO3_PYTHON not set" errors:**
+
+```bash
 export PYO3_PYTHON=python3
+cargo build --release
+```
+
+**If tests fail with library loading errors on Linux:**
+
+The Makefile handles this automatically, but if running `cargo test` directly:
+
+```bash
+# Discover libpython path
+LIBPYTHON=$(python3 -c "import sysconfig, os; print(os.path.join(sysconfig.get_config_var('LIBDIR'), sysconfig.get_config_var('LDLIBRARY')))")
+
+# Run tests with LD_PRELOAD
+LD_PRELOAD="$LIBPYTHON" cargo test
 ```
 
 ## 📋 Project Status
