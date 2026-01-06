@@ -14,7 +14,7 @@ const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"),
     name = "snail",
     version = VERSION,
     about = "Snail programming language interpreter",
-    override_usage = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]...\n       snail update",
+    override_usage = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]...",
     trailing_var_arg = true,
     disable_version_flag = true
 )]
@@ -38,10 +38,6 @@ struct Cli {
     /// Print version
     #[arg(short = 'v', long = "version")]
     version: bool,
-
-    /// Self-update to the latest release from GitHub
-    #[arg(long = "update")]
-    update: bool,
 
     /// Input file and arguments passed to the script
     #[arg(allow_hyphen_values = true)]
@@ -70,15 +66,6 @@ fn run() -> Result<(), String> {
     if cli.version {
         println!("{VERSION}");
         return Ok(());
-    }
-
-    if cli.update {
-        return self_update();
-    }
-
-    // Also check if first arg is "update" for convenience
-    if cli.args.first().map(|s| s.as_str()) == Some("update") {
-        return self_update();
     }
 
     let mode = if cli.awk {
@@ -188,109 +175,4 @@ fn flush_python_io(sys: &Bound<'_, PyModule>) {
     }
     let _ = io::stdout().flush();
     let _ = io::stderr().flush();
-}
-
-fn self_update() -> Result<(), String> {
-    use serde::Deserialize;
-    use std::env;
-    use std::fs::File;
-    use std::io::copy;
-
-    #[derive(Deserialize)]
-    struct Release {
-        tag_name: String,
-        assets: Vec<Asset>,
-    }
-
-    #[derive(Deserialize)]
-    struct Asset {
-        name: String,
-        browser_download_url: String,
-    }
-
-    println!("Checking for latest release...");
-
-    // Get the latest release from GitHub
-    let client = reqwest::blocking::Client::builder()
-        .user_agent("snail-updater")
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
-    let release: Release = client
-        .get("https://api.github.com/repos/sudonym1/snail/releases/latest")
-        .send()
-        .map_err(|e| format!("Failed to fetch release info: {}", e))?
-        .json()
-        .map_err(|e| format!("Failed to parse release info: {}", e))?;
-
-    println!("Latest release: {}", release.tag_name);
-
-    // Determine the asset name for the current platform
-    let asset_name = if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
-        "snail-linux-x86_64"
-    } else if cfg!(target_os = "macos") && cfg!(target_arch = "x86_64") {
-        "snail-macos-x86_64"
-    } else if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
-        "snail-macos-aarch64"
-    } else if cfg!(target_os = "windows") && cfg!(target_arch = "x86_64") {
-        "snail-windows-x86_64.exe"
-    } else {
-        return Err(format!(
-            "Unsupported platform: {}-{}",
-            env::consts::OS,
-            env::consts::ARCH
-        ));
-    };
-
-    // Find the asset
-    let asset = release
-        .assets
-        .iter()
-        .find(|a| a.name == asset_name)
-        .ok_or_else(|| format!("Asset {} not found in release", asset_name))?;
-
-    println!("Downloading {}...", asset.name);
-
-    // Download the binary
-    let response = client
-        .get(&asset.browser_download_url)
-        .send()
-        .map_err(|e| format!("Failed to download binary: {}", e))?;
-
-    // Get the current executable path
-    let current_exe =
-        env::current_exe().map_err(|e| format!("Failed to get current executable path: {}", e))?;
-
-    // Create a temporary file
-    let temp_path = current_exe.with_extension("tmp");
-    let mut temp_file =
-        File::create(&temp_path).map_err(|e| format!("Failed to create temporary file: {}", e))?;
-
-    // Write the downloaded binary to the temp file
-    let content = response
-        .bytes()
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-    copy(&mut content.as_ref(), &mut temp_file)
-        .map_err(|e| format!("Failed to write binary: {}", e))?;
-
-    drop(temp_file);
-
-    // Make the temp file executable on Unix
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&temp_path)
-            .map_err(|e| format!("Failed to get file metadata: {}", e))?
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&temp_path, perms)
-            .map_err(|e| format!("Failed to set permissions: {}", e))?;
-    }
-
-    // Replace the current executable with the new one
-    fs::rename(&temp_path, &current_exe)
-        .map_err(|e| format!("Failed to replace executable: {}", e))?;
-
-    println!("Successfully updated to {}", release.tag_name);
-    Ok(())
 }
