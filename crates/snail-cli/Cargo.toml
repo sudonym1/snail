@@ -7,11 +7,7 @@ edition.workspace = true
 crate-type = ["rlib"]
 
 [dependencies]
-snail-ast = { path = "../crates/snail-ast" }
-snail-python-ast = { path = "../crates/snail-python-ast" }
-snail-error = { path = "../crates/snail-error" }
-snail-parser = { path = "../crates/snail-parser" }
-snail-lower = { path = "../crates/snail-lower" }
+snail-core = { path = "../snail-core" }
 clap = { version = "4", features = ["derive"] }
 pest = "2.7"
 pest_derive = "2.7"

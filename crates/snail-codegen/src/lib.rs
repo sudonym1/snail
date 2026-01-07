@@ -5,14 +5,14 @@ use snail_lower::*;
 use snail_python_ast::*;
 
 // Vendored jmespath library
-const JMESPATH_EXCEPTIONS: &str = include_str!("../../vendored/jmespath/exceptions.py");
-const JMESPATH_COMPAT: &str = include_str!("../../vendored/jmespath/compat.py");
-const JMESPATH_AST: &str = include_str!("../../vendored/jmespath/ast.py");
-const JMESPATH_LEXER: &str = include_str!("../../vendored/jmespath/lexer.py");
-const JMESPATH_FUNCTIONS: &str = include_str!("../../vendored/jmespath/functions.py");
-const JMESPATH_VISITOR: &str = include_str!("../../vendored/jmespath/visitor.py");
-const JMESPATH_PARSER: &str = include_str!("../../vendored/jmespath/parser.py");
-const JMESPATH_INIT: &str = include_str!("../../vendored/jmespath/__init__.py");
+const JMESPATH_EXCEPTIONS: &str = include_str!("../../../vendored/jmespath/exceptions.py");
+const JMESPATH_COMPAT: &str = include_str!("../../../vendored/jmespath/compat.py");
+const JMESPATH_AST: &str = include_str!("../../../vendored/jmespath/ast.py");
+const JMESPATH_LEXER: &str = include_str!("../../../vendored/jmespath/lexer.py");
+const JMESPATH_FUNCTIONS: &str = include_str!("../../../vendored/jmespath/functions.py");
+const JMESPATH_VISITOR: &str = include_str!("../../../vendored/jmespath/visitor.py");
+const JMESPATH_PARSER: &str = include_str!("../../../vendored/jmespath/parser.py");
+const JMESPATH_INIT: &str = include_str!("../../../vendored/jmespath/__init__.py");
 
 pub fn python_source(module: &PyModule) -> String {
     python_source_with_auto_print(module, false)

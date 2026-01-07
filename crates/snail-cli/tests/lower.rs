@@ -1,8 +1,7 @@
 mod common;
 
 use common::*;
-use snail::{lower_program, parse_program};
-use snail_python_ast::{PyBinaryOp, PyCompareOp, PyExpr, PyStmt, PyUnaryOp};
+use snail::{PyBinaryOp, PyCompareOp, PyExpr, PyStmt, PyUnaryOp, lower_program, parse_program};
 
 #[test]
 fn lowers_if_chain_into_nested_orelse() {

@@ -1,0 +1,9 @@
+[package]
+name = "snail-codegen"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+snail-ast = { path = "../snail-ast" }
+snail-python-ast = { path = "../snail-python-ast" }
+snail-lower = { path = "../snail-lower" }

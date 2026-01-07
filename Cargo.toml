@@ -6,7 +6,9 @@ members = [
     "crates/snail-error",
     "crates/snail-parser",
     "crates/snail-lower",
-    "snail",
+    "crates/snail-codegen",
+    "crates/snail-core",
+    "crates/snail-cli",
 ]
 
 [workspace.package]
