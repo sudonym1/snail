@@ -634,3 +634,43 @@ fn structured_accessor_requires_structured_method() {
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(stderr.contains("must implement __structured__"));
 }
+
+#[test]
+fn json_in_pipeline_does_not_block_stdin() {
+    // Regression test: x | json() should not block reading from stdin
+    // It should fail immediately with a parse error instead
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args([r#"x = "{{\"key\": \"value\"}}"; result = x | json(); print(result.data["key"])"#])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "value");
+}
+
+#[test]
+fn json_with_structured_accessor_from_stdin() {
+    // Regression test: json() | $[query] should read from stdin and apply query
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let mut child = Command::new(exe)
+        .args([r#"json() | $[test]"#])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    let stdin = child.stdin.as_mut().expect("get stdin");
+    stdin.write_all(b"{\"test\": 123}").expect("write to stdin");
+    drop(stdin);
+
+    let output = child.wait_with_output().expect("wait for output");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "123");
+}

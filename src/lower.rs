@@ -13,6 +13,7 @@ const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
 const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
 const SNAIL_STRUCTURED_ACCESSOR_CLASS: &str = "__SnailStructuredAccessor";
 const SNAIL_JSON_OBJECT_CLASS: &str = "__SnailJsonObject";
+const SNAIL_JSON_PIPELINE_WRAPPER_CLASS: &str = "__SnailJsonPipelineWrapper";
 const SNAIL_AWK_LINE: &str = "$l";
 const SNAIL_AWK_FIELDS: &str = "$f";
 const SNAIL_AWK_NR: &str = "$n";
@@ -2830,10 +2831,44 @@ impl PythonWriter {
         self.indent -= 2;
         self.write_line("");
 
+        // Write __SnailJsonPipelineWrapper class
+        self.write_line(&format!("class {}:", SNAIL_JSON_PIPELINE_WRAPPER_CLASS));
+        self.indent += 1;
+        self.write_line(
+            "\"\"\"Wrapper for json() to support pipeline operator without blocking stdin.\"\"\"",
+        );
+        self.write_line("");
+        self.write_line("def __pipeline__(self, input):");
+        self.indent += 1;
+        self.write_line("\"\"\"Called when used in a pipeline: x | json()\"\"\"");
+        self.write_line("return json(input)");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line("def __structured__(self, query):");
+        self.indent += 1;
+        self.write_line("\"\"\"Called when used with structured accessor: json() | $[query]\"\"\"");
+        self.write_line("data = json(_sys.stdin)");
+        self.write_line("return data.__structured__(query)");
+        self.indent -= 1;
+        self.write_line("");
+        self.write_line("def __repr__(self):");
+        self.indent += 1;
+        self.write_line("\"\"\"When printed, consume stdin and display parsed JSON.\"\"\"");
+        self.write_line("data = json(_sys.stdin)");
+        self.write_line("return repr(data)");
+        self.indent -= 2;
+        self.write_line("");
+
         // Write json() function
-        self.write_line("def json(input=_sys.stdin):");
+        self.write_line("def json(input=None):");
         self.indent += 1;
         self.write_line("\"\"\"Parse JSON from various input sources.\"\"\"");
+        self.write_line("# Return wrapper when called with no arguments for pipeline support");
+        self.write_line("if input is None:");
+        self.indent += 1;
+        self.write_line(&format!("return {}()", SNAIL_JSON_PIPELINE_WRAPPER_CLASS));
+        self.indent -= 1;
+        self.write_line("");
         self.write_line("# Handle different input types");
         self.write_line("if isinstance(input, str):");
         self.indent += 1;
