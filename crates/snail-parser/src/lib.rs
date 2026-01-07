@@ -2,9 +2,8 @@ use pest::Parser;
 use pest::iterators::Pair;
 use pest_derive::Parser;
 
-use crate::ast::*;
-use crate::awk::{AwkProgram, AwkRule};
-use crate::error::ParseError;
+use snail_ast::*;
+use snail_error::ParseError;
 
 #[derive(Parser)]
 #[grammar = "snail.pest"]

@@ -377,7 +377,49 @@ dependencies = [
  "pest_derive",
  "serde",
  "serde_json",
+ "snail-ast",
+ "snail-error",
+ "snail-lower",
+ "snail-parser",
+ "snail-python-ast",
  "tempfile",
+]
+
+[[package]]
+name = "snail-ast"
+version = "0.1.0"
+
+[[package]]
+name = "snail-error"
+version = "0.1.0"
+dependencies = [
+ "snail-ast",
+]
+
+[[package]]
+name = "snail-lower"
+version = "0.1.0"
+dependencies = [
+ "snail-ast",
+ "snail-error",
+ "snail-python-ast",
+]
+
+[[package]]
+name = "snail-parser"
+version = "0.1.0"
+dependencies = [
+ "pest",
+ "pest_derive",
+ "snail-ast",
+ "snail-error",
+]
+
+[[package]]
+name = "snail-python-ast"
+version = "0.1.0"
+dependencies = [
+ "snail-ast",
 ]
 
 [[package]]

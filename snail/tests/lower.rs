@@ -1,7 +1,8 @@
 mod common;
 
 use common::*;
-use snail::{PyBinaryOp, PyCompareOp, PyStmt, PyUnaryOp, lower_program, parse_program};
+use snail::{lower_program, parse_program};
+use snail_python_ast::{PyBinaryOp, PyCompareOp, PyExpr, PyStmt, PyUnaryOp};
 
 #[test]
 fn lowers_if_chain_into_nested_orelse() {
@@ -425,9 +426,9 @@ compiled = /abc/
     assert!(compiled_str.contains("re.compile"));
 }
 
-fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
+fn assert_name_location(expr: &PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
-        snail::PyExpr::Name { id, span } => {
+        PyExpr::Name { id, span } => {
             assert_eq!(id, expected);
             assert_eq!(span.start.line, line);
             assert_eq!(span.start.column, column);

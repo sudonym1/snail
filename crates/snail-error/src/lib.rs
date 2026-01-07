@@ -2,8 +2,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::Write as _;
 
-use crate::ast::SourceSpan;
-use crate::lower::LowerError;
+use snail_ast::SourceSpan;
 
 #[derive(Debug, Clone)]
 pub struct ParseError {
@@ -41,6 +40,27 @@ impl fmt::Display for ParseError {
 }
 
 impl Error for ParseError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LowerError {
+    pub message: String,
+}
+
+impl LowerError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for LowerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl Error for LowerError {}
 
 #[derive(Debug)]
 pub enum SnailError {

@@ -1,4 +1,5 @@
-use snail::{AssignTarget, BinaryOp, Expr, Stmt, parse_program};
+use snail_ast::{AssignTarget, BinaryOp, Expr, Stmt};
+use snail_parser::parse_program;
 
 #[test]
 fn parses_basic_program() {
