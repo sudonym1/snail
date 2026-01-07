@@ -151,6 +151,68 @@ snail --python "x = risky()? ; print(x)"
 snail --update
 ```
 
+## 🏗️ Architecture
+
+Snail compiles to Python through a multi-stage pipeline:
+
+```mermaid
+flowchart TB
+    subgraph Input
+        A[Snail Source Code]
+    end
+
+    subgraph Parsing["Parsing (Pest PEG Parser)"]
+        B1[src/snail.pest<br/>Grammar Definition]
+        B2[src/parser.rs<br/>Parser Implementation]
+    end
+
+    subgraph AST["Abstract Syntax Tree"]
+        C1[src/ast.rs<br/>Program AST]
+        C2[src/awk.rs<br/>AwkProgram AST]
+    end
+
+    subgraph Lowering["Lowering & Code Generation"]
+        D1[src/lower.rs<br/>AST → Python AST Transform]
+        D2[Runtime Helpers<br/>__snail_compact_try<br/>__snail_subprocess_*<br/>__snail_regex_*]
+        D3[python_source<br/>Python AST → Source Code]
+    end
+
+    subgraph Execution
+        E1[src/main.rs<br/>CLI Interface]
+        E2[subprocess<br/>python3 execution]
+    end
+
+    A -->|Regular Mode| B1
+    A -->|--awk Mode| B1
+    B1 --> B2
+    B2 -->|Regular| C1
+    B2 -->|Awk| C2
+    C1 --> D1
+    C2 --> D1
+    D1 --> D2
+    D1 --> D3
+    D2 --> D3
+    D3 --> E1
+    E1 -->|Respects venv| E2
+    E2 --> F[Python Execution]
+
+    style A fill:#e1f5ff
+    style F fill:#e1ffe1
+    style D2 fill:#fff4e1
+```
+
+**Key Components:**
+
+- **Parser**: Uses [Pest](https://pest.rs/) parser generator with PEG grammar defined in `src/snail.pest`
+- **AST**: Separate representations for regular Snail (`Program`) and awk mode (`AwkProgram`) with source spans for error reporting
+- **Lowering**: Transforms Snail AST into Python AST, generating runtime helper functions for Snail-specific features:
+  - `?` operator → `__snail_compact_try` helper
+  - `$(cmd)` subprocess capture → `__snail_subprocess_capture`
+  - `@(cmd)` subprocess status → `__snail_subprocess_status`
+  - Regex literals → `__snail_regex_search` and `__snail_regex_compile`
+- **Code Generation**: Converts Python AST to executable Python source code
+- **CLI**: Handles execution via subprocess, automatically respecting virtual environments
+
 ## 📚 Documentation
 
 - **[Language Reference](docs/REFERENCE.md)** — Complete syntax and semantics
