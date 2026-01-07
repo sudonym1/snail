@@ -162,28 +162,28 @@ flowchart TB
     end
 
     subgraph Parsing["Parsing (Pest PEG Parser)"]
-        B1[src/snail.pest<br/>Grammar Definition]
-        B2[src/parser.rs<br/>Parser Implementation]
+        B1[crates/snail-parser/src/snail.pest<br/>Grammar Definition]
+        B2[crates/snail-parser/<br/>Parser Implementation]
     end
 
     subgraph AST["Abstract Syntax Tree"]
-        C1[src/ast.rs<br/>Program AST]
-        C2[src/awk.rs<br/>AwkProgram AST]
+        C1[crates/snail-ast/src/ast.rs<br/>Program AST]
+        C2[crates/snail-ast/src/awk.rs<br/>AwkProgram AST]
     end
 
     subgraph Lowering["Lowering & Code Generation"]
-        D1[src/lower.rs<br/>AST → Python AST Transform]
-        D2[Runtime Helpers<br/>__snail_compact_try<br/>__snail_subprocess_*<br/>__snail_regex_*]
-        D3[python_source<br/>Python AST → Source Code]
+        D1[crates/snail-lower/<br/>AST → Python AST Transform]
+        D2[crates/snail-codegen/src/helpers.rs<br/>Runtime Helpers]
+        D3[crates/snail-codegen/<br/>Python AST → Source Code]
     end
 
     subgraph Execution
-        E1[src/main.rs<br/>CLI Interface]
+        E1[crates/snail-cli/<br/>CLI Interface]
         E2[subprocess<br/>python3 execution]
     end
 
     A -->|Regular Mode| B1
-    A -->|--awk Mode| B1
+    A -->|Awk Mode| B1
     B1 --> B2
     B2 -->|Regular| C1
     B2 -->|Awk| C2
@@ -193,7 +193,7 @@ flowchart TB
     D1 --> D3
     D2 --> D3
     D3 --> E1
-    E1 -->|Respects venv| E2
+    E1 --> E2
     E2 --> F[Python Execution]
 
     style A fill:#e1f5ff
