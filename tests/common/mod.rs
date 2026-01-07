@@ -1,6 +1,5 @@
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
 use snail::{Program, lower_program, parse_program, python_source};
+use std::process::Command;
 
 /// Parse source code and panic with a helpful message if it fails
 pub fn assert_parses(source: &str) -> Program {
@@ -21,57 +20,108 @@ pub fn snail_to_python(source: &str) -> String {
 
 /// Verify that Python code compiles without syntax errors
 pub fn assert_python_compiles(python_code: &str) {
-    Python::with_gil(|py| {
-        let result = PyModule::import_bound(py, "builtins")
-            .unwrap()
-            .getattr("compile")
-            .unwrap()
-            .call1((python_code, "<test>", "exec"));
+    // Use Python's compile() to check syntax without executing
+    let check_code = format!(
+        r#"import sys
+try:
+    compile({}, '<test>', 'exec')
+except SyntaxError as e:
+    print(f'SyntaxError: {{e}}', file=sys.stderr)
+    sys.exit(1)"#,
+        format_python_string(python_code)
+    );
 
-        assert!(
-            result.is_ok(),
-            "Generated Python has syntax errors:\n{}\n\nError: {:?}",
-            python_code,
-            result.unwrap_err()
-        );
-    });
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(&check_code)
+        .output()
+        .expect("failed to execute python3");
+
+    assert!(
+        output.status.success(),
+        "Generated Python has syntax errors:\n{}\n\nStderr: {}",
+        python_code,
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
-/// Execute Snail source code and return the Python globals dict
+/// Format a string for inclusion in Python code
+fn format_python_string(s: &str) -> String {
+    format!(
+        "\"{}\"",
+        s.replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+    )
+}
+
+/// Execute Snail source code and return a variable as JSON
 #[allow(dead_code)]
-pub fn execute_snail(source: &str) -> Py<PyDict> {
-    Python::with_gil(|py| {
-        let python = snail_to_python(source);
-        let globals = PyDict::new_bound(py);
-        py.run_bound(&python, None, Some(&globals))
-            .unwrap_or_else(|e| panic!("Execution failed:\n{}\nError: {:?}", python, e));
-        globals.into()
+pub fn execute_snail_get_var<T: serde::de::DeserializeOwned>(source: &str, var_name: &str) -> T {
+    let python = snail_to_python(source);
+    let code = format!(
+        r#"import json
+{}
+print(json.dumps({}))"#,
+        python, var_name
+    );
+
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(&code)
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to execute Python:\n{}\nError: {}", code, e));
+
+    assert!(
+        output.status.success(),
+        "Execution failed:\n{}\nStderr: {}",
+        code,
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
+        panic!(
+            "Failed to parse JSON from {}: {}\nOutput: {}",
+            var_name, e, stdout
+        )
     })
 }
 
-/// Execute Snail source code with a setup function and return the Python globals
+/// Execute Snail source code with setup and return a variable as JSON
 #[allow(dead_code)]
-pub fn execute_snail_with_setup(source: &str, setup: &str) -> Py<PyDict> {
-    Python::with_gil(|py| {
-        let python = snail_to_python(source);
-        let code = format!("{}\n{}", setup, python);
-        let globals = PyDict::new_bound(py);
-        py.run_bound(&code, None, Some(&globals))
-            .unwrap_or_else(|e| panic!("Execution failed:\n{}\nError: {:?}", code, e));
-        globals.into()
-    })
-}
-
-/// Get a Python variable value from globals dict
-pub fn get_py_var<'py, T: FromPyObject<'py>>(
-    _py: Python<'py>,
-    globals: &Bound<'py, PyDict>,
-    name: &str,
+pub fn execute_snail_with_setup_get_var<T: serde::de::DeserializeOwned>(
+    source: &str,
+    setup: &str,
+    var_name: &str,
 ) -> T {
-    globals
-        .get_item(name)
-        .unwrap_or_else(|e| panic!("Failed to get item {}: {:?}", name, e))
-        .unwrap_or_else(|| panic!("Variable {} not found in globals", name))
-        .extract()
-        .unwrap_or_else(|e| panic!("Failed to extract {}: {:?}", name, e))
+    let python = snail_to_python(source);
+    let code = format!(
+        r#"import json
+{}
+{}
+print(json.dumps({}))"#,
+        setup, python, var_name
+    );
+
+    let output = Command::new("python3")
+        .arg("-c")
+        .arg(&code)
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to execute Python:\n{}\nError: {}", code, e));
+
+    assert!(
+        output.status.success(),
+        "Execution failed:\n{}\nStderr: {}",
+        code,
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
+        panic!(
+            "Failed to parse JSON from {}: {}\nOutput: {}",
+            var_name, e, stdout
+        )
+    })
 }
