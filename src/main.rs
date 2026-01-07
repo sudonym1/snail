@@ -1,11 +1,10 @@
+use std::env;
 use std::fs;
-use std::io::{self, Write};
+use std::process::{Command, Stdio};
 
 use clap::Parser;
-use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule};
 
-use snail::{CompileMode, SnailError, compile_snail_source_with_auto_print, format_snail_error};
+use snail::{CompileMode, compile_snail_source_with_auto_print, format_snail_error};
 
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")");
 
@@ -106,14 +105,7 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
 
-    match run_source(&input, !cli.no_auto_print) {
-        Ok(()) => Ok(()),
-        Err(CliError::Snail(err)) => Err(format_snail_error(&err, &input.filename)),
-        Err(CliError::Python(err)) => {
-            Python::with_gil(|py| err.print(py));
-            Err(String::new())
-        }
-    }
+    run_source(&input, !cli.no_auto_print)
 }
 
 fn read_source(path: &str) -> Result<String, String> {
@@ -127,52 +119,52 @@ fn build_argv(argv0: &str, extra: Vec<String>) -> Vec<String> {
     argv
 }
 
-enum CliError {
-    Snail(SnailError),
-    Python(PyErr),
-}
+fn run_source(input: &CliInput, auto_print: bool) -> Result<(), String> {
+    let python_code = compile_snail_source_with_auto_print(&input.source, input.mode, auto_print)
+        .map_err(|err| format_snail_error(&err, &input.filename))?;
 
-fn run_source(input: &CliInput, auto_print: bool) -> Result<(), CliError> {
-    let python = compile_snail_source_with_auto_print(&input.source, input.mode, auto_print)
-        .map_err(CliError::Snail)?;
+    // Get Python interpreter from PYTHON env var, or default to python3
+    let python_exe = env::var("PYTHON").unwrap_or_else(|_| "python3".to_string());
 
-    Python::with_gil(|py| -> Result<(), CliError> {
-        let builtins = PyModule::import_bound(py, "builtins").map_err(CliError::Python)?;
-        let code = builtins
-            .getattr("compile")
-            .and_then(|compile| compile.call1((python, &input.filename, "exec")))
-            .map_err(CliError::Python)?;
+    // Build the Python script with proper setup
+    let script = format!(
+        r#"import sys
+sys.argv = {argv}
+__file__ = {file}
+__name__ = "__main__"
 
-        let globals = PyDict::new_bound(py);
-        globals
-            .set_item("__name__", "__main__")
-            .map_err(CliError::Python)?;
-        globals
-            .set_item("__file__", &input.filename)
-            .map_err(CliError::Python)?;
+{code}"#,
+        argv = format_python_list(&input.argv),
+        file = format_python_string(&input.filename),
+        code = python_code
+    );
 
-        let sys = PyModule::import_bound(py, "sys").map_err(CliError::Python)?;
-        let argv = PyList::new_bound(py, &input.argv);
-        sys.setattr("argv", argv).map_err(CliError::Python)?;
+    // Execute Python code via subprocess
+    let mut child = Command::new(&python_exe)
+        .arg("-c")
+        .arg(&script)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("failed to execute {python_exe}: {e}"))?;
 
-        builtins
-            .getattr("exec")
-            .and_then(|exec| exec.call1((code, &globals, &globals)))
-            .map_err(CliError::Python)?;
+    let status = child
+        .wait()
+        .map_err(|e| format!("failed to wait for python process: {e}"))?;
 
-        // Ensure buffered output is flushed for non-interactive runs.
-        flush_python_io(&sys);
-
+    if status.success() {
         Ok(())
-    })
+    } else {
+        std::process::exit(status.code().unwrap_or(1));
+    }
 }
 
-fn flush_python_io(sys: &Bound<'_, PyModule>) {
-    for name in ["stdout", "stderr", "__stdout__", "__stderr__"] {
-        if let Ok(stream) = sys.getattr(name) {
-            let _ = stream.call_method0("flush");
-        }
-    }
-    let _ = io::stdout().flush();
-    let _ = io::stderr().flush();
+fn format_python_string(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn format_python_list(items: &[String]) -> String {
+    let formatted_items: Vec<String> = items.iter().map(|s| format_python_string(s)).collect();
+    format!("[{}]", formatted_items.join(", "))
 }

@@ -10,7 +10,7 @@ crate-type = ["rlib"]
 clap = { version = "4", features = ["derive"] }
 pest = "2.7"
 pest_derive = "2.7"
-pyo3 = { version = "0.21", features = ["auto-initialize"] }
 
 [dev-dependencies]
+pyo3 = { version = "0.21", features = ["auto-initialize"] }
 tempfile = "3"

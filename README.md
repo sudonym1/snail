@@ -171,16 +171,20 @@ See [extras/vim/README.md](extras/vim/README.md) for details. Tree-sitter gramma
 
 ### Prerequisites
 
-**Python 3.10+** (required at build and runtime)
+**Python 3.10+** (required at runtime)
 
-Snail uses [pyo3](https://pyo3.rs) to execute generated Python code via CPython. You need Python 3.10 or later installed and available on your PATH.
+Snail compiles to Python code and executes it via subprocess using whatever `python3` is in your PATH. This means:
+- ✅ **Virtual environments are fully supported** - just activate your venv before running snail
+- ✅ **No rebuild needed** when switching Python versions or environments
+- ✅ **Configure Python interpreter** via `PYTHON` environment variable (e.g., `PYTHON=python3.12 snail ...`)
 
+Installation per platform:
 - **Ubuntu/Debian**: `sudo apt install python3 python3-dev`
 - **Fedora/RHEL**: `sudo dnf install python3 python3-devel`
 - **macOS**: `brew install python@3.12` (or use the system Python 3)
 - **Windows**: Download from [python.org](https://www.python.org/downloads/)
 
-**No Python packages required**: Snail vendors all necessary Python libraries (jmespath) directly into the compiled binary.
+**No Python packages required**: Snail vendors all necessary Python libraries (jmespath) directly into the generated code.
 
 **Rust toolchain** (cargo and rustc)
 
@@ -216,7 +220,6 @@ cargo build --release
 
 # Install to ~/.local/bin (make sure it's in your PATH)
 cp target/release/snail ~/.local/bin/
-cp target/release/snail-core ~/.local/bin/
 
 # Or use the Makefile (runs tests, builds, and installs)
 make install
@@ -247,23 +250,30 @@ cargo clippy -- -D warnings
 
 ### Troubleshooting
 
-**If you see "PYO3_PYTHON not set" errors:**
+**Using a specific Python version:**
+
+Set the `PYTHON` environment variable to specify which Python interpreter to use:
 
 ```bash
-export PYO3_PYTHON=python3
-cargo build --release
+# Use a specific Python version
+PYTHON=python3.12 snail "print('hello')"
+
+# Or set it globally
+export PYTHON=python3.12
+snail "print('hello')"
 ```
 
-**If tests fail with library loading errors on Linux:**
+**Using with virtual environments:**
 
-The Makefile handles this automatically, but if running `cargo test` directly:
+Simply activate your virtual environment before running snail:
 
 ```bash
-# Discover libpython path
-LIBPYTHON=$(python3 -c "import sysconfig, os; print(os.path.join(sysconfig.get_config_var('LIBDIR'), sysconfig.get_config_var('LDLIBRARY')))")
+# Create and activate a venv
+python3 -m venv myenv
+source myenv/bin/activate  # On Windows: myenv\Scripts\activate
 
-# Run tests with LD_PRELOAD
-LD_PRELOAD="$LIBPYTHON" cargo test
+# Snail will automatically use the venv's Python
+snail "import sys; print(sys.prefix)"
 ```
 
 ## 📋 Project Status
