@@ -51,7 +51,7 @@ Options:
 ## Used By
 
 - End users invoke the `snail` binary directly
-- Can be called from shell scripts with shebangs: `#!/usr/bin/env snail --awk -f`
+- Can be called from shell scripts with shebangs: `#!/usr/bin/env -S snail [--awk] -f`
 
 ## Design
 
