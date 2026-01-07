@@ -44,6 +44,39 @@ cargo fmt --check
 cargo clippy -- -D warnings
 ```
 
+## ⚠️ MANDATORY: CI Requirements Before Committing/Pushing
+
+**CRITICAL**: Before creating ANY commit, push, or pull request, you MUST run all three CI checks below and ensure they ALL pass. No exceptions.
+
+### Required CI Checks (ALL must pass):
+
+```bash
+# 1. FORMATTING - Must pass with no changes
+cargo fmt --check
+
+# 2. LINTING - Must pass with no warnings
+cargo clippy -- -D warnings
+
+# 3. TESTS - Must pass completely
+cargo test
+```
+
+### Pre-Commit/Pre-PR Checklist:
+
+- [ ] `cargo fmt --check` passes (or run `cargo fmt` to fix formatting)
+- [ ] `cargo clippy -- -D warnings` passes with zero warnings
+- [ ] `cargo test` passes with all tests succeeding
+- [ ] If adding new syntax: `examples/all_syntax.snail` updated
+- [ ] Appropriate tests added for new functionality
+
+**DO NOT**:
+- ❌ Skip any CI check "to save time"
+- ❌ Commit/push without running all three checks
+- ❌ Create a PR without verifying all checks pass
+- ❌ Assume tests still pass without running them
+
+**If any check fails**: Fix the issues before proceeding. Do not create commits or PRs with failing CI checks.
+
 ## High-Level Architecture
 
 ### Compilation Pipeline
@@ -129,7 +162,7 @@ Set `PYO3_PYTHON=python3` if you have multiple Python versions installed.
 ## Important Development Notes
 
 - **Always update `examples/all_syntax.snail`** when adding new syntax features
-- **CI must pass**: format (`cargo fmt --check`), clippy (`cargo clippy -- -D warnings`), and all tests
+- **MANDATORY CI checks must ALL pass** before any commit/push/PR - see "MANDATORY: CI Requirements" section above
 - The grammar is in `src/snail.pest` - parser logic uses Pest's PEG syntax
 - Keep Python semantics identical; only syntax differs
 - User-defined identifiers cannot start with `$` (reserved for awk mode)
@@ -142,4 +175,8 @@ When implementing a phase from the project plan:
 2. Update `examples/all_syntax.snail` with new syntax examples
 3. Add parser tests, lowering tests, and integration tests
 4. Update `docs/REFERENCE.md` if user-facing syntax changes
-5. Ensure all CI checks pass before completion
+5. **RUN ALL MANDATORY CI CHECKS** (see "MANDATORY: CI Requirements" section):
+   - `cargo fmt --check` (fix with `cargo fmt` if needed)
+   - `cargo clippy -- -D warnings`
+   - `cargo test`
+6. Only commit/push after ALL CI checks pass
