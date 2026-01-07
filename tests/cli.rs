@@ -665,7 +665,7 @@ fn json_with_structured_accessor_from_stdin() {
         .spawn()
         .expect("spawn snail");
 
-    let stdin = child.stdin.as_mut().expect("get stdin");
+    let mut stdin = child.stdin.take().expect("get stdin");
     stdin.write_all(b"{\"test\": 123}").expect("write to stdin");
     drop(stdin);
 

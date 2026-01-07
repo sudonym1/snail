@@ -7,7 +7,7 @@ all: test build install
 test:
 	cargo fmt --check
 	cargo clippy -- -D warnings
-	cargo test
+	RUSTFLAGS="-D warnings" cargo test
 
 # Build release binary
 build:
