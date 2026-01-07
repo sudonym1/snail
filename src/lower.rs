@@ -2842,6 +2842,13 @@ impl PythonWriter {
         self.write_line("return json(input)");
         self.indent -= 1;
         self.write_line("");
+        self.write_line("def __structured__(self, query):");
+        self.indent += 1;
+        self.write_line("\"\"\"Called when used with structured accessor: json() | $[query]\"\"\"");
+        self.write_line("data = json(_sys.stdin)");
+        self.write_line("return data.__structured__(query)");
+        self.indent -= 1;
+        self.write_line("");
         self.write_line("def __repr__(self):");
         self.indent += 1;
         self.write_line("\"\"\"When printed, consume stdin and display parsed JSON.\"\"\"");

@@ -649,3 +649,28 @@ fn json_in_pipeline_does_not_block_stdin() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert_eq!(stdout.trim(), "value");
 }
+
+#[test]
+fn json_with_structured_accessor_from_stdin() {
+    // Regression test: json() | $[query] should read from stdin and apply query
+    use std::process::Stdio;
+    use std::io::Write;
+
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let mut child = Command::new(exe)
+        .args([r#"json() | $[test]"#])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn snail");
+
+    let stdin = child.stdin.as_mut().expect("get stdin");
+    stdin.write_all(b"{\"test\": 123}").expect("write to stdin");
+    drop(stdin);
+
+    let output = child.wait_with_output().expect("wait for output");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "123");
+}
