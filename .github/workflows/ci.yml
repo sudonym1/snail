@@ -22,4 +22,4 @@ jobs:
       - name: clippy
         run: cargo clippy -- -D warnings
       - name: test
-        run: cargo test
+        run: RUSTFLAGS="-D warnings" cargo test
