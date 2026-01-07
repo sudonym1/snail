@@ -61,7 +61,7 @@ RUSTFLAGS="-D warnings" cargo build
 cargo clippy -- -D warnings
 
 # 4. TESTS - Must pass completely
-cargo test
+RUSTFLAGS="-D warnings" cargo test
 ```
 
 ### Pre-Commit/Pre-PR Checklist:
@@ -183,5 +183,5 @@ When implementing a phase from the project plan:
    - `cargo fmt --check` (fix with `cargo fmt` if needed)
    - `RUSTFLAGS="-D warnings" cargo build` (must pass with zero compiler warnings)
    - `cargo clippy -- -D warnings` (must pass with zero clippy warnings)
-   - `cargo test` (all tests must pass)
+   - `RUSTFLAGS="-D warnings" cargo test` (all tests must pass)
 6. Only commit/push after ALL CI checks pass
