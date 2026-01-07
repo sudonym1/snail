@@ -653,8 +653,8 @@ fn json_in_pipeline_does_not_block_stdin() {
 #[test]
 fn json_with_structured_accessor_from_stdin() {
     // Regression test: json() | $[query] should read from stdin and apply query
-    use std::process::Stdio;
     use std::io::Write;
+    use std::process::Stdio;
 
     let exe = env!("CARGO_BIN_EXE_snail");
     let mut child = Command::new(exe)

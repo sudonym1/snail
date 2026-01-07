@@ -2834,7 +2834,9 @@ impl PythonWriter {
         // Write __SnailJsonPipelineWrapper class
         self.write_line(&format!("class {}:", SNAIL_JSON_PIPELINE_WRAPPER_CLASS));
         self.indent += 1;
-        self.write_line("\"\"\"Wrapper for json() to support pipeline operator without blocking stdin.\"\"\"");
+        self.write_line(
+            "\"\"\"Wrapper for json() to support pipeline operator without blocking stdin.\"\"\"",
+        );
         self.write_line("");
         self.write_line("def __pipeline__(self, input):");
         self.indent += 1;
