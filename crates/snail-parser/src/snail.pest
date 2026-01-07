@@ -210,8 +210,15 @@ string = @{ raw_prefix? ~ (triple_double | triple_single | double_string | singl
 raw_prefix = { "r" }
 triple_double = { "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" }
 triple_single = { "'''" ~ (!"'''" ~ ANY)* ~ "'''" }
-double_string = { "\"" ~ ( "\\\"" | !"\"" ~ ANY )* ~ "\"" }
-single_string = { "'" ~ ( "\\'" | !"'" ~ ANY )* ~ "'" }
+double_string = { "\"" ~ double_string_content ~ "\"" }
+double_string_content = @{ (brace_block | escaped_char | double_string_char)* }
+single_string = { "'" ~ single_string_content ~ "'" }
+single_string_content = @{ (brace_block | escaped_char | single_string_char)* }
+brace_block = { "{" ~ brace_content* ~ "}" }
+brace_content = _{ brace_block | (!"}" ~ !"{" ~ ANY) }
+escaped_char = { "\\" ~ ANY }
+double_string_char = { (!("\\" | "\"" | "{") ~ ANY) }
+single_string_char = { (!("\\" | "'" | "{") ~ ANY) }
 regex = @{ "/" ~ ( "\\/" | !"/" ~ ANY )* ~ "/" }
 
 // Identifiers: must not be keywords

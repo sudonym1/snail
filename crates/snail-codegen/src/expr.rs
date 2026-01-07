@@ -247,10 +247,39 @@ fn format_string_literal(value: &str, raw: bool, delimiter: StringDelimiter) -> 
 }
 
 fn format_f_string(parts: &[PyFStringPart]) -> String {
+    // Determine which quote delimiter to use based on quotes in expressions
+    let has_double_quotes = parts.iter().any(|part| {
+        if let PyFStringPart::Expr(expr) = part {
+            contains_quotes_in_expr(expr, StringDelimiter::Double)
+        } else {
+            false
+        }
+    });
+
+    let has_single_quotes = parts.iter().any(|part| {
+        if let PyFStringPart::Expr(expr) = part {
+            contains_quotes_in_expr(expr, StringDelimiter::Single)
+        } else {
+            false
+        }
+    });
+
+    // Choose quote style: if both types are present, use triple double quotes
+    // If only double quotes, use single quotes for outer
+    // If only single quotes, use double quotes for outer
+    // If neither, use double quotes (default)
+    let (quote_str, quote_char) = if has_double_quotes && has_single_quotes {
+        ("\"\"\"", '"')
+    } else if has_double_quotes {
+        ("'", '\'')
+    } else {
+        ("\"", '"')
+    };
+
     let mut out = String::new();
     for part in parts {
         match part {
-            PyFStringPart::Text(text) => out.push_str(&escape_f_string_text(text)),
+            PyFStringPart::Text(text) => out.push_str(&escape_f_string_text(text, quote_char)),
             PyFStringPart::Expr(expr) => {
                 out.push('{');
                 out.push_str(&expr_source(expr));
@@ -258,20 +287,127 @@ fn format_f_string(parts: &[PyFStringPart]) -> String {
             }
         }
     }
-    format!("f\"{}\"", out)
+    format!("f{quote_str}{out}{quote_str}")
 }
 
-fn escape_f_string_text(text: &str) -> String {
+/// Recursively check if an expression contains string literals with the specified quote delimiter
+fn contains_quotes_in_expr(expr: &PyExpr, target_delim: StringDelimiter) -> bool {
+    match expr {
+        PyExpr::String { delimiter, .. } => match target_delim {
+            StringDelimiter::Double | StringDelimiter::TripleDouble => {
+                matches!(
+                    delimiter,
+                    StringDelimiter::Double | StringDelimiter::TripleDouble
+                )
+            }
+            StringDelimiter::Single | StringDelimiter::TripleSingle => {
+                matches!(
+                    delimiter,
+                    StringDelimiter::Single | StringDelimiter::TripleSingle
+                )
+            }
+        },
+        PyExpr::FString { parts, .. } => parts.iter().any(|part| {
+            if let PyFStringPart::Expr(e) = part {
+                contains_quotes_in_expr(e, target_delim)
+            } else {
+                false
+            }
+        }),
+        PyExpr::Unary { operand, .. } => contains_quotes_in_expr(operand, target_delim),
+        PyExpr::Binary { left, right, .. } => {
+            contains_quotes_in_expr(left, target_delim)
+                || contains_quotes_in_expr(right, target_delim)
+        }
+        PyExpr::Compare {
+            left, comparators, ..
+        } => {
+            contains_quotes_in_expr(left, target_delim)
+                || comparators
+                    .iter()
+                    .any(|e| contains_quotes_in_expr(e, target_delim))
+        }
+        PyExpr::IfExpr {
+            test, body, orelse, ..
+        } => {
+            contains_quotes_in_expr(test, target_delim)
+                || contains_quotes_in_expr(body, target_delim)
+                || contains_quotes_in_expr(orelse, target_delim)
+        }
+        PyExpr::Call { func, args, .. } => {
+            contains_quotes_in_expr(func, target_delim)
+                || args.iter().any(|arg| match arg {
+                    PyArgument::Positional { value, .. }
+                    | PyArgument::Keyword { value, .. }
+                    | PyArgument::Star { value, .. }
+                    | PyArgument::KwStar { value, .. } => {
+                        contains_quotes_in_expr(value, target_delim)
+                    }
+                })
+        }
+        PyExpr::Attribute { value, .. } => contains_quotes_in_expr(value, target_delim),
+        PyExpr::Index { value, index, .. } => {
+            contains_quotes_in_expr(value, target_delim)
+                || contains_quotes_in_expr(index, target_delim)
+        }
+        PyExpr::Paren { expr, .. } => contains_quotes_in_expr(expr, target_delim),
+        PyExpr::List { elements, .. }
+        | PyExpr::Tuple { elements, .. }
+        | PyExpr::Set { elements, .. } => elements
+            .iter()
+            .any(|e| contains_quotes_in_expr(e, target_delim)),
+        PyExpr::Dict { entries, .. } => entries.iter().any(|(k, v)| {
+            contains_quotes_in_expr(k, target_delim) || contains_quotes_in_expr(v, target_delim)
+        }),
+        PyExpr::ListComp {
+            element, iter, ifs, ..
+        } => {
+            contains_quotes_in_expr(element, target_delim)
+                || contains_quotes_in_expr(iter, target_delim)
+                || ifs.iter().any(|e| contains_quotes_in_expr(e, target_delim))
+        }
+        PyExpr::DictComp {
+            key,
+            value,
+            iter,
+            ifs,
+            ..
+        } => {
+            contains_quotes_in_expr(key, target_delim)
+                || contains_quotes_in_expr(value, target_delim)
+                || contains_quotes_in_expr(iter, target_delim)
+                || ifs.iter().any(|e| contains_quotes_in_expr(e, target_delim))
+        }
+        PyExpr::Slice { start, end, .. } => {
+            start
+                .as_ref()
+                .is_some_and(|e| contains_quotes_in_expr(e, target_delim))
+                || end
+                    .as_ref()
+                    .is_some_and(|e| contains_quotes_in_expr(e, target_delim))
+        }
+        PyExpr::Name { .. }
+        | PyExpr::Number { .. }
+        | PyExpr::Bool { .. }
+        | PyExpr::None { .. }
+        | PyExpr::Lambda { .. } => false,
+    }
+}
+
+fn escape_f_string_text(text: &str, quote_char: char) -> String {
     let mut escaped = String::with_capacity(text.len());
     for ch in text.chars() {
         match ch {
             '\\' => escaped.push_str("\\\\"),
-            '"' => escaped.push_str("\\\""),
             '\n' => escaped.push_str("\\n"),
             '\r' => escaped.push_str("\\r"),
             '\t' => escaped.push_str("\\t"),
             '{' => escaped.push_str("{{"),
             '}' => escaped.push_str("}}"),
+            c if c == quote_char => {
+                escaped.push('\\');
+                escaped.push(quote_char);
+            }
             _ => escaped.push(ch),
         }
     }
