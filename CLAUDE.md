@@ -85,7 +85,7 @@ RUSTFLAGS="-D warnings" cargo test
 
 ### Compilation Pipeline
 
-Snail → Parser → AST → Lowering → Python AST → Python Source → CPython exec
+Snail → Parser → AST → Lowering → Python AST → Python Source → subprocess exec
 
 1. **Parser** (`src/parser.rs`, `src/snail.pest`):
    - Uses Pest parser generator with grammar defined in `src/snail.pest`
@@ -120,7 +120,8 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → CPyth
 
 6. **CLI** (`src/main.rs`):
    - Handles `-f file.snail`, one-liner execution, and `--awk` mode
-   - Uses pyo3 to execute generated Python code via CPython
+   - Executes generated Python code via subprocess (respects virtual environments)
+   - Uses `python3` by default, configurable via `PYTHON` environment variable
    - `--python` flag shows generated Python code for debugging
    - `-P` flag disables auto-printing of last expression
    - Awk mode can be triggered by `#!/usr/bin/env -S snail --awk -f` shebang
@@ -161,7 +162,7 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → CPyth
 - **Awk mode tests** (`tests/awk.rs`): Pattern matching, BEGIN/END, variables
 - **CLI tests** (`tests/cli.rs`): End-to-end execution via CLI, command-line interface behavior
 
-Set `PYO3_PYTHON=python3` if you have multiple Python versions installed.
+**Note on virtual environments:** The CLI now executes Python via subprocess, automatically respecting any active virtual environment. Tests use pyo3 and may require Python 3.10+ with development headers installed.
 
 ## Important Development Notes
 

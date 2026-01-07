@@ -1,16 +1,15 @@
-[package]
-name = "snail"
-version = "0.1.0"
+[workspace]
+resolver = "2"
+members = [
+    "crates/snail-ast",
+    "crates/snail-python-ast",
+    "crates/snail-error",
+    "crates/snail-parser",
+    "crates/snail-lower",
+    "crates/snail-codegen",
+    "crates/snail-core",
+    "crates/snail-cli",
+]
+
+[workspace.package]
 edition = "2024"
-
-[lib]
-crate-type = ["rlib"]
-
-[dependencies]
-clap = { version = "4", features = ["derive"] }
-pest = "2.7"
-pest_derive = "2.7"
-pyo3 = { version = "0.21", features = ["auto-initialize"] }
-
-[dev-dependencies]
-tempfile = "3"

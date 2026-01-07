@@ -1,0 +1,18 @@
+[package]
+name = "snail"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+snail-core = { path = "../snail-core" }
+clap = { version = "4", features = ["derive"] }
+pest = "2.7"
+pest_derive = "2.7"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"

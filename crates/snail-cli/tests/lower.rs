@@ -1,9 +1,7 @@
 mod common;
 
 use common::*;
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
-use snail::{PyBinaryOp, PyCompareOp, PyStmt, PyUnaryOp, lower_program, parse_program};
+use snail::{PyBinaryOp, PyCompareOp, PyExpr, PyStmt, PyUnaryOp, lower_program, parse_program};
 
 #[test]
 fn lowers_if_chain_into_nested_orelse() {
@@ -217,18 +215,9 @@ else { pass }
 fn round_trip_executes_small_program() {
     let source = "def fact(n) {\n    if n <= 1 { return 1 }\n    return n * fact(n - 1)\n}\nresult = fact(5)";
 
-    Python::with_gil(|py| {
-        let python = snail_to_python(source);
-
-        // Execute the generated Python code with both globals and locals as the same dict
-        let globals = PyDict::new_bound(py);
-        py.run_bound(&python, Some(&globals), Some(&globals))
-            .unwrap_or_else(|e| panic!("Execution failed:\n{}\nError: {:?}", python, e));
-
-        // Verify the result
-        let result: i64 = get_py_var(py, &globals, "result");
-        assert_eq!(result, 120);
-    });
+    // Execute the generated Python code and verify the result
+    let result: i64 = execute_snail_get_var(source, "result");
+    assert_eq!(result, 120);
 }
 
 #[test]
@@ -236,27 +225,15 @@ fn renders_list_and_dict_comprehensions() {
     let source =
         "nums = [1, 2]\nvals = {n: n * 2 for n in nums if n > 1}\nlisty = [n for n in nums]";
 
-    Python::with_gil(|py| {
-        let python = snail_to_python(source);
-        assert_python_compiles(&python);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
 
-        let globals = PyDict::new_bound(py);
-        py.run_bound(&python, Some(&globals), Some(&globals))
-            .unwrap();
+    // Verify semantic correctness
+    let val: i64 = execute_snail_get_var(source, "vals[2]");
+    assert_eq!(val, 4);
 
-        // Verify semantic correctness
-        let vals: Bound<PyDict> = globals
-            .get_item("vals")
-            .unwrap()
-            .unwrap()
-            .downcast_into()
-            .unwrap();
-        let val: i64 = vals.get_item(2i64).unwrap().unwrap().extract().unwrap();
-        assert_eq!(val, 4);
-
-        let listy: Vec<i64> = get_py_var(py, &globals, "listy");
-        assert_eq!(listy, vec![1, 2]);
-    });
+    let listy: Vec<i64> = execute_snail_get_var(source, "listy");
+    assert_eq!(listy, vec![1, 2]);
 }
 
 #[test]
@@ -332,24 +309,18 @@ mid = items[1:3]
 head = items[:2]
 tail = items[2:]
 "#;
-    Python::with_gil(|py| {
-        let python = snail_to_python(source);
-        assert_python_compiles(&python);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
 
-        let globals = PyDict::new_bound(py);
-        py.run_bound(&python, Some(&globals), Some(&globals))
-            .unwrap();
+    // Verify semantic correctness
+    let pair: (i64, i64) = execute_snail_get_var(source, "pair");
+    assert_eq!(pair, (1, 2));
 
-        // Verify semantic correctness
-        let pair: (i64, i64) = get_py_var(py, &globals, "pair");
-        assert_eq!(pair, (1, 2));
+    let single: (i64,) = execute_snail_get_var(source, "single");
+    assert_eq!(single, (1,));
 
-        let single: (i64,) = get_py_var(py, &globals, "single");
-        assert_eq!(single, (1,));
-
-        let mid: Vec<i64> = get_py_var(py, &globals, "mid");
-        assert_eq!(mid, vec![2, 3]);
-    });
+    let mid: Vec<i64> = execute_snail_get_var(source, "mid");
+    assert_eq!(mid, vec![2, 3]);
 }
 
 #[test]
@@ -403,21 +374,13 @@ details = risky():$e.args[0]?
     assert!(python.contains("lambda: risky()"));
 
     // Verify it works semantically
-    Python::with_gil(|py| {
-        let setup = r#"
+    let setup = r#"
 def risky():
     raise ValueError('test')
 "#;
-        let code = format!("{}\n{}", setup, python);
-        let globals = PyDict::new_bound(py);
-
-        // The compact try should handle the exception
-        py.run_bound(&code, Some(&globals), Some(&globals)).unwrap();
-
-        // Verify the exception is caught and returned
-        let value_str = globals.get_item("value").unwrap().unwrap().to_string();
-        assert!(value_str.contains("ValueError") || value_str.contains("test"));
-    });
+    // The compact try should handle the exception, verify it's caught and returned
+    let value_str: String = execute_snail_with_setup_get_var(source, setup, "str(value)");
+    assert!(value_str.contains("ValueError") || value_str.contains("test"));
 }
 
 #[test]
@@ -444,33 +407,27 @@ text = "value"
 found = text in /val(.)/
 compiled = /abc/
 "#;
-    Python::with_gil(|py| {
-        let python = snail_to_python(source);
-        assert_python_compiles(&python);
+    let python = snail_to_python(source);
+    assert_python_compiles(&python);
 
-        // Verify helper functions are generated
-        assert!(python.contains("import re"));
-        assert!(python.contains("def __snail_regex_search"));
-        assert!(python.contains("def __snail_regex_compile"));
+    // Verify helper functions are generated
+    assert!(python.contains("import re"));
+    assert!(python.contains("def __snail_regex_search"));
+    assert!(python.contains("def __snail_regex_compile"));
 
-        // Verify semantic correctness
-        let globals = PyDict::new_bound(py);
-        py.run_bound(&python, Some(&globals), Some(&globals))
-            .unwrap();
+    // Verify semantic correctness
+    // Check that regex search worked (found should be a match object, not None)
+    let found_is_not_none: bool = execute_snail_get_var(source, "found is not None");
+    assert!(found_is_not_none);
 
-        // Check that regex search worked
-        let found = globals.get_item("found").unwrap().unwrap();
-        assert!(!found.is_none()); // Should have found a match
-
-        // Check that compiled pattern is a regex object
-        let compiled_str = globals.get_item("compiled").unwrap().unwrap().to_string();
-        assert!(compiled_str.contains("re.compile"));
-    });
+    // Check that compiled pattern is a regex object
+    let compiled_str: String = execute_snail_get_var(source, "str(compiled)");
+    assert!(compiled_str.contains("re.compile"));
 }
 
-fn assert_name_location(expr: &snail::PyExpr, expected: &str, line: usize, column: usize) {
+fn assert_name_location(expr: &PyExpr, expected: &str, line: usize, column: usize) {
     match expr {
-        snail::PyExpr::Name { id, span } => {
+        PyExpr::Name { id, span } => {
             assert_eq!(id, expected);
             assert_eq!(span.start.line, line);
             assert_eq!(span.start.column, column);
