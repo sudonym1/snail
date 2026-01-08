@@ -36,6 +36,20 @@ module.exports = grammar({
     [$.primary],
     [$._atom, $.tuple_literal],
     [$.set_literal, $.dict_literal],
+    [$._stmt_sep],
+    [$.assign_target, $._atom],
+    [$.stmt_list],
+    [$.program],
+    [$.if_stmt],
+    [$.while_stmt],
+    [$.for_stmt],
+    [$.try_stmt],
+    [$._try_except_tail],
+    [$._try_finally_tail],
+    [$.awk_entry_list],
+    [$.awk_program],
+    [$.block],
+    [$.expr_stmt, $.set_literal],
   ],
 
   word: $ => $.identifier,
@@ -510,20 +524,21 @@ module.exports = grammar({
 
     subprocess_capture: $ => seq(
       '$(',
-      $.subprocess_body,
+      repeat(choice(
+        $.subprocess_expr,
+        $.subprocess_text,
+      )),
       ')',
     ),
 
     subprocess_status: $ => seq(
       '@(',
-      $.subprocess_body,
+      repeat(choice(
+        $.subprocess_expr,
+        $.subprocess_text,
+      )),
       ')',
     ),
-
-    subprocess_body: $ => repeat(choice(
-      $.subprocess_expr,
-      $.subprocess_text,
-    )),
 
     subprocess_expr: $ => seq('{', $._expr, '}'),
 
@@ -653,15 +668,44 @@ module.exports = grammar({
 
     raw_prefix: $ => 'r',
 
-    triple_double_string: $ => /"""([^"\\]|\\.|"(?!""))*"""/,
+    triple_double_string: $ => seq(
+      '"""',
+      repeat(choice(
+        $.string_interpolation,
+        $.escape_sequence,
+        $.triple_double_char,
+      )),
+      '"""',
+    ),
 
-    triple_single_string: $ => /'''([^'\\]|\\.|'(?!''))*'''/,
+    triple_single_string: $ => seq(
+      "'''",
+      repeat(choice(
+        $.string_interpolation,
+        $.escape_sequence,
+        $.triple_single_char,
+      )),
+      "'''",
+    ),
+
+    triple_double_char: $ => choice(
+      /[^"\\{]+/,
+      seq('"', /[^"]/),  // Allow single " that's not part of """
+      seq('"', '"', /[^"]/),  // Allow "" that's not part of """
+    ),
+
+    triple_single_char: $ => choice(
+      /[^'\\{]+/,
+      seq("'", /[^']/),  // Allow single ' that's not part of '''
+      seq("'", "'", /[^']/),  // Allow '' that's not part of '''
+    ),
 
     double_string: $ => seq(
       '"',
       repeat(choice(
-        /[^"\\]/,
+        $.string_interpolation,
         $.escape_sequence,
+        $.double_string_char,
       )),
       '"',
     ),
@@ -669,10 +713,20 @@ module.exports = grammar({
     single_string: $ => seq(
       "'",
       repeat(choice(
-        /[^'\\]/,
+        $.string_interpolation,
         $.escape_sequence,
+        $.single_string_char,
       )),
       "'",
+    ),
+
+    double_string_char: $ => /[^"\\{]+/,
+    single_string_char: $ => /[^'\\{]+/,
+
+    string_interpolation: $ => seq(
+      '{',
+      $._expr,
+      '}',
     ),
 
     escape_sequence: $ => /\\./,

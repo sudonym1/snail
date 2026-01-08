@@ -8,6 +8,7 @@
   },
   "license": "MIT",
   "main": "bindings/node",
+  "types": "bindings/node",
   "keywords": [
     "parser",
     "tree-sitter",
@@ -21,15 +22,27 @@
     "src/**"
   ],
   "dependencies": {
-    "nan": "^2.17.0"
+    "node-addon-api": "^7.1.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "tree_sitter": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "tree-sitter-cli": "^0.20.8"
+    "tree-sitter-cli": "^0.20.8",
+    "prebuildify": "^6.0.0"
   },
   "scripts": {
     "build": "tree-sitter generate",
     "test": "tree-sitter test",
-    "parse": "tree-sitter parse"
+    "parse": "tree-sitter parse",
+    "install": "node-gyp-build",
+    "prebuildify": "prebuildify --napi --strip"
   },
   "tree-sitter": [
     {
@@ -42,4 +55,3 @@
     }
   ]
 }
-
