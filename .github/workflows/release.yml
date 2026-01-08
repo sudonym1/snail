@@ -1,0 +1,79 @@
+name: Release builds
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  precheck:
+    runs-on: ubuntu-latest
+    outputs:
+      release_ok: ${{ steps.tag_check.outputs.release_ok }}
+    steps:
+      - name: Verify tag format
+        id: tag_check
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: precheck
+    if: needs.precheck.outputs.release_ok == 'true'
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: snail
+          - os: macos-14
+            target: aarch64-apple-darwin
+            bin: snail
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: snail.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build -p snail --release --target ${{ matrix.target }}
+        env:
+          SNAIL_RELEASE_TAG: ${{ github.ref_name }}
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          tar -czf dist/snail-${{ github.ref_name }}-${{ matrix.target }}.tar.gz \
+            -C target/${{ matrix.target }}/release \
+            ${{ matrix.bin }}
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "target/${{ matrix.target }}/release/${{ matrix.bin }}" `
+            -DestinationPath "dist/snail-${{ github.ref_name }}-${{ matrix.target }}.zip"
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true

@@ -6,7 +6,14 @@ use clap::Parser;
 
 use snail::{CompileMode, compile_snail_source_with_auto_print, format_snail_error};
 
+#[cfg(debug_assertions)]
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")");
+
+#[cfg(not(debug_assertions))]
+const VERSION: &str = match option_env!("SNAIL_RELEASE_TAG") {
+    Some(tag) if !tag.is_empty() => tag,
+    _ => concat!("v", env!("CARGO_PKG_VERSION")),
+};
 
 #[derive(Parser)]
 #[command(
