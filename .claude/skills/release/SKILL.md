@@ -17,7 +17,12 @@ Invoke this skill when the user wants to:
 
 ## What This Skill Does
 
-1. **Validates the version tag format** - Ensures the version follows vX.Y.Z format (e.g., v1.2.3)
+1. **Validates the version** - Runs `validate_version.sh` script to ensure:
+   - Version format matches vX.Y.Z (e.g., v1.2.3)
+   - No leading zeros in version components
+   - Git tag doesn't already exist
+   - Version is newer than current version in Cargo.toml
+   - All Cargo.toml files in the repo have consistent versions
 2. **Runs all mandatory CI checks** - Executes the same checks that CI runs:
    - `cargo fmt --check` - Ensures code is properly formatted
    - `RUSTFLAGS="-D warnings" cargo build` - Builds with zero warnings
@@ -37,13 +42,28 @@ Examples of valid versions: `v1.0.0`, `v2.3.1`, `v0.1.0`
 
 When this skill is invoked:
 
-1. **Extract and validate the version tag**:
+1. **Get the version tag**:
    - If the user provided a version argument, use it
    - Otherwise, ask the user for the version tag
-   - Validate the format matches `vX.Y.Z` (regex: `^v\d+\.\d+\.\d+$`)
-   - If invalid, explain the correct format and ask again
+   - The version must be in format `vX.Y.Z` (e.g., v1.2.3)
 
-2. **Run all CI checks** (in this exact order):
+2. **MANDATORY: Run the validation script**:
+   **CRITICAL**: You MUST run this script as the very first validation step, before proceeding with any other operations.
+   ```bash
+   .claude/skills/release/validate_version.sh <version>
+   ```
+   - Replace `<version>` with the version tag from step 1
+   - This script performs comprehensive validation:
+     - Checks version format (vX.Y.Z)
+     - Ensures no leading zeros
+     - Verifies tag doesn't already exist
+     - Confirms version is newer than current
+     - Validates all Cargo.toml files have consistent versions
+   - If the script fails (non-zero exit code), STOP immediately and report the error to the user
+   - Do NOT proceed to CI checks or any other steps if validation fails
+   - The script provides detailed error messages explaining what went wrong
+
+3. **Run all CI checks** (in this exact order):
    ```bash
    cargo fmt --check
    RUSTFLAGS="-D warnings" cargo build
@@ -54,21 +74,21 @@ When this skill is invoked:
    - Do NOT proceed to version updates or tagging if CI fails
    - The user must fix the issues before creating a release
 
-3. **Update version in Cargo.toml files**:
+4. **Update version in Cargo.toml files**:
    - Extract the version number without the 'v' prefix (e.g., `v1.2.3` → `1.2.3`)
    - Update the `version` field in the workspace root `Cargo.toml`
    - Update the `version` field in all workspace member crates' `Cargo.toml` files
    - Use the Read tool to find all Cargo.toml files that need updating
    - Use the Edit tool to update each version field
 
-4. **Create version bump commit**:
+5. **Create version bump commit**:
    ```bash
    git add Cargo.toml crates/*/Cargo.toml
    git commit -m "Bump version to <version>"
    ```
    - Replace `<version>` with the version number (with 'v' prefix, e.g., "Bump version to v1.2.3")
 
-5. **Create and push the git tag**:
+6. **Create and push the git tag**:
    ```bash
    git tag <version>
    git push origin <version>
@@ -77,7 +97,7 @@ When this skill is invoked:
    - Replace `<version>` with the full version tag (e.g., `v1.2.3`)
    - Push both the tag and the version bump commit
 
-6. **Report completion**:
+7. **Report completion**:
    - Confirm to the user that the release has been prepared
    - Show the version tag that was created
    - Mention that the tag and version bump have been pushed to remote
@@ -85,8 +105,8 @@ When this skill is invoked:
 
 ## Error Handling
 
+- If validation script fails: Stop immediately and show the error message from the script. The script provides detailed explanations of what validation failed.
 - If CI checks fail: Stop and report which check failed. Do not proceed.
-- If version format is invalid: Explain the format and ask for a corrected version.
 - If git operations fail: Report the error and suggest checking git status.
 - If Cargo.toml files are not found or cannot be updated: Report the issue and ask for guidance.
 
@@ -102,6 +122,8 @@ Assistant: What version would you like to release? (format: vX.Y.Z)
 ## Notes
 
 - This skill follows the project's mandatory CI requirements from CLAUDE.md
-- All CI checks must pass before version updates and tagging
-- Version tags use semantic versioning with 'v' prefix
+- The `validate_version.sh` script is located in `.claude/skills/release/` and MUST be invoked as the first validation step
+- All validation and CI checks must pass before version updates and tagging
+- Version tags use semantic versioning with 'v' prefix (e.g., v1.2.3)
 - The skill both creates the tag locally and pushes it to the remote repository
+- The validation script ensures all Cargo.toml files have the same version before proceeding
