@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
             bin: snail
           - os: macos-14
@@ -55,21 +55,20 @@ jobs:
         env:
           SNAIL_RELEASE_TAG: ${{ github.ref_name }}
 
-      - name: Package (unix)
+      - name: Prepare binary (unix)
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist
-          tar -czf dist/snail-${{ github.ref_name }}-${{ matrix.target }}.tar.gz \
-            -C target/${{ matrix.target }}/release \
-            ${{ matrix.bin }}
+          cp target/${{ matrix.target }}/release/${{ matrix.bin }} \
+            dist/snail-${{ github.ref_name }}-${{ matrix.target }}
 
-      - name: Package (windows)
+      - name: Prepare binary (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Path "target/${{ matrix.target }}/release/${{ matrix.bin }}" `
-            -DestinationPath "dist/snail-${{ github.ref_name }}-${{ matrix.target }}.zip"
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" `
+            -Destination "dist/snail-${{ github.ref_name }}-${{ matrix.target }}.exe"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
