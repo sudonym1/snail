@@ -4,19 +4,19 @@
 (comment) @comment
 
 ; Strings
-(string) @string
-(triple_string) @string
-(raw_string) @string
-(raw_triple_string) @string
-(interpolation) @embedded
+(double_string) @string
+(single_string) @string
+(triple_double_string) @string
+(triple_single_string) @string
+(string_interpolation) @embedded
 (escape_sequence) @string.escape
+(raw_prefix) @string.special
 
 ; Regex
 (regex) @string.regex
 
 ; Numbers
 (number) @number
-(float) @number.float
 
 ; Booleans and None
 (boolean) @boolean
@@ -117,27 +117,18 @@
   "}"
 ] @punctuation.bracket
 
-; Functions
-(def_stmt
-  name: (identifier) @function)
+; Functions and classes
+(def_stmt name: (identifier) @function)
+(class_stmt name: (identifier) @type)
 
-(class_stmt
-  name: (identifier) @type)
-
-(call
-  function: (identifier) @function.call)
-
-(call
-  function: (attribute
-    attribute: (identifier) @function.method))
+; Function calls
+; Note: We match the func field of call which is a primary expression
+(call) @function.call
 
 ; Parameters
-(regular_param
-  name: (identifier) @variable.parameter)
-(star_param
-  name: (identifier) @variable.parameter)
-(kw_param
-  name: (identifier) @variable.parameter)
+(regular_param (identifier) @variable.parameter)
+(star_param (identifier) @variable.parameter)
+(kw_param (identifier) @variable.parameter)
 
 ; Variables
 (identifier) @variable
@@ -155,6 +146,5 @@
 (structured_accessor) @function.macro
 
 ; Attributes
-(attribute
-  attribute: (identifier) @property)
+(attribute (identifier) @property)
 
