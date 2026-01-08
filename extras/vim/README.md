@@ -79,15 +79,41 @@ let g:snail_highlight_interpolation = 1
 
 ## Tree-sitter (Neovim only)
 
-For enhanced parsing, build and configure the Tree-sitter grammar:
+For enhanced syntax highlighting, code folding, and parsing with Tree-sitter:
 
-```bash
-cd extras/tree-sitter-snail
-npm install
-npm run build
-```
+### Quick Setup
 
-Then configure nvim-treesitter to use the parser.
+1. **Build the parser:**
+
+   ```bash
+   cd extras/tree-sitter-snail
+   tree-sitter generate  # Or: npm install && npm run build
+   ```
+
+2. **Configure nvim-treesitter:**
+
+   Add to your Neovim config (Lua):
+
+   ```lua
+   local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
+   parser_config.snail = {
+     install_info = {
+       url = "~/path/to/snail/extras/tree-sitter-snail",
+       files = {"src/parser.c"},
+       generate_requires_npm = false,
+       requires_generate_from_grammar = false,
+     },
+     filetype = "snail",
+   }
+   ```
+
+3. **Install the parser:**
+
+   ```vim
+   :TSInstall snail
+   ```
+
+See `extras/tree-sitter-snail/README.md` for more details.
 
 ## Directory Structure
 
