@@ -17,20 +17,19 @@ Invoke this skill when the user wants to:
 
 ## What This Skill Does
 
-1. **Validates the version** - Runs `validate_version.sh` script to ensure:
+1. **Validates the version** - Runs `update_version.sh` script to ensure:
    - Version format matches vX.Y.Z (e.g., v1.2.3)
    - No leading zeros in version components
    - Git tag doesn't already exist
-   - Version is newer than current version in Cargo.toml
    - All Cargo.toml files in the repo have consistent versions
 2. **Runs all mandatory CI checks** - Executes the same checks that CI runs:
    - `cargo fmt --check` - Ensures code is properly formatted
    - `RUSTFLAGS="-D warnings" cargo build` - Builds with zero warnings
    - `cargo clippy -- -D warnings` - Lints with zero warnings
    - `RUSTFLAGS="-D warnings" cargo test` - Runs all tests
-3. **Updates Cargo.toml version** - Updates the version field in all relevant Cargo.toml files to match the release version (without the 'v' prefix)
-4. **Creates and commits version bump** - Commits the Cargo.toml changes
-5. **Creates and pushes git tag** - Tags the release and pushes to remote
+3. **Creates and commits version bump** - Commits the Cargo.toml and
+   Cargo.lock changes
+4. **Creates and pushes git tag** - Tags the release and pushes to remote
 
 ## Required Input
 
@@ -47,25 +46,14 @@ When this skill is invoked:
    - Otherwise, ask the user for the version tag
    - The version must be in format `vX.Y.Z` (e.g., v1.2.3)
 
-2. **Update version in Cargo.toml files**:
-   - Extract the version number without the 'v' prefix (e.g., `v1.2.3` → `1.2.3`)
-   - Update the `version` field in the workspace root `Cargo.toml`
-   - Update the `version` field in all workspace member crates' `Cargo.toml` files
-   - Use the Read tool to find all Cargo.toml files that need updating
-   - Use the Edit tool to update each version field
-
-
-3. **MANDATORY: Run the validation script**:
+2. **MANDATORY: Run the validation and Cargo.toml update script**:
    **CRITICAL**: You MUST run this script as the very first validation step, before proceeding with any other operations.
    ```bash
-   .claude/skills/release/validate_version.sh <version>
+   .claude/skills/release/update_version.sh <version>
    ```
    - Replace `<version>` with the version tag from step 1
    - This script performs comprehensive validation:
      - Checks version format (vX.Y.Z)
-     - Ensures no leading zeros
-     - Verifies tag doesn't already exist
-     - Confirms version is newer than current
      - Validates all Cargo.toml files have consistent versions
    - If the script fails (non-zero exit code), STOP immediately and report the error to the user
    - Do NOT proceed to CI checks or any other steps if validation fails
@@ -122,8 +110,9 @@ Assistant: What version would you like to release? (format: vX.Y.Z)
 ## Notes
 
 - This skill follows the project's mandatory CI requirements from CLAUDE.md
-- The `validate_version.sh` script is located in `.claude/skills/release/` and MUST be invoked as the first validation step
-- All validation and CI checks must pass before version updates and tagging
+- The `update_version.sh` script is located in `.claude/skills/release/` and MUST be invoked as the first validation step
+- All validation and CI checks must pass and the version updates must be
+  commited before tagging
 - Version tags use semantic versioning with 'v' prefix (e.g., v1.2.3)
 - The skill both creates the tag locally and pushes it to the remote repository
 - The validation script ensures all Cargo.toml files have the same version before proceeding
