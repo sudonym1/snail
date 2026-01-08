@@ -33,19 +33,24 @@ syn match snailFloat "\<\d\+\.\d\+\>"
 " STRINGS (from grammar: string with raw_prefix, triple/single/double variants)
 " =============================================================================
 " Triple-quoted strings (must come before single-quoted to match first)
-syn region snailTripleString start=+"""+ end=+"""+ contains=snailInterpolation,snailEscape,@Spell
-syn region snailTripleString start=+'''+ end=+'''+ contains=snailInterpolation,snailEscape,@Spell
+syn region snailTripleString start=+"""+ end=+"""+ contains=snailInterpolation,snailEscapedBrace,snailEscape,@Spell
+syn region snailTripleString start=+'''+ end=+'''+ contains=snailInterpolation,snailEscapedBrace,snailEscape,@Spell
 syn region snailRawTripleString start=+r"""+ end=+"""+ contains=@Spell
 syn region snailRawTripleString start=+r'''+ end=+'''+ contains=@Spell
 
-" Single/double quoted strings
-syn region snailString start=+"+ skip=+\\"+ end=+"+ contains=snailInterpolation,snailEscape,@Spell
-syn region snailString start=+'+ skip=+\\'+ end=+'+ contains=snailInterpolation,snailEscape,@Spell
-syn region snailRawString start=+r"+ skip=+\\"+ end=+"+ contains=@Spell
-syn region snailRawString start=+r'+ skip=+\\'+ end=+'+ contains=@Spell
+" Single/double quoted strings with proper nested quote handling
+" Note: We need to be careful with skip patterns to not break on interpolations
+syn region snailString start=+"+ skip=+\\\\\|\\"+ end=+"+ contains=snailInterpolation,snailEscapedBrace,snailEscape,@Spell
+syn region snailString start=+'+ skip=+\\\\\|\\'+ end=+'+ contains=snailInterpolation,snailEscapedBrace,snailEscape,@Spell
+syn region snailRawString start=+r"+ skip=+\\\\\|\\"+ end=+"+ contains=@Spell
+syn region snailRawString start=+r'+ skip=+\\\\\|\\'+ end=+'+ contains=@Spell
 
 " String interpolation: {expr} inside strings
-syn region snailInterpolation matchgroup=snailInterpolationDelim start=+{+ end=+}+ contained contains=TOP,snailInterpolationDelim
+" The interpolation region can contain any Snail syntax including nested strings
+" We use keepend to prevent the interpolation from consuming too much
+syn region snailInterpolation matchgroup=snailInterpolationDelim start=+{+ end=+}+ keepend contained contains=snailString,snailTripleString,snailRawString,snailRawTripleString,snailNumber,snailFloat,snailBoolean,snailNone,snailFunctionCall,snailMethod,snailOperator,snailOperatorWord,snailBracket,snailDelimiter,snailComment,snailInterpolation,snailConditional,snailRepeat,snailStatement,snailException,snailDefine,snailImport,snailExceptionVar,snailFieldVar,snailInjectedVar
+
+" Escaped braces in strings (must come after interpolation region)
 syn match snailEscapedBrace "{{" contained
 syn match snailEscapedBrace "}}" contained
 
