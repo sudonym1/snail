@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "snail"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "pest",
@@ -383,11 +383,11 @@ dependencies = [
 
 [[package]]
 name = "snail-ast"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "snail-codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "snail-ast",
  "snail-lower",
@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "snail-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "snail-ast",
  "snail-codegen",
@@ -408,14 +408,14 @@ dependencies = [
 
 [[package]]
 name = "snail-error"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "snail-ast",
 ]
 
 [[package]]
 name = "snail-lower"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "snail-ast",
  "snail-error",
@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "snail-parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pest",
  "pest_derive",
@@ -434,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "snail-python-ast"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "snail-ast",
 ]
