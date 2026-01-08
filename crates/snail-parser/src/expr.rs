@@ -213,7 +213,7 @@ fn parse_comparison(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
         comparators.push(parse_expr_pair(rhs_pair, source)?);
     }
     if ops.len() == 1
-        && matches!(ops[0], CompareOp::In)
+        && matches!(ops[0], CompareOp::In | CompareOp::NotIn)
         && let [
             Expr::Regex {
                 pattern,
@@ -222,10 +222,20 @@ fn parse_comparison(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
         ] = comparators.as_slice()
     {
         let span = merge_span(expr_span(&left), regex_span);
-        return Ok(Expr::RegexMatch {
+        let regex_match = Expr::RegexMatch {
             value: Box::new(left),
             pattern: pattern.clone(),
-            span,
+            span: span.clone(),
+        };
+
+        return Ok(match ops[0] {
+            CompareOp::In => regex_match,
+            CompareOp::NotIn => Expr::Unary {
+                op: UnaryOp::Not,
+                expr: Box::new(regex_match),
+                span,
+            },
+            _ => unreachable!(),
         });
     }
     if ops.is_empty() {

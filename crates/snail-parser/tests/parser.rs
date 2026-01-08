@@ -1,4 +1,4 @@
-use snail_ast::{AssignTarget, BinaryOp, Expr, Stmt};
+use snail_ast::{AssignTarget, BinaryOp, Expr, Stmt, UnaryOp};
 use snail_parser::parse_program;
 
 #[test]
@@ -506,6 +506,27 @@ compiled = /abc/
 "#;
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 3);
+}
+
+#[test]
+fn parses_not_in_regex_as_negated_match() {
+    let source = r#"result = text not in /pattern/"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            // Should be a Unary(Not) wrapping a RegexMatch
+            match value {
+                Expr::Unary { op, expr, .. } => {
+                    assert!(matches!(op, UnaryOp::Not));
+                    assert!(matches!(expr.as_ref(), Expr::RegexMatch { .. }));
+                }
+                other => panic!("Expected negated regex match, got {:?}", other),
+            }
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
 }
 
 // ========== Error Path Tests ==========
