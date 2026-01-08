@@ -8,7 +8,6 @@ Snail is a programming language that compiles to Python, offering terse Perl/awk
 - Curly-brace blocks instead of indentation
 - Compiles to Python AST, then executes via CPython
 - Two modes: regular Snail and awk mode for line-oriented processing
-- Written in Rust with pyo3 for Python integration
 
 ## Build and Test Commands
 
