@@ -47,7 +47,15 @@ When this skill is invoked:
    - Otherwise, ask the user for the version tag
    - The version must be in format `vX.Y.Z` (e.g., v1.2.3)
 
-2. **MANDATORY: Run the validation script**:
+2. **Update version in Cargo.toml files**:
+   - Extract the version number without the 'v' prefix (e.g., `v1.2.3` → `1.2.3`)
+   - Update the `version` field in the workspace root `Cargo.toml`
+   - Update the `version` field in all workspace member crates' `Cargo.toml` files
+   - Use the Read tool to find all Cargo.toml files that need updating
+   - Use the Edit tool to update each version field
+
+
+3. **MANDATORY: Run the validation script**:
    **CRITICAL**: You MUST run this script as the very first validation step, before proceeding with any other operations.
    ```bash
    .claude/skills/release/validate_version.sh <version>
@@ -63,7 +71,7 @@ When this skill is invoked:
    - Do NOT proceed to CI checks or any other steps if validation fails
    - The script provides detailed error messages explaining what went wrong
 
-3. **Run all CI checks** (in this exact order):
+4. **Run all CI checks** (in this exact order):
    ```bash
    cargo fmt --check
    RUSTFLAGS="-D warnings" cargo build
@@ -74,16 +82,9 @@ When this skill is invoked:
    - Do NOT proceed to version updates or tagging if CI fails
    - The user must fix the issues before creating a release
 
-4. **Update version in Cargo.toml files**:
-   - Extract the version number without the 'v' prefix (e.g., `v1.2.3` → `1.2.3`)
-   - Update the `version` field in the workspace root `Cargo.toml`
-   - Update the `version` field in all workspace member crates' `Cargo.toml` files
-   - Use the Read tool to find all Cargo.toml files that need updating
-   - Use the Edit tool to update each version field
-
 5. **Create version bump commit**:
    ```bash
-   git add Cargo.toml crates/*/Cargo.toml
+   git add -A
    git commit -m "Bump version to <version>"
    ```
    - Replace `<version>` with the version number (with 'v' prefix, e.g., "Bump version to v1.2.3")
@@ -92,7 +93,6 @@ When this skill is invoked:
    ```bash
    git tag <version>
    git push origin <version>
-   git push origin HEAD
    ```
    - Replace `<version>` with the full version tag (e.g., `v1.2.3`)
    - Push both the tag and the version bump commit
