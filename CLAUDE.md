@@ -80,25 +80,38 @@ RUSTFLAGS="-D warnings" cargo test
 
 **If any check fails**: Fix the issues before proceeding. Do not create commits or PRs with failing CI checks.
 
+## Repository Structure
+
+The repository is organized as a Cargo workspace with the following crates:
+
+- **`snail-ast`**: Snail AST definitions (Program, AwkProgram, statements, expressions)
+- **`snail-parser`**: Pest-based parser that converts Snail source to AST
+- **`snail-lower`**: Lowers Snail AST to Python AST representation
+- **`snail-python-ast`**: Python AST node definitions (PyModule, PyStmt, PyExpr, etc.)
+- **`snail-codegen`**: Generates Python source code from Python AST
+- **`snail-error`**: Error types (ParseError, LowerError, SnailError)
+- **`snail-core`**: High-level compilation API (compile_snail_source, etc.)
+- **`snail-cli`**: Command-line interface and integration tests
+
 ## High-Level Architecture
 
 ### Compilation Pipeline
 
 Snail → Parser → AST → Lowering → Python AST → Python Source → subprocess exec
 
-1. **Parser** (`src/parser.rs`, `src/snail.pest`):
-   - Uses Pest parser generator with grammar defined in `src/snail.pest`
+1. **Parser** (`crates/snail-parser/`):
+   - Uses Pest parser generator with grammar defined in `crates/snail-parser/src/snail.pest`
    - Produces Snail AST with source spans for error reporting
    - Two entry points: `parse_program()` for regular Snail, `parse_awk_program()` for awk mode
    - All string forms (quotes, regex `/.../`, subprocess `$(...)`, `@(...)`) support `{expr}` interpolation
 
-2. **AST** (`src/ast.rs`, `src/awk.rs`):
-   - `Program`: Top-level Snail AST with statement list
-   - `AwkProgram`: Separate structure with BEGIN/END blocks and pattern/action rules
+2. **AST** (`crates/snail-ast/`):
+   - `Program`: Top-level Snail AST with statement list (`crates/snail-ast/src/ast.rs`)
+   - `AwkProgram`: Separate structure with BEGIN/END blocks and pattern/action rules (`crates/snail-ast/src/awk.rs`)
    - All nodes carry `SourceSpan` for traceback accuracy
    - Awk mode has special `$`-prefixed variables (`$l`, `$f`, `$n`, `$fn`, `$p`, `$m`)
 
-3. **Lowering** (`src/lower.rs`):
+3. **Lowering** (`crates/snail-lower/`):
    - Transforms Snail AST into Python AST representation (`PyModule`, `PyStmt`, `PyExpr`)
    - Handles Snail-specific features by generating helper code:
      - `?` operator → compact try/except using `__snail_compact_try` helper
@@ -108,16 +121,20 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → subpr
    - Awk variables (`$l`, `$n`, etc.) map to Python names (`__snail_line`, `__snail_nr_user`, etc.)
    - Awk mode wrapping: lower_awk_program() generates a Python main loop over input files/stdin
 
-4. **Python Code Generation** (`src/lower.rs`):
+4. **Python AST** (`crates/snail-python-ast/`):
+   - Defines Python AST node types used as intermediate representation
+   - Structures mirror Python's AST for accurate code generation
+
+5. **Python Code Generation** (`crates/snail-codegen/`):
    - `python_source()` converts Python AST to executable Python source strings
    - Preserves indentation and Python semantics exactly
 
-5. **Compilation API** (`src/python.rs`):
+6. **Compilation API** (`crates/snail-core/`):
    - `compile_snail_source()`: compiles Snail source to Python source code
    - `compile_snail_source_with_auto_print()`: compiles with optional auto-print of last expression
    - Used by CLI to generate Python code for execution
 
-6. **CLI** (`src/main.rs`):
+7. **CLI** (`crates/snail-cli/src/main.rs`):
    - Handles `-f file.snail`, one-liner execution, and `--awk` mode
    - Executes generated Python code via subprocess (respects virtual environments)
    - Uses `python3` by default, configurable via `PYTHON` environment variable
@@ -127,7 +144,7 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → subpr
 
 ### Error Handling
 
-- **ParseError** (`src/error.rs`): Wraps Pest errors with source context
+- **ParseError** (`crates/snail-error/`): Wraps Pest errors with source context
 - **LowerError**: Raised when AST can't be lowered to Python
 - **SnailError**: Unified error enum wrapping both
 - All errors preserve source spans for precise diagnostics
@@ -156,21 +173,23 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → subpr
 
 ## Testing Strategy
 
-- **Parser tests** (`tests/parser.rs`): Validate AST structure from source
-- **Lowering tests** (`tests/lower.rs`): Verify Python AST generation and code output
-- **Awk mode tests** (`tests/awk.rs`): Pattern matching, BEGIN/END, variables
-- **CLI tests** (`tests/cli.rs`): End-to-end execution via CLI, command-line interface behavior
+- **Parser tests** (`crates/snail-parser/tests/parser.rs`): Validate AST structure from source
+- **Lowering tests** (`crates/snail-cli/tests/lower.rs`): Verify Python AST generation and code output
+- **Awk mode tests** (`crates/snail-cli/tests/awk.rs`): Pattern matching, BEGIN/END, variables
+- **CLI tests** (`crates/snail-cli/tests/cli.rs`): End-to-end execution via CLI, command-line interface behavior
+- **Quote interpolation tests** (`crates/snail-cli/tests/quotes_in_expressions.rs`): String interpolation in various contexts
 
-**Note on virtual environments:** The CLI now executes Python via subprocess, automatically respecting any active virtual environment. Tests use pyo3 and may require Python 3.10+ with development headers installed.
+**Note on virtual environments:** The CLI executes Python via subprocess, automatically respecting any active virtual environment.
 
 ## Important Development Notes
 
 - **Always update `examples/all_syntax.snail`** when adding new syntax features
 - **MANDATORY CI checks must ALL pass** before any commit/push/PR - see "MANDATORY: CI Requirements" section above
-- The grammar is in `src/snail.pest` - parser logic uses Pest's PEG syntax
+- The grammar is in `crates/snail-parser/src/snail.pest` - parser logic uses Pest's PEG syntax
 - Keep Python semantics identical; only syntax differs
 - User-defined identifiers cannot start with `$` (reserved for awk mode)
 - Vim/Neovim syntax highlighting available in `extras/vim/`
+- Tree-sitter grammar available in `extras/tree-sitter-snail/`
 
 ## Phase-Based Development
 
