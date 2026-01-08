@@ -112,7 +112,7 @@ pipe_op = _{ "|" }
 
 // Comparisons
 comparison = { sum ~ (comp_op ~ sum)* }
-comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | "in" | "is" }
+comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | "not" ~ "in" | "is" ~ "not" | "in" | "is" }
 
 // Arithmetic operators
 sum = { product ~ (add_op ~ product)* }

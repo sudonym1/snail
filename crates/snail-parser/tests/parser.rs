@@ -768,3 +768,31 @@ fn parses_empty_structured_accessor() {
     let program = parse_program("result = $[]").expect("should parse");
     assert_eq!(program.stmts.len(), 1);
 }
+
+#[test]
+fn parses_ternary_with_not_in_operator() {
+    let source = "result = x if x not in y else z";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::IfExpr { .. }));
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_ternary_with_is_not_operator() {
+    let source = "result = x if x is not None else y";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::IfExpr { .. }));
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}

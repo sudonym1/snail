@@ -35,6 +35,8 @@ pub(crate) fn lower_compare_op(op: CompareOp) -> PyCompareOp {
         CompareOp::Gt => PyCompareOp::Gt,
         CompareOp::GtEq => PyCompareOp::GtEq,
         CompareOp::In => PyCompareOp::In,
+        CompareOp::NotIn => PyCompareOp::NotIn,
         CompareOp::Is => PyCompareOp::Is,
+        CompareOp::IsNot => PyCompareOp::IsNot,
     }
 }
