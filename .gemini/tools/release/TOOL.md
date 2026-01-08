@@ -3,13 +3,13 @@ name: release
 description: Prepare and create a new release - runs all CI checks, updates version in ALL Cargo.toml files in the repo, creates git tag, and pushes to remote. Use when the user wants to cut a new release or tag a version.
 ---
 
-# Release Preparation Skill
+# Release Preparation Tool
 
-This skill automates the release preparation workflow for the Snail project.
+This tool automates the release preparation workflow for the Snail project.
 
 ## When to Use
 
-Invoke this skill when the user wants to:
+Invoke this tool when the user wants to:
 - Create a new release
 - Tag a version
 - Prepare for publishing
@@ -49,7 +49,7 @@ When this skill is invoked:
 2. **MANDATORY: Run the validation and Cargo.toml update script**:
    **CRITICAL**: You MUST run this script as the very first validation step, before proceeding with any other operations.
    ```bash
-   .claude/skills/release/update_version.sh <version>
+   .gemini/tools/release/update_version.sh <version>
    ```
    - Replace `<version>` with the version tag from step 1
    - This script performs comprehensive validation:
@@ -109,8 +109,8 @@ Assistant: What version would you like to release? (format: vX.Y.Z)
 
 ## Notes
 
-- This skill follows the project's mandatory CI requirements from CLAUDE.md
-- The `update_version.sh` script is located in `.claude/skills/release/` and MUST be invoked as the first validation step
+- This tool follows the project's mandatory CI requirements from AGENTS.md
+- The `update_version.sh` script is located in `.gemini/tools/release/` and MUST be invoked as the first validation step
 - All validation and CI checks must pass and the version updates must be
   commited before tagging
 - Version tags use semantic versioning with 'v' prefix (e.g., v1.2.3)
