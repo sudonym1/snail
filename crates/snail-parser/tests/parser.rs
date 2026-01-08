@@ -1,4 +1,4 @@
-use snail_ast::{AssignTarget, BinaryOp, Expr, Stmt};
+use snail_ast::{AssignTarget, BinaryOp, Expr, Stmt, UnaryOp};
 use snail_parser::parse_program;
 
 #[test]
@@ -508,6 +508,27 @@ compiled = /abc/
     assert_eq!(program.stmts.len(), 3);
 }
 
+#[test]
+fn parses_not_in_regex_as_negated_match() {
+    let source = r#"result = text not in /pattern/"#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            // Should be a Unary(Not) wrapping a RegexMatch
+            match value {
+                Expr::Unary { op, expr, .. } => {
+                    assert!(matches!(op, UnaryOp::Not));
+                    assert!(matches!(expr.as_ref(), Expr::RegexMatch { .. }));
+                }
+                other => panic!("Expected negated regex match, got {:?}", other),
+            }
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
 // ========== Error Path Tests ==========
 
 #[test]
@@ -767,4 +788,32 @@ fn parses_structured_accessor_with_pipeline() {
 fn parses_empty_structured_accessor() {
     let program = parse_program("result = $[]").expect("should parse");
     assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn parses_ternary_with_not_in_operator() {
+    let source = "result = x if x not in y else z";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::IfExpr { .. }));
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_ternary_with_is_not_operator() {
+    let source = "result = x if x is not None else y";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::IfExpr { .. }));
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
 }

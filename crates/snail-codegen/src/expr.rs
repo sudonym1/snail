@@ -437,6 +437,8 @@ fn compare_op(op: PyCompareOp) -> &'static str {
         PyCompareOp::Gt => ">",
         PyCompareOp::GtEq => ">=",
         PyCompareOp::In => "in",
+        PyCompareOp::NotIn => "not in",
         PyCompareOp::Is => "is",
+        PyCompareOp::IsNot => "is not",
     }
 }

@@ -305,5 +305,7 @@ pub enum PyCompareOp {
     Gt,
     GtEq,
     In,
+    NotIn,
     Is,
+    IsNot,
 }

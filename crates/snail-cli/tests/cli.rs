@@ -674,3 +674,27 @@ fn json_with_structured_accessor_from_stdin() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert_eq!(stdout.trim(), "123");
 }
+
+#[test]
+fn not_in_regex_negates_match() {
+    // Regression test: "text not in /pattern/" should negate the regex match
+    let exe = env!("CARGO_BIN_EXE_snail");
+
+    // Test when pattern doesn't match
+    let output = Command::new(exe)
+        .args([r#"if "foo" not in /bar/ { print("not found") }"#])
+        .output()
+        .expect("run snail");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "not found");
+
+    // Test when pattern matches
+    let output = Command::new(exe)
+        .args([r#"if "foo" not in /foo/ { print("not found") } else { print("found") }"#])
+        .output()
+        .expect("run snail");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.trim(), "found");
+}

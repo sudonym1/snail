@@ -388,5 +388,7 @@ pub enum CompareOp {
     Gt,
     GtEq,
     In,
+    NotIn,
     Is,
+    IsNot,
 }
