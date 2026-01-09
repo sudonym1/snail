@@ -72,7 +72,17 @@ pub fn expr_source(expr: &PyExpr) -> String {
                 .join(", ");
             format!("{}({})", expr_source(func), args)
         }
-        PyExpr::Attribute { value, attr, .. } => format!("{}.{}", expr_source(value), attr),
+        PyExpr::Attribute { value, attr, .. } => {
+            // Wrap numeric literals and unary expressions in parentheses to allow method calls
+            // e.g., (123).__str__() or (+123).attr
+            let value_str = match value.as_ref() {
+                PyExpr::Number { .. } | PyExpr::Unary { .. } => {
+                    format!("({})", expr_source(value))
+                }
+                _ => expr_source(value),
+            };
+            format!("{}.{}", value_str, attr)
+        }
         PyExpr::Index { value, index, .. } => {
             format!("{}[{}]", expr_source(value), expr_source(index))
         }
