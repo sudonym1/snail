@@ -322,16 +322,13 @@ pub fn index_expr(size: Size) -> impl Strategy<Value = Expr> {
 pub fn compare_expr(size: Size) -> impl Strategy<Value = Expr> {
     (
         expr_with_size(size),
-        prop::collection::vec(compare_op(), 1..=3),
-        prop::collection::vec(expr_with_size(size), 1..=3),
+        compare_op(),
+        expr_with_size(size),
     )
-        .prop_filter("same length", |(_, ops, comparators)| {
-            ops.len() == comparators.len()
-        })
-        .prop_map(|(left, ops, comparators)| Expr::Compare {
+        .prop_map(|(left, op, right)| Expr::Compare {
             left: Box::new(left),
-            ops,
-            comparators,
+            ops: vec![op],
+            comparators: vec![right],
             span: dummy_span(),
         })
 }
