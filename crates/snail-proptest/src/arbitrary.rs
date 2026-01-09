@@ -165,7 +165,7 @@ pub fn expr_with_size(size: Size) -> impl Strategy<Value = Expr> {
             2 => call_expr(size.half()),
             2 => attribute_expr(size.half()),
             2 => index_expr(size.half()),
-            1 => slice_expr(size.half()),
+            // Note: slice_expr removed - slices are only valid as indices, not standalone
             // Snail-specific features
             1 => fstring_expr(size.half()),
             1 => regex_expr(),
@@ -204,12 +204,30 @@ pub fn unary_expr(size: Size) -> impl Strategy<Value = Expr> {
 pub fn call_expr(size: Size) -> impl Strategy<Value = Expr> {
     (
         expr_with_size(size),
-        prop::collection::vec(argument(size), 0..=3),
+        prop::collection::vec(expr_with_size(size), 0..=2), // positional args
+        prop::collection::vec((identifier(), expr_with_size(size)), 0..=2), // keyword args
     )
-        .prop_map(|(func, args)| Expr::Call {
-            func: Box::new(func),
-            args,
-            span: dummy_span(),
+        .prop_map(|(func, positional_values, keyword_pairs)| {
+            // Build args list with positional first, then keyword
+            let mut args = Vec::new();
+            for value in positional_values {
+                args.push(Argument::Positional {
+                    value,
+                    span: dummy_span(),
+                });
+            }
+            for (name, value) in keyword_pairs {
+                args.push(Argument::Keyword {
+                    name,
+                    value,
+                    span: dummy_span(),
+                });
+            }
+            Expr::Call {
+                func: Box::new(func),
+                args,
+                span: dummy_span(),
+            }
         })
 }
 
@@ -287,11 +305,18 @@ pub fn attribute_expr(size: Size) -> impl Strategy<Value = Expr> {
 }
 
 pub fn index_expr(size: Size) -> impl Strategy<Value = Expr> {
-    (expr_with_size(size), expr_with_size(size)).prop_map(|(value, index)| Expr::Index {
-        value: Box::new(value),
-        index: Box::new(index),
-        span: dummy_span(),
-    })
+    (
+        expr_with_size(size),
+        prop_oneof![
+            3 => expr_with_size(size),
+            1 => slice_expr(size),
+        ],
+    )
+        .prop_map(|(value, index)| Expr::Index {
+            value: Box::new(value),
+            index: Box::new(index),
+            span: dummy_span(),
+        })
 }
 
 pub fn compare_expr(size: Size) -> impl Strategy<Value = Expr> {
@@ -608,7 +633,11 @@ pub fn try_stmt(size: Size) -> impl Strategy<Value = Stmt> {
 
 pub fn except_handler(size: Size) -> impl Strategy<Value = ExceptHandler> {
     prop::collection::vec(stmt_with_size(size), 1..=2).prop_map(|body| ExceptHandler {
-        type_name: None,
+        // Always specify "Exception" to avoid "default except must be last" errors
+        type_name: Some(Expr::Name {
+            name: "Exception".to_string(),
+            span: dummy_span(),
+        }),
         name: None,
         body,
         span: dummy_span(),
@@ -690,13 +719,22 @@ pub fn import_stmt() -> impl Strategy<Value = Stmt> {
 pub fn import_from_stmt() -> impl Strategy<Value = Stmt> {
     (
         prop::collection::vec(identifier(), 1..=2),
-        prop::collection::vec(import_item(), 1..=3),
+        prop::collection::vec(import_from_item(), 1..=3),
     )
         .prop_map(|(module, items)| Stmt::ImportFrom {
             module,
             items,
             span: dummy_span(),
         })
+}
+
+pub fn import_from_item() -> impl Strategy<Value = ImportItem> {
+    // In "from x import y", y must be a simple identifier, not a dotted path
+    (identifier(), prop::option::of(identifier())).prop_map(|(name, alias)| ImportItem {
+        name: vec![name],
+        alias,
+        span: dummy_span(),
+    })
 }
 
 pub fn import_item() -> impl Strategy<Value = ImportItem> {
