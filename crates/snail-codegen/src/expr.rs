@@ -21,19 +21,37 @@ pub fn expr_source(expr: &PyExpr) -> String {
             }
         }
         PyExpr::None { .. } => "None".to_string(),
-        PyExpr::Unary { op, operand, .. } => match op {
-            PyUnaryOp::Plus => format!("+{}", expr_source(operand)),
-            PyUnaryOp::Minus => format!("-{}", expr_source(operand)),
-            PyUnaryOp::Not => format!("not {}", expr_source(operand)),
-        },
+        PyExpr::Unary { op, operand, .. } => {
+            // Wrap 'not' operands in parens to avoid "not after operator" errors
+            let operand_str = match operand.as_ref() {
+                PyExpr::Unary { op: PyUnaryOp::Not, .. } => {
+                    format!("({})", expr_source(operand))
+                }
+                _ => expr_source(operand),
+            };
+            match op {
+                PyUnaryOp::Plus => format!("+{}", operand_str),
+                PyUnaryOp::Minus => format!("-{}", operand_str),
+                PyUnaryOp::Not => format!("not {}", operand_str),
+            }
+        }
         PyExpr::Binary {
             left, op, right, ..
-        } => format!(
-            "({} {} {})",
-            expr_source(left),
-            binary_op(*op),
-            expr_source(right)
-        ),
+        } => {
+            // Wrap 'not' unary expressions in extra parens to avoid "not after operator" syntax errors
+            let right_str = match right.as_ref() {
+                PyExpr::Unary { op: PyUnaryOp::Not, .. } => {
+                    format!("({})", expr_source(right))
+                }
+                _ => expr_source(right),
+            };
+            format!(
+                "({} {} {})",
+                expr_source(left),
+                binary_op(*op),
+                right_str
+            )
+        }
         PyExpr::Compare {
             left,
             ops,
@@ -44,7 +62,14 @@ pub fn expr_source(expr: &PyExpr) -> String {
             parts.push(expr_source(left));
             for (op, comparator) in ops.iter().zip(comparators) {
                 parts.push(compare_op(*op).to_string());
-                parts.push(expr_source(comparator));
+                // Wrap 'not' unary expressions in extra parens to avoid syntax errors
+                let comparator_str = match comparator {
+                    PyExpr::Unary { op: PyUnaryOp::Not, .. } => {
+                        format!("({})", expr_source(comparator))
+                    }
+                    _ => expr_source(comparator),
+                };
+                parts.push(comparator_str);
             }
             format!("({})", parts.join(" "))
         }
@@ -73,10 +98,10 @@ pub fn expr_source(expr: &PyExpr) -> String {
             format!("{}({})", expr_source(func), args)
         }
         PyExpr::Attribute { value, attr, .. } => {
-            // Wrap numeric literals and unary expressions in parentheses to allow method calls
-            // e.g., (123).__str__() or (+123).attr
+            // Wrap numeric literals, unary expressions, and bool literals in parentheses
+            // e.g., (123).__str__(), (+123).attr, or (True).__str__()
             let value_str = match value.as_ref() {
-                PyExpr::Number { .. } | PyExpr::Unary { .. } => {
+                PyExpr::Number { .. } | PyExpr::Unary { .. } | PyExpr::Bool { .. } | PyExpr::None { .. } => {
                     format!("({})", expr_source(value))
                 }
                 _ => expr_source(value),
