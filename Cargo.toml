@@ -9,6 +9,7 @@ members = [
     "crates/snail-codegen",
     "crates/snail-core",
     "crates/snail-cli",
+    "crates/snail-proptest",
 ]
 
 [workspace.package]

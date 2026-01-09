@@ -1,0 +1,17 @@
+[package]
+name = "snail-proptest"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+snail-ast = { path = "../snail-ast" }
+snail-parser = { path = "../snail-parser" }
+snail-lower = { path = "../snail-lower" }
+snail-python-ast = { path = "../snail-python-ast" }
+snail-codegen = { path = "../snail-codegen" }
+snail-core = { path = "../snail-core" }
+snail-error = { path = "../snail-error" }
+proptest = "1.5"
+
+[dev-dependencies]
+tempfile = "3"

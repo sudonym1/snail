@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 9589a0d7d5d3919fa31d6272177c48cc84c8f412f4628de6bb983b7aa8afaa3e # shrinks to left = Number { value: "0", span: SourceSpan { start: SourcePos { offset: 0, line: 1, column: 1 }, end: SourcePos { offset: 0, line: 1, column: 1 } } }, op = Pipeline, right = Number { value: "0", span: SourceSpan { start: SourcePos { offset: 0, line: 1, column: 1 }, end: SourcePos { offset: 0, line: 1, column: 1 } } }
