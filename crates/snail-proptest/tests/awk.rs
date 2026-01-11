@@ -1,3 +1,5 @@
+#![cfg(feature = "run-proptests")]
+
 use proptest::prelude::*;
 use snail_proptest::arbitrary::*;
 

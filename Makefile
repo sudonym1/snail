@@ -6,6 +6,7 @@ all: test build install
 # Run all tests
 test:
 	cargo fmt --check
+	RUSTFLAGS="-D warnings" cargo build --features run-proptests
 	cargo clippy -- -D warnings
 	RUSTFLAGS="-D warnings" cargo test
 

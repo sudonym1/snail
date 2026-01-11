@@ -12,12 +12,42 @@ pub fn identifier() -> impl Strategy<Value = String> {
         .prop_filter("not a keyword", |s| {
             !matches!(
                 s.as_str(),
-                "if" | "elif" | "else" | "while" | "for" | "def" | "class"
-                    | "try" | "except" | "finally" | "with" | "as" | "return"
-                    | "raise" | "assert" | "del" | "break" | "continue" | "pass"
-                    | "import" | "from" | "and" | "or" | "not" | "in" | "is"
-                    | "True" | "False" | "None" | "BEGIN" | "END" | "lambda"
-                    | "yield" | "global" | "nonlocal" | "async" | "await"
+                "if" | "elif"
+                    | "else"
+                    | "while"
+                    | "for"
+                    | "def"
+                    | "class"
+                    | "try"
+                    | "except"
+                    | "finally"
+                    | "with"
+                    | "as"
+                    | "return"
+                    | "raise"
+                    | "assert"
+                    | "del"
+                    | "break"
+                    | "continue"
+                    | "pass"
+                    | "import"
+                    | "from"
+                    | "and"
+                    | "or"
+                    | "not"
+                    | "in"
+                    | "is"
+                    | "True"
+                    | "False"
+                    | "None"
+                    | "BEGIN"
+                    | "END"
+                    | "lambda"
+                    | "yield"
+                    | "global"
+                    | "nonlocal"
+                    | "async"
+                    | "await"
             )
         })
 }
@@ -72,9 +102,7 @@ pub fn bool_expr() -> impl Strategy<Value = Expr> {
 }
 
 pub fn none_expr() -> impl Strategy<Value = Expr> {
-    Just(Expr::None {
-        span: dummy_span(),
-    })
+    Just(Expr::None { span: dummy_span() })
 }
 
 pub fn name_expr() -> impl Strategy<Value = Expr> {
@@ -180,17 +208,14 @@ pub fn expr_with_size(size: Size) -> impl Strategy<Value = Expr> {
 }
 
 pub fn binary_expr(size: Size) -> impl Strategy<Value = Expr> {
-    (
-        expr_with_size(size),
-        binary_op(),
-        expr_with_size(size),
-    )
-        .prop_map(|(left, op, right)| Expr::Binary {
+    (expr_with_size(size), binary_op(), expr_with_size(size)).prop_map(|(left, op, right)| {
+        Expr::Binary {
             left: Box::new(left),
             op,
             right: Box::new(right),
             span: dummy_span(),
-        })
+        }
+    })
 }
 
 pub fn unary_expr(size: Size) -> impl Strategy<Value = Expr> {
@@ -262,12 +287,12 @@ pub fn tuple_expr(size: Size) -> impl Strategy<Value = Expr> {
 }
 
 pub fn dict_expr(size: Size) -> impl Strategy<Value = Expr> {
-    prop::collection::vec((expr_with_size(size), expr_with_size(size)), 0..=3).prop_map(
-        |entries| Expr::Dict {
+    prop::collection::vec((expr_with_size(size), expr_with_size(size)), 0..=3).prop_map(|entries| {
+        Expr::Dict {
             entries,
             span: dummy_span(),
-        },
-    )
+        }
+    })
 }
 
 pub fn if_expr(size: Size) -> impl Strategy<Value = Expr> {
@@ -285,15 +310,13 @@ pub fn if_expr(size: Size) -> impl Strategy<Value = Expr> {
 }
 
 pub fn try_expr(size: Size) -> impl Strategy<Value = Expr> {
-    (
-        expr_with_size(size),
-        prop::option::of(expr_with_size(size)),
-    )
-        .prop_map(|(expr, fallback)| Expr::TryExpr {
+    (expr_with_size(size), prop::option::of(expr_with_size(size))).prop_map(|(expr, fallback)| {
+        Expr::TryExpr {
             expr: Box::new(expr),
             fallback: fallback.map(Box::new),
             span: dummy_span(),
-        })
+        }
+    })
 }
 
 pub fn attribute_expr(size: Size) -> impl Strategy<Value = Expr> {
@@ -320,17 +343,14 @@ pub fn index_expr(size: Size) -> impl Strategy<Value = Expr> {
 }
 
 pub fn compare_expr(size: Size) -> impl Strategy<Value = Expr> {
-    (
-        expr_with_size(size),
-        compare_op(),
-        expr_with_size(size),
-    )
-        .prop_map(|(left, op, right)| Expr::Compare {
+    (expr_with_size(size), compare_op(), expr_with_size(size)).prop_map(|(left, op, right)| {
+        Expr::Compare {
             left: Box::new(left),
             ops: vec![op],
             comparators: vec![right],
             span: dummy_span(),
-        })
+        }
+    })
 }
 
 pub fn set_expr(size: Size) -> impl Strategy<Value = Expr> {
@@ -439,13 +459,12 @@ pub fn regex_match_expr(size: Size) -> impl Strategy<Value = Expr> {
 
 pub fn subprocess_expr() -> impl Strategy<Value = Expr> {
     (
-        prop_oneof![
-            Just(SubprocessKind::Capture),
-            Just(SubprocessKind::Status),
-        ],
+        prop_oneof![Just(SubprocessKind::Capture), Just(SubprocessKind::Status),],
         prop::collection::vec(
-            prop::string::string_regex("[a-z]{1,5}").unwrap().prop_map(SubprocessPart::Text),
-            1..=3
+            prop::string::string_regex("[a-z]{1,5}")
+                .unwrap()
+                .prop_map(SubprocessPart::Text),
+            1..=3,
         ),
     )
         .prop_map(|(kind, parts)| Expr::Subprocess {
@@ -688,15 +707,13 @@ pub fn raise_stmt(size: Size) -> impl Strategy<Value = Stmt> {
 }
 
 pub fn assert_stmt(size: Size) -> impl Strategy<Value = Stmt> {
-    (
-        expr_with_size(size),
-        prop::option::of(expr_with_size(size)),
-    )
-        .prop_map(|(test, message)| Stmt::Assert {
+    (expr_with_size(size), prop::option::of(expr_with_size(size))).prop_map(|(test, message)| {
+        Stmt::Assert {
             test,
             message,
             span: dummy_span(),
-        })
+        }
+    })
 }
 
 pub fn delete_stmt() -> impl Strategy<Value = Stmt> {

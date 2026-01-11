@@ -15,8 +15,11 @@ Snail is a programming language that compiles to Python, offering terse Perl/awk
 # Build the project
 cargo build
 
-# Run all tests (includes parser, lowering, awk mode, CLI tests)
+# Run all tests (includes parser, lowering, awk mode, CLI tests; excludes proptests by default)
 cargo test
+
+# Run tests including property-based tests (proptests)
+cargo test --features run-proptests
 
 # Run tests for a specific module
 cargo test parser
@@ -41,11 +44,25 @@ cargo fmt --check
 
 # Lint with clippy
 cargo clippy -- -D warnings
+
+# Build with all features (including proptests)
+cargo build --features run-proptests
 ```
+
+## Property-Based Testing (Proptests)
+
+The `snail-proptest` crate contains property-based tests using the proptest framework. These tests are **skipped by default** during `cargo test` to keep development iteration fast.
+
+- **Default behavior**: `cargo test` excludes proptest tests
+- **To run proptests**: Use `cargo test --features run-proptests`
+- **Feature flag**: `run-proptests` conditionally compiles test files in `crates/snail-proptest/tests/`
+- **Pre-commit requirement**: Must build with feature flag (`cargo build --features run-proptests`) before committing
+
+Proptests are useful for finding edge cases and regressions, but are slower than regular tests. The feature flag allows developers to run them when needed while keeping normal test runs fast.
 
 ## ⚠️ MANDATORY: CI Requirements Before Committing/Pushing
 
-**CRITICAL**: Before creating ANY commit, push, or pull request, you MUST run all four CI checks below and ensure they ALL pass. No exceptions.
+**CRITICAL**: Before creating ANY commit, push, or pull request, you MUST run all five CI checks below and ensure they ALL pass. No exceptions.
 
 ### Required CI Checks (ALL must pass):
 
@@ -56,10 +73,13 @@ cargo fmt --check
 # 2. BUILD - Must pass with NO compiler warnings (warnings treated as errors)
 RUSTFLAGS="-D warnings" cargo build
 
-# 3. LINTING - Must pass with NO clippy warnings
+# 3. BUILD WITH PROPTESTS - Must pass with all features enabled
+cargo build --features run-proptests
+
+# 4. LINTING - Must pass with NO clippy warnings
 cargo clippy -- -D warnings
 
-# 4. TESTS - Must pass completely
+# 5. TESTS - Must pass completely (excludes proptests by default)
 RUSTFLAGS="-D warnings" cargo test
 ```
 
@@ -67,6 +87,7 @@ RUSTFLAGS="-D warnings" cargo test
 
 - [ ] `cargo fmt --check` passes (or run `cargo fmt` to fix formatting)
 - [ ] `RUSTFLAGS="-D warnings" cargo build` passes with zero compiler warnings
+- [ ] `cargo build --features run-proptests` passes (feature-gated proptest support)
 - [ ] `cargo clippy -- -D warnings` passes with zero clippy warnings
 - [ ] `cargo test` passes with all tests succeeding
 - [ ] If adding new syntax: `examples/all_syntax.snail` updated
@@ -74,7 +95,7 @@ RUSTFLAGS="-D warnings" cargo test
 
 **DO NOT**:
 - ❌ Skip any CI check "to save time"
-- ❌ Commit/push without running all four checks
+- ❌ Commit/push without running all five checks
 - ❌ Create a PR without verifying all checks pass
 - ❌ Assume tests/build still pass without running them
 

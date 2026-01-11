@@ -297,8 +297,11 @@ source ~/.bashrc
 ### Running Tests
 
 ```bash
-# Run all tests (parser, lowering, awk mode, CLI)
+# Run all tests (parser, lowering, awk mode, CLI; excludes proptests by default)
 cargo test
+
+# Run tests including property-based tests (proptests)
+cargo test --features run-proptests
 
 # Run specific test suites
 cargo test parser
@@ -308,7 +311,12 @@ cargo test cli
 # Check code formatting and linting
 cargo fmt --check
 cargo clippy -- -D warnings
+
+# Build with all features enabled (required before committing)
+cargo build --features run-proptests
 ```
+
+**Note on Proptests**: The `snail-proptest` crate contains property-based tests that are skipped by default to keep development iteration fast. Use `--features run-proptests` to run them. Before committing, verify that `cargo build --features run-proptests` compiles successfully.
 
 ### Troubleshooting
 
