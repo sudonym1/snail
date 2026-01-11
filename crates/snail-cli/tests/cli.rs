@@ -698,3 +698,145 @@ fn not_in_regex_negates_match() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert_eq!(stdout.trim(), "found");
 }
+
+#[test]
+fn parse_only_succeeds_with_valid_inline_syntax() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["--parse-only", "x = 42; print(x)"])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn parse_only_fails_with_invalid_inline_syntax() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["--parse-only", "x = 1 +"])
+        .output()
+        .expect("run snail");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("error") || stderr.contains("Error"));
+}
+
+#[test]
+fn parse_only_succeeds_with_valid_file() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let mut file = NamedTempFile::with_suffix(".snail").expect("create temp file");
+    writeln!(file, "x = 10; print(x)").expect("write to temp file");
+    let path = file.path().to_str().unwrap();
+
+    let output = Command::new(exe)
+        .args(["--parse-only", "-f", path])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn parse_only_fails_with_invalid_file() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let mut file = NamedTempFile::with_suffix(".snail").expect("create temp file");
+    writeln!(file, "x = 1 +").expect("write to temp file");
+    let path = file.path().to_str().unwrap();
+
+    let output = Command::new(exe)
+        .args(["--parse-only", "-f", path])
+        .output()
+        .expect("run snail");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("error") || stderr.contains("Error"));
+}
+
+#[test]
+fn parse_only_succeeds_in_awk_mode() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["--parse-only", "--awk", "BEGIN { print(\"ok\") }"])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn parse_only_fails_in_awk_mode() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["--parse-only", "--awk", "BEGIN { print(\"ok\")"])
+        .output()
+        .expect("run snail");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("error") || stderr.contains("Error"));
+}
+
+#[test]
+fn parse_only_does_not_execute_runtime_errors() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["--parse-only", "raise ValueError('boom')"])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn parse_only_allows_empty_input() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["--parse-only", ""])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn parse_only_ignores_no_print_flag() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["--parse-only", "-P", "42"])
+        .output()
+        .expect("run snail");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn parse_only_reports_file_not_found() {
+    let exe = env!("CARGO_BIN_EXE_snail");
+    let output = Command::new(exe)
+        .args(["--parse-only", "-f", "/nonexistent/path/to/file.snail"])
+        .output()
+        .expect("run snail");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("failed to read")
+            || stderr.contains("No such file")
+            || stderr.contains("not found")
+    );
+}

@@ -4,7 +4,10 @@ use std::process::{Command, Stdio};
 
 use clap::Parser;
 
-use snail::{CompileMode, compile_snail_source_with_auto_print, format_snail_error};
+use snail::{
+    CompileMode, compile_snail_source_with_auto_print, format_snail_error, parse_awk_program,
+    parse_program,
+};
 
 #[cfg(debug_assertions)]
 const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")");
@@ -44,6 +47,10 @@ struct Cli {
     /// Print version
     #[arg(short = 'v', long = "version")]
     version: bool,
+
+    /// Validate syntax only (parse without executing)
+    #[arg(long = "parse-only")]
+    parse_only: bool,
 
     /// Input file and arguments passed to the script
     #[arg(allow_hyphen_values = true)]
@@ -98,6 +105,10 @@ fn run() -> Result<(), String> {
     } else {
         return Err("no input provided".to_string());
     };
+
+    if cli.parse_only {
+        return validate_syntax(&input);
+    }
 
     if cli.python {
         let python = match compile_snail_source_with_auto_print(
@@ -165,6 +176,20 @@ __name__ = "__main__"
     } else {
         std::process::exit(status.code().unwrap_or(1));
     }
+}
+
+fn validate_syntax(input: &CliInput) -> Result<(), String> {
+    match input.mode {
+        CompileMode::Snail => {
+            parse_program(&input.source)
+                .map_err(|err| format_snail_error(&err.into(), &input.filename))?;
+        }
+        CompileMode::Awk => {
+            parse_awk_program(&input.source)
+                .map_err(|err| format_snail_error(&err.into(), &input.filename))?;
+        }
+    }
+    Ok(())
 }
 
 fn format_python_string(s: &str) -> String {
