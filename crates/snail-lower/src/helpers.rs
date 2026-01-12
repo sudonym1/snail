@@ -1,49 +1,103 @@
+use pyo3::prelude::*;
+use pyo3::types::PyList;
 use snail_ast::{SourceSpan, StringDelimiter};
-use snail_python_ast::*;
+use snail_error::LowerError;
 
-pub(crate) fn assign_name(name: &str, value: PyExpr, span: &SourceSpan) -> PyStmt {
-    PyStmt::Assign {
-        targets: vec![name_expr(name, span)],
-        value,
-        span: span.clone(),
-    }
+use crate::py_ast::{AstBuilder, py_err_to_lower, set_location};
+
+pub(crate) fn assign_name(
+    builder: &AstBuilder<'_>,
+    name: &str,
+    value: PyObject,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let target = name_expr(
+        builder,
+        name,
+        span,
+        builder.store_ctx().map_err(py_err_to_lower)?,
+    )?;
+    builder
+        .call_node(
+            "Assign",
+            vec![
+                PyList::new_bound(builder.py(), vec![target]).into_py(builder.py()),
+                value,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
 }
 
-pub(crate) fn name_expr(name: &str, span: &SourceSpan) -> PyExpr {
-    PyExpr::Name {
-        id: name.to_string(),
-        span: span.clone(),
-    }
+pub(crate) fn name_expr(
+    builder: &AstBuilder<'_>,
+    name: &str,
+    span: &SourceSpan,
+    ctx: PyObject,
+) -> Result<PyObject, LowerError> {
+    builder
+        .call_node(
+            "Name",
+            vec![name.to_string().into_py(builder.py()), ctx],
+            span,
+        )
+        .map_err(py_err_to_lower)
 }
 
-pub(crate) fn string_expr(value: &str, span: &SourceSpan) -> PyExpr {
-    PyExpr::String {
-        value: value.to_string(),
-        raw: false,
-        delimiter: StringDelimiter::Double,
-        span: span.clone(),
-    }
+pub(crate) fn string_expr(
+    builder: &AstBuilder<'_>,
+    value: &str,
+    raw: bool,
+    delimiter: StringDelimiter,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let rendered = match (raw, delimiter) {
+        (true, StringDelimiter::Single) => format!("r'{}'", value),
+        (true, StringDelimiter::Double) => format!("r\"{}\"", value),
+        (true, StringDelimiter::TripleSingle) => format!("r'''{}'''", value),
+        (true, StringDelimiter::TripleDouble) => format!("r\"\"\"{}\"\"\"", value),
+        (false, StringDelimiter::Single) => format!("'{}'", value),
+        (false, StringDelimiter::Double) => format!("\"{}\"", value),
+        (false, StringDelimiter::TripleSingle) => format!("'''{}'''", value),
+        (false, StringDelimiter::TripleDouble) => format!("\"\"\"{}\"\"\"", value),
+    };
+    let expr = builder
+        .py()
+        .import_bound("ast")
+        .and_then(|ast| ast.getattr("parse"))
+        .and_then(|parse| parse.call1((rendered,)))
+        .and_then(|module| module.getattr("body"))
+        .and_then(|body| body.get_item(0))
+        .and_then(|expr_stmt| expr_stmt.getattr("value"));
+
+    let expr = expr.map_err(py_err_to_lower)?;
+    set_location(&expr, span).map_err(py_err_to_lower)?;
+    Ok(expr.into_py(builder.py()))
 }
 
-pub(crate) fn number_expr(value: &str, span: &SourceSpan) -> PyExpr {
-    PyExpr::Number {
-        value: value.to_string(),
-        span: span.clone(),
-    }
+pub(crate) fn number_expr(
+    builder: &AstBuilder<'_>,
+    value: &str,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let expr = builder
+        .py()
+        .import_bound("ast")
+        .and_then(|ast| ast.getattr("parse"))
+        .and_then(|parse| parse.call1((value,)))
+        .and_then(|module| module.getattr("body"))
+        .and_then(|body| body.get_item(0))
+        .and_then(|expr_stmt| expr_stmt.getattr("value"));
+
+    let expr = expr.map_err(py_err_to_lower)?;
+    set_location(&expr, span).map_err(py_err_to_lower)?;
+    Ok(expr.into_py(builder.py()))
 }
 
-pub(crate) fn regex_pattern_expr(pattern: &str, span: &SourceSpan) -> PyExpr {
-    PyExpr::String {
-        value: pattern.to_string(),
-        raw: true,
-        delimiter: StringDelimiter::Double,
-        span: span.clone(),
-    }
-}
-
-pub(crate) fn pos_arg(value: PyExpr, span: &SourceSpan) -> PyArgument {
-    PyArgument::Positional {
-        value,
-        span: span.clone(),
-    }
+pub(crate) fn regex_pattern_expr(
+    builder: &AstBuilder<'_>,
+    pattern: &str,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    string_expr(builder, pattern, true, StringDelimiter::Double, span)
 }

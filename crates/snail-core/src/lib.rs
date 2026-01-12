@@ -1,33 +1,36 @@
+use pyo3::prelude::*;
+
 // Re-export all workspace crates for unified API
 pub use snail_ast::*;
-pub use snail_codegen::*;
 pub use snail_error::*;
 pub use snail_lower::*;
 pub use snail_parser::*;
-pub use snail_python_ast::*;
 
 /// Compilation API
-pub fn compile_snail_source(source: &str, mode: CompileMode) -> Result<String, SnailError> {
-    compile_snail_source_with_auto_print(source, mode, false)
+pub fn compile_snail_source(
+    py: Python<'_>,
+    source: &str,
+    mode: CompileMode,
+) -> Result<PyObject, SnailError> {
+    compile_snail_source_with_auto_print(py, source, mode, false)
 }
 
 pub fn compile_snail_source_with_auto_print(
+    py: Python<'_>,
     source: &str,
     mode: CompileMode,
     auto_print_last: bool,
-) -> Result<String, SnailError> {
+) -> Result<PyObject, SnailError> {
     match mode {
         CompileMode::Snail => {
             let program = parse_program(source)?;
-            let module = lower_program(&program)?;
-            Ok(python_source_with_auto_print(&module, auto_print_last))
+            let module = lower_program_with_auto_print(py, &program, auto_print_last)?;
+            Ok(module)
         }
         CompileMode::Awk => {
             let program = parse_awk_program(source)?;
-            // For awk mode, auto-print is handled at the block level during lowering
-            let module = lower_awk_program_with_auto_print(&program, auto_print_last)?;
-            // Use python_source without module-level auto-print since it's already in the AST
-            Ok(python_source(&module))
+            let module = lower_awk_program_with_auto_print(py, &program, auto_print_last)?;
+            Ok(module)
         }
     }
 }

@@ -1,83 +1,151 @@
+use pyo3::prelude::*;
+use pyo3::types::PyList;
 use snail_ast::*;
 use snail_error::LowerError;
-use snail_python_ast::*;
 
 use crate::constants::*;
-use crate::helpers::*;
-use crate::operators::*;
+use crate::helpers::{name_expr, number_expr, regex_pattern_expr, string_expr};
+use crate::operators::{lower_binary_op, lower_bool_op, lower_compare_op, lower_unary_op};
+use crate::py_ast::{AstBuilder, py_err_to_lower};
 
-pub(crate) fn lower_expr(expr: &Expr) -> Result<PyExpr, LowerError> {
-    lower_expr_with_exception(expr, None)
+pub(crate) fn lower_expr(builder: &AstBuilder<'_>, expr: &Expr) -> Result<PyObject, LowerError> {
+    lower_expr_with_exception(builder, expr, None)
 }
 
-pub(crate) fn lower_assign_target(target: &AssignTarget) -> Result<PyExpr, LowerError> {
+pub(crate) fn lower_assign_target(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+) -> Result<PyObject, LowerError> {
+    let store_ctx = builder.store_ctx().map_err(py_err_to_lower)?;
     match target {
-        AssignTarget::Name { name, span } => Ok(PyExpr::Name {
-            id: name.clone(),
-            span: span.clone(),
-        }),
-        AssignTarget::Attribute { value, attr, span } => Ok(PyExpr::Attribute {
-            value: Box::new(lower_expr(value)?),
-            attr: attr.clone(),
-            span: span.clone(),
-        }),
-        AssignTarget::Index { value, index, span } => Ok(PyExpr::Index {
-            value: Box::new(lower_expr(value)?),
-            index: Box::new(lower_expr(index)?),
-            span: span.clone(),
-        }),
+        AssignTarget::Name { name, span } => name_expr(builder, name, span, store_ctx),
+        AssignTarget::Attribute { value, attr, span } => {
+            let value = lower_expr_with_exception(builder, value, None)?;
+            builder
+                .call_node(
+                    "Attribute",
+                    vec![value, attr.to_string().into_py(builder.py()), store_ctx],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        AssignTarget::Index { value, index, span } => {
+            let value_expr = lower_expr_with_exception(builder, value, None)?;
+            let index_expr = lower_expr_with_exception(builder, index, None)?;
+            builder
+                .call_node("Subscript", vec![value_expr, index_expr, store_ctx], span)
+                .map_err(py_err_to_lower)
+        }
+    }
+}
+
+pub(crate) fn lower_delete_target(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+) -> Result<PyObject, LowerError> {
+    let del_ctx = builder.del_ctx().map_err(py_err_to_lower)?;
+    match target {
+        AssignTarget::Name { name, span } => name_expr(builder, name, span, del_ctx),
+        AssignTarget::Attribute { value, attr, span } => {
+            let value = lower_expr_with_exception(builder, value, None)?;
+            builder
+                .call_node(
+                    "Attribute",
+                    vec![value, attr.to_string().into_py(builder.py()), del_ctx],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        AssignTarget::Index { value, index, span } => {
+            let value_expr = lower_expr_with_exception(builder, value, None)?;
+            let index_expr = lower_expr_with_exception(builder, index, None)?;
+            builder
+                .call_node("Subscript", vec![value_expr, index_expr, del_ctx], span)
+                .map_err(py_err_to_lower)
+        }
     }
 }
 
 pub(crate) fn lower_regex_match(
+    builder: &AstBuilder<'_>,
     value: &Expr,
     pattern: &RegexPattern,
     span: &SourceSpan,
     exception_name: Option<&str>,
-) -> Result<PyExpr, LowerError> {
-    Ok(PyExpr::Call {
-        func: Box::new(PyExpr::Name {
-            id: SNAIL_REGEX_SEARCH.to_string(),
-            span: span.clone(),
-        }),
-        args: vec![
-            pos_arg(lower_expr_with_exception(value, exception_name)?, span),
-            pos_arg(
-                lower_regex_pattern_expr(pattern, span, exception_name)?,
-                span,
-            ),
-        ],
-        span: span.clone(),
-    })
+) -> Result<PyObject, LowerError> {
+    let func = name_expr(
+        builder,
+        SNAIL_REGEX_SEARCH,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let value_expr = lower_expr_with_exception(builder, value, exception_name)?;
+    let pattern_expr = lower_regex_pattern_expr(builder, pattern, span, exception_name)?;
+    let args = vec![value_expr, pattern_expr];
+    builder
+        .call_node(
+            "Call",
+            vec![
+                func,
+                PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
 }
 
 fn lower_regex_pattern_expr(
+    builder: &AstBuilder<'_>,
     pattern: &RegexPattern,
     span: &SourceSpan,
     exception_name: Option<&str>,
-) -> Result<PyExpr, LowerError> {
+) -> Result<PyObject, LowerError> {
     match pattern {
-        RegexPattern::Literal(text) => Ok(regex_pattern_expr(text, span)),
-        RegexPattern::Interpolated(parts) => Ok(PyExpr::FString {
-            parts: lower_fstring_parts(parts, exception_name)?,
-            span: span.clone(),
-        }),
+        RegexPattern::Literal(text) => regex_pattern_expr(builder, text, span),
+        RegexPattern::Interpolated(parts) => {
+            let values = lower_fstring_parts(builder, parts, exception_name)?;
+            builder
+                .call_node(
+                    "JoinedStr",
+                    vec![PyList::new_bound(builder.py(), values).into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
     }
 }
 
 fn lower_fstring_parts(
+    builder: &AstBuilder<'_>,
     parts: &[FStringPart],
     exception_name: Option<&str>,
-) -> Result<Vec<PyFStringPart>, LowerError> {
+) -> Result<Vec<PyObject>, LowerError> {
     let mut lowered = Vec::with_capacity(parts.len());
     for part in parts {
         match part {
-            FStringPart::Text(text) => lowered.push(PyFStringPart::Text(text.clone())),
+            FStringPart::Text(text) => {
+                let const_node = builder
+                    .call_node(
+                        "Constant",
+                        vec![text.clone().into_py(builder.py())],
+                        &dummy_span(),
+                    )
+                    .map_err(py_err_to_lower)?;
+                lowered.push(const_node);
+            }
             FStringPart::Expr(expr) => {
-                lowered.push(PyFStringPart::Expr(lower_expr_with_exception(
-                    expr,
-                    exception_name,
-                )?));
+                let value = lower_expr_with_exception(builder, expr, exception_name)?;
+                let conversion = (-1i32).into_py(builder.py());
+                let format_spec = builder.py().None();
+                let formatted = builder
+                    .call_node(
+                        "FormattedValue",
+                        vec![value, conversion, format_spec.into_py(builder.py())],
+                        &dummy_span(),
+                    )
+                    .map_err(py_err_to_lower)?;
+                lowered.push(formatted);
             }
         }
     }
@@ -85,89 +153,106 @@ fn lower_fstring_parts(
 }
 
 pub(crate) fn lower_expr_with_exception(
+    builder: &AstBuilder<'_>,
     expr: &Expr,
     exception_name: Option<&str>,
-) -> Result<PyExpr, LowerError> {
+) -> Result<PyObject, LowerError> {
     match expr {
         Expr::Name { name, span } => {
             if name == "$e" {
                 if let Some(exception_name) = exception_name {
-                    return Ok(PyExpr::Name {
-                        id: exception_name.to_string(),
-                        span: span.clone(),
-                    });
+                    return name_expr(
+                        builder,
+                        exception_name,
+                        span,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    );
                 }
                 return Err(LowerError::new(
                     "`$e` is only available in compact exception fallbacks",
                 ));
             }
             if let Some(py_name) = injected_py_name(name) {
-                return Ok(PyExpr::Name {
-                    id: py_name.to_string(),
-                    span: span.clone(),
-                });
+                return name_expr(
+                    builder,
+                    py_name,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                );
             }
-            Ok(PyExpr::Name {
-                id: name.clone(),
-                span: span.clone(),
-            })
+            name_expr(
+                builder,
+                name,
+                span,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            )
         }
         Expr::FieldIndex { index, span } => {
-            // AWK convention: $0 is the whole line, $1 is first field, etc.
             if index == "0" {
-                Ok(PyExpr::Name {
-                    id: SNAIL_AWK_LINE_PYVAR.to_string(),
-                    span: span.clone(),
-                })
-            } else {
-                // Parse index and convert from 1-based to 0-based
-                let field_index = index.parse::<i32>().map_err(|_| LowerError {
-                    message: format!("Invalid field index: ${}", index),
-                })?;
-                let python_index = field_index - 1;
-
-                Ok(PyExpr::Index {
-                    value: Box::new(PyExpr::Name {
-                        id: SNAIL_AWK_FIELDS_PYVAR.to_string(),
-                        span: span.clone(),
-                    }),
-                    index: Box::new(PyExpr::Number {
-                        value: python_index.to_string(),
-                        span: span.clone(),
-                    }),
-                    span: span.clone(),
-                })
+                return name_expr(
+                    builder,
+                    SNAIL_AWK_LINE_PYVAR,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                );
             }
+            let field_index = index
+                .parse::<i32>()
+                .map_err(|_| LowerError::new(format!("Invalid field index: ${}", index)))?;
+            let python_index = field_index - 1;
+            let value = name_expr(
+                builder,
+                SNAIL_AWK_FIELDS_PYVAR,
+                span,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            )?;
+            let index_expr = number_expr(builder, &python_index.to_string(), span)?;
+            builder
+                .call_node(
+                    "Subscript",
+                    vec![
+                        value,
+                        index_expr,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
-        Expr::Number { value, span } => Ok(PyExpr::Number {
-            value: value.clone(),
-            span: span.clone(),
-        }),
+        Expr::Number { value, span } => number_expr(builder, value, span),
         Expr::String {
             value,
             raw,
             delimiter,
             span,
-        } => Ok(PyExpr::String {
-            value: value.clone(),
-            raw: *raw,
-            delimiter: *delimiter,
-            span: span.clone(),
-        }),
-        Expr::FString { parts, span } => Ok(PyExpr::FString {
-            parts: lower_fstring_parts(parts, exception_name)?,
-            span: span.clone(),
-        }),
-        Expr::Bool { value, span } => Ok(PyExpr::Bool {
-            value: *value,
-            span: span.clone(),
-        }),
-        Expr::None { span } => Ok(PyExpr::None { span: span.clone() }),
-        Expr::Unary { op, expr, span } => Ok(PyExpr::Unary {
-            op: lower_unary_op(*op),
-            operand: Box::new(lower_expr_with_exception(expr, exception_name)?),
-            span: span.clone(),
-        }),
+        } => string_expr(builder, value, *raw, *delimiter, span),
+        Expr::FString { parts, span } => {
+            let values = lower_fstring_parts(builder, parts, exception_name)?;
+            builder
+                .call_node(
+                    "JoinedStr",
+                    vec![PyList::new_bound(builder.py(), values).into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        Expr::Bool { value, span } => builder
+            .call_node("Constant", vec![value.into_py(builder.py())], span)
+            .map_err(py_err_to_lower),
+        Expr::None { span } => builder
+            .call_node(
+                "Constant",
+                vec![builder.py().None().into_py(builder.py())],
+                span,
+            )
+            .map_err(py_err_to_lower),
+        Expr::Unary { op, expr, span } => {
+            let operand = lower_expr_with_exception(builder, expr, exception_name)?;
+            let op = lower_unary_op(builder, *op)?;
+            builder
+                .call_node("UnaryOp", vec![op, operand], span)
+                .map_err(py_err_to_lower)
+        }
         Expr::Binary {
             left,
             op,
@@ -175,72 +260,60 @@ pub(crate) fn lower_expr_with_exception(
             span,
         } => {
             if *op == BinaryOp::Pipeline {
-                // Pipeline: x | y becomes y.__pipeline__(x)
-                let left_expr = lower_expr_with_exception(left, exception_name)?;
-
-                // Special handling for Subprocess on RHS: just create the object, don't call __pipeline__(None)
+                let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
                 let right_obj = match right.as_ref() {
                     Expr::Subprocess {
                         kind,
                         parts,
                         span: s_span,
-                    } => {
-                        // Create just the __SnailSubprocess{Capture|Status}(cmd) object
-                        let mut lowered_parts = Vec::with_capacity(parts.len());
-                        for part in parts {
-                            match part {
-                                SubprocessPart::Text(text) => {
-                                    lowered_parts.push(PyFStringPart::Text(text.clone()));
-                                }
-                                SubprocessPart::Expr(expr) => {
-                                    lowered_parts.push(PyFStringPart::Expr(
-                                        lower_expr_with_exception(expr, exception_name)?,
-                                    ));
-                                }
-                            }
-                        }
-                        let command = PyExpr::FString {
-                            parts: lowered_parts,
-                            span: s_span.clone(),
-                        };
-                        let class_name = match kind {
-                            SubprocessKind::Capture => SNAIL_SUBPROCESS_CAPTURE_CLASS,
-                            SubprocessKind::Status => SNAIL_SUBPROCESS_STATUS_CLASS,
-                        };
-                        PyExpr::Call {
-                            func: Box::new(PyExpr::Name {
-                                id: class_name.to_string(),
-                                span: s_span.clone(),
-                            }),
-                            args: vec![PyArgument::Positional {
-                                value: command,
-                                span: s_span.clone(),
-                            }],
-                            span: s_span.clone(),
-                        }
-                    }
-                    _ => lower_expr_with_exception(right, exception_name)?,
+                    } => lower_subprocess_object(builder, kind, parts, s_span, exception_name)?,
+                    _ => lower_expr_with_exception(builder, right, exception_name)?,
                 };
-
-                Ok(PyExpr::Call {
-                    func: Box::new(PyExpr::Attribute {
-                        value: Box::new(right_obj),
-                        attr: "__pipeline__".to_string(),
-                        span: span.clone(),
-                    }),
-                    args: vec![PyArgument::Positional {
-                        value: left_expr,
-                        span: span.clone(),
-                    }],
-                    span: span.clone(),
-                })
+                let attr = builder
+                    .call_node(
+                        "Attribute",
+                        vec![
+                            right_obj,
+                            "__pipeline__".to_string().into_py(builder.py()),
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?;
+                let args = vec![left_expr];
+                builder
+                    .call_node(
+                        "Call",
+                        vec![
+                            attr,
+                            PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                            PyList::empty_bound(builder.py()).into_py(builder.py()),
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)
+            } else if *op == BinaryOp::Or || *op == BinaryOp::And {
+                let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
+                let right_expr = lower_expr_with_exception(builder, right, exception_name)?;
+                let op = lower_bool_op(builder, *op)?;
+                builder
+                    .call_node(
+                        "BoolOp",
+                        vec![
+                            op,
+                            PyList::new_bound(builder.py(), vec![left_expr, right_expr])
+                                .into_py(builder.py()),
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)
             } else {
-                Ok(PyExpr::Binary {
-                    left: Box::new(lower_expr_with_exception(left, exception_name)?),
-                    op: lower_binary_op(*op),
-                    right: Box::new(lower_expr_with_exception(right, exception_name)?),
-                    span: span.clone(),
-                })
+                let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
+                let right_expr = lower_expr_with_exception(builder, right, exception_name)?;
+                let op = lower_binary_op(builder, *op)?;
+                builder
+                    .call_node("BinOp", vec![left_expr, op, right_expr], span)
+                    .map_err(py_err_to_lower)
             }
         }
         Expr::Compare {
@@ -248,238 +321,317 @@ pub(crate) fn lower_expr_with_exception(
             ops,
             comparators,
             span,
-        } => Ok(PyExpr::Compare {
-            left: Box::new(lower_expr_with_exception(left, exception_name)?),
-            ops: ops.iter().map(|op| lower_compare_op(*op)).collect(),
-            comparators: comparators
+        } => {
+            let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
+            let ops = ops
                 .iter()
-                .map(|expr| lower_expr_with_exception(expr, exception_name))
-                .collect::<Result<Vec<_>, _>>()?,
-            span: span.clone(),
-        }),
+                .map(|op| lower_compare_op(builder, *op))
+                .collect::<Result<Vec<_>, _>>()?;
+            let comparators = comparators
+                .iter()
+                .map(|expr| lower_expr_with_exception(builder, expr, exception_name))
+                .collect::<Result<Vec<_>, _>>()?;
+            builder
+                .call_node(
+                    "Compare",
+                    vec![
+                        left_expr,
+                        PyList::new_bound(builder.py(), ops).into_py(builder.py()),
+                        PyList::new_bound(builder.py(), comparators).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
         Expr::IfExpr {
             test,
             body,
             orelse,
             span,
-        } => Ok(PyExpr::IfExpr {
-            test: Box::new(lower_expr_with_exception(test, exception_name)?),
-            body: Box::new(lower_expr_with_exception(body, exception_name)?),
-            orelse: Box::new(lower_expr_with_exception(orelse, exception_name)?),
-            span: span.clone(),
-        }),
+        } => {
+            let test = lower_expr_with_exception(builder, test, exception_name)?;
+            let body = lower_expr_with_exception(builder, body, exception_name)?;
+            let orelse = lower_expr_with_exception(builder, orelse, exception_name)?;
+            builder
+                .call_node("IfExp", vec![test, body, orelse], span)
+                .map_err(py_err_to_lower)
+        }
         Expr::TryExpr {
             expr,
             fallback,
             span,
         } => {
-            let try_lambda = PyExpr::Lambda {
-                params: Vec::new(),
-                body: Box::new(lower_expr_with_exception(expr, exception_name)?),
-                span: span.clone(),
-            };
-            let mut args = vec![PyArgument::Positional {
-                value: try_lambda,
-                span: span.clone(),
-            }];
+            let try_lambda = builder
+                .call_node(
+                    "Lambda",
+                    vec![
+                        empty_lambda_args(builder)?,
+                        lower_expr_with_exception(builder, expr, exception_name)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            let mut args = vec![try_lambda];
             if let Some(fallback_expr) = fallback {
-                let fallback_lambda = PyExpr::Lambda {
-                    params: vec![SNAIL_EXCEPTION_VAR.to_string()],
-                    body: Box::new(lower_expr_with_exception(
-                        fallback_expr,
-                        Some(SNAIL_EXCEPTION_VAR),
-                    )?),
-                    span: span.clone(),
-                };
-                args.push(PyArgument::Positional {
-                    value: fallback_lambda,
-                    span: span.clone(),
-                });
+                let fallback_lambda = builder
+                    .call_node(
+                        "Lambda",
+                        vec![
+                            lambda_args_with_param(builder, SNAIL_EXCEPTION_VAR)?,
+                            lower_expr_with_exception(
+                                builder,
+                                fallback_expr,
+                                Some(SNAIL_EXCEPTION_VAR),
+                            )?,
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?;
+                args.push(fallback_lambda);
             }
-            Ok(PyExpr::Call {
-                func: Box::new(PyExpr::Name {
-                    id: SNAIL_TRY_HELPER.to_string(),
-                    span: span.clone(),
-                }),
-                args,
-                span: span.clone(),
-            })
+            let func = name_expr(
+                builder,
+                SNAIL_TRY_HELPER,
+                span,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            )?;
+            builder
+                .call_node(
+                    "Call",
+                    vec![
+                        func,
+                        PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                        PyList::empty_bound(builder.py()).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
         Expr::Compound { expressions, span } => {
             let mut lowered = Vec::new();
             for expr in expressions {
-                lowered.push(lower_expr_with_exception(expr, exception_name)?);
+                lowered.push(lower_expr_with_exception(builder, expr, exception_name)?);
             }
-
-            let tuple_expr = PyExpr::Tuple {
-                elements: lowered,
-                span: span.clone(),
-            };
-
-            let index_expr = PyExpr::Unary {
-                op: PyUnaryOp::Minus,
-                operand: Box::new(PyExpr::Number {
-                    value: "1".to_string(),
-                    span: span.clone(),
-                }),
-                span: span.clone(),
-            };
-
-            Ok(PyExpr::Index {
-                value: Box::new(tuple_expr),
-                index: Box::new(index_expr),
-                span: span.clone(),
-            })
+            let tuple_expr = builder
+                .call_node(
+                    "Tuple",
+                    vec![
+                        PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            let index_expr = builder
+                .call_node(
+                    "UnaryOp",
+                    vec![
+                        lower_unary_op(builder, UnaryOp::Minus)?,
+                        number_expr(builder, "1", span)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            builder
+                .call_node(
+                    "Subscript",
+                    vec![
+                        tuple_expr,
+                        index_expr,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
-        Expr::Regex { pattern, span } => Ok(PyExpr::Call {
-            func: Box::new(PyExpr::Name {
-                id: SNAIL_REGEX_COMPILE.to_string(),
-                span: span.clone(),
-            }),
-            args: vec![pos_arg(
-                lower_regex_pattern_expr(pattern, span, exception_name)?,
+        Expr::Regex { pattern, span } => {
+            let func = name_expr(
+                builder,
+                SNAIL_REGEX_COMPILE,
                 span,
-            )],
-            span: span.clone(),
-        }),
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            )?;
+            let arg = lower_regex_pattern_expr(builder, pattern, span, exception_name)?;
+            builder
+                .call_node(
+                    "Call",
+                    vec![
+                        func,
+                        PyList::new_bound(builder.py(), vec![arg]).into_py(builder.py()),
+                        PyList::empty_bound(builder.py()).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
         Expr::RegexMatch {
             value,
             pattern,
             span,
-        } => lower_regex_match(value, pattern, span, exception_name),
+        } => lower_regex_match(builder, value, pattern, span, exception_name),
         Expr::Subprocess { kind, parts, span } => {
-            let mut lowered_parts = Vec::with_capacity(parts.len());
-            for part in parts {
-                match part {
-                    SubprocessPart::Text(text) => {
-                        lowered_parts.push(PyFStringPart::Text(text.clone()));
-                    }
-                    SubprocessPart::Expr(expr) => {
-                        lowered_parts.push(PyFStringPart::Expr(lower_expr_with_exception(
-                            expr,
-                            exception_name,
-                        )?));
-                    }
-                }
-            }
-            let command = PyExpr::FString {
-                parts: lowered_parts,
-                span: span.clone(),
-            };
-            let class_name = match kind {
-                SubprocessKind::Capture => SNAIL_SUBPROCESS_CAPTURE_CLASS,
-                SubprocessKind::Status => SNAIL_SUBPROCESS_STATUS_CLASS,
-            };
-            // $(cmd) becomes __SnailSubprocessCapture(cmd).__pipeline__(None)
-            let subprocess_obj = PyExpr::Call {
-                func: Box::new(PyExpr::Name {
-                    id: class_name.to_string(),
-                    span: span.clone(),
-                }),
-                args: vec![PyArgument::Positional {
-                    value: command,
-                    span: span.clone(),
-                }],
-                span: span.clone(),
-            };
-            Ok(PyExpr::Call {
-                func: Box::new(PyExpr::Attribute {
-                    value: Box::new(subprocess_obj),
-                    attr: "__pipeline__".to_string(),
-                    span: span.clone(),
-                }),
-                args: vec![PyArgument::Positional {
-                    value: PyExpr::None { span: span.clone() },
-                    span: span.clone(),
-                }],
-                span: span.clone(),
-            })
+            let subprocess_obj =
+                lower_subprocess_object(builder, kind, parts, span, exception_name)?;
+            let attr = builder
+                .call_node(
+                    "Attribute",
+                    vec![
+                        subprocess_obj,
+                        "__pipeline__".to_string().into_py(builder.py()),
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            let none_arg = builder
+                .call_node(
+                    "Constant",
+                    vec![builder.py().None().into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            builder
+                .call_node(
+                    "Call",
+                    vec![
+                        attr,
+                        PyList::new_bound(builder.py(), vec![none_arg]).into_py(builder.py()),
+                        PyList::empty_bound(builder.py()).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
         Expr::StructuredAccessor { query, span } => {
-            // $[query] becomes __SnailStructuredAccessor(query)
-            // The query is raw source text, so we need to escape it for Python
             let escaped_query = escape_for_python_string(query);
-            Ok(PyExpr::Call {
-                func: Box::new(PyExpr::Name {
-                    id: SNAIL_STRUCTURED_ACCESSOR_CLASS.to_string(),
-                    span: span.clone(),
-                }),
-                args: vec![PyArgument::Positional {
-                    value: PyExpr::String {
-                        value: escaped_query,
-                        raw: false,
-                        delimiter: StringDelimiter::Double,
-                        span: span.clone(),
-                    },
-                    span: span.clone(),
-                }],
-                span: span.clone(),
-            })
+            let func = name_expr(
+                builder,
+                SNAIL_STRUCTURED_ACCESSOR_CLASS,
+                span,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            )?;
+            let arg = string_expr(
+                builder,
+                &escaped_query,
+                false,
+                StringDelimiter::Double,
+                span,
+            )?;
+            builder
+                .call_node(
+                    "Call",
+                    vec![
+                        func,
+                        PyList::new_bound(builder.py(), vec![arg]).into_py(builder.py()),
+                        PyList::empty_bound(builder.py()).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
-        Expr::Call { func, args, span } => Ok(PyExpr::Call {
-            func: Box::new(lower_expr_with_exception(func, exception_name)?),
-            args: args
-                .iter()
-                .map(|arg| lower_argument(arg, exception_name))
-                .collect::<Result<Vec<_>, _>>()?,
-            span: span.clone(),
-        }),
-        Expr::Attribute { value, attr, span } => Ok(PyExpr::Attribute {
-            value: Box::new(lower_expr_with_exception(value, exception_name)?),
-            attr: attr.clone(),
-            span: span.clone(),
-        }),
-        Expr::Index { value, index, span } => Ok(PyExpr::Index {
-            value: Box::new(lower_expr_with_exception(value, exception_name)?),
-            index: Box::new(lower_expr_with_exception(index, exception_name)?),
-            span: span.clone(),
-        }),
-        Expr::Paren { expr, span } => Ok(PyExpr::Paren {
-            expr: Box::new(lower_expr_with_exception(expr, exception_name)?),
-            span: span.clone(),
-        }),
+        Expr::Call { func, args, span } => {
+            let func = lower_expr_with_exception(builder, func, exception_name)?;
+            let (args, keywords) = lower_call_arguments(builder, args, exception_name)?;
+            builder
+                .call_node(
+                    "Call",
+                    vec![
+                        func,
+                        PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                        PyList::new_bound(builder.py(), keywords).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        Expr::Attribute { value, attr, span } => {
+            let value = lower_expr_with_exception(builder, value, exception_name)?;
+            builder
+                .call_node(
+                    "Attribute",
+                    vec![
+                        value,
+                        attr.to_string().into_py(builder.py()),
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        Expr::Index { value, index, span } => {
+            let value = lower_expr_with_exception(builder, value, exception_name)?;
+            let index = lower_expr_with_exception(builder, index, exception_name)?;
+            builder
+                .call_node(
+                    "Subscript",
+                    vec![value, index, builder.load_ctx().map_err(py_err_to_lower)?],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        Expr::Paren { expr, .. } => lower_expr_with_exception(builder, expr, exception_name),
         Expr::List { elements, span } => {
             let mut lowered = Vec::with_capacity(elements.len());
             for element in elements {
-                lowered.push(lower_expr_with_exception(element, exception_name)?);
+                lowered.push(lower_expr_with_exception(builder, element, exception_name)?);
             }
-            Ok(PyExpr::List {
-                elements: lowered,
-                span: span.clone(),
-            })
+            builder
+                .call_node(
+                    "List",
+                    vec![
+                        PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
         Expr::Tuple { elements, span } => {
             let mut lowered = Vec::with_capacity(elements.len());
             for element in elements {
-                lowered.push(lower_expr_with_exception(element, exception_name)?);
+                lowered.push(lower_expr_with_exception(builder, element, exception_name)?);
             }
-            Ok(PyExpr::Tuple {
-                elements: lowered,
-                span: span.clone(),
-            })
+            builder
+                .call_node(
+                    "Tuple",
+                    vec![
+                        PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
         Expr::Dict { entries, span } => {
-            let mut lowered = Vec::with_capacity(entries.len());
+            let mut keys = Vec::with_capacity(entries.len());
+            let mut values = Vec::with_capacity(entries.len());
             for (key, value) in entries {
-                lowered.push((
-                    lower_expr_with_exception(key, exception_name)?,
-                    lower_expr_with_exception(value, exception_name)?,
-                ));
+                keys.push(lower_expr_with_exception(builder, key, exception_name)?);
+                values.push(lower_expr_with_exception(builder, value, exception_name)?);
             }
-            Ok(PyExpr::Dict {
-                entries: lowered,
-                span: span.clone(),
-            })
+            builder
+                .call_node(
+                    "Dict",
+                    vec![
+                        PyList::new_bound(builder.py(), keys).into_py(builder.py()),
+                        PyList::new_bound(builder.py(), values).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
         Expr::Set { elements, span } => {
             let mut lowered = Vec::with_capacity(elements.len());
             for element in elements {
-                lowered.push(lower_expr_with_exception(element, exception_name)?);
+                lowered.push(lower_expr_with_exception(builder, element, exception_name)?);
             }
-            Ok(PyExpr::Set {
-                elements: lowered,
-                span: span.clone(),
-            })
+            builder
+                .call_node(
+                    "Set",
+                    vec![PyList::new_bound(builder.py(), lowered).into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
         Expr::ListComp {
             element,
@@ -488,17 +640,39 @@ pub(crate) fn lower_expr_with_exception(
             ifs,
             span,
         } => {
+            let element = lower_expr_with_exception(builder, element, exception_name)?;
+            let target = name_expr(
+                builder,
+                target,
+                span,
+                builder.store_ctx().map_err(py_err_to_lower)?,
+            )?;
+            let iter = lower_expr_with_exception(builder, iter, exception_name)?;
             let mut lowered_ifs = Vec::with_capacity(ifs.len());
             for cond in ifs {
-                lowered_ifs.push(lower_expr_with_exception(cond, exception_name)?);
+                lowered_ifs.push(lower_expr_with_exception(builder, cond, exception_name)?);
             }
-            Ok(PyExpr::ListComp {
-                element: Box::new(lower_expr_with_exception(element, exception_name)?),
-                target: target.clone(),
-                iter: Box::new(lower_expr_with_exception(iter, exception_name)?),
-                ifs: lowered_ifs,
-                span: span.clone(),
-            })
+            let comprehension = builder
+                .call_node_no_loc(
+                    "comprehension",
+                    vec![
+                        target,
+                        iter,
+                        PyList::new_bound(builder.py(), lowered_ifs).into_py(builder.py()),
+                        0u8.into_py(builder.py()),
+                    ],
+                )
+                .map_err(py_err_to_lower)?;
+            builder
+                .call_node(
+                    "ListComp",
+                    vec![
+                        element,
+                        PyList::new_bound(builder.py(), vec![comprehension]).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
         Expr::DictComp {
             key,
@@ -508,53 +682,242 @@ pub(crate) fn lower_expr_with_exception(
             ifs,
             span,
         } => {
+            let key = lower_expr_with_exception(builder, key, exception_name)?;
+            let value = lower_expr_with_exception(builder, value, exception_name)?;
+            let target = name_expr(
+                builder,
+                target,
+                span,
+                builder.store_ctx().map_err(py_err_to_lower)?,
+            )?;
+            let iter = lower_expr_with_exception(builder, iter, exception_name)?;
             let mut lowered_ifs = Vec::with_capacity(ifs.len());
             for cond in ifs {
-                lowered_ifs.push(lower_expr_with_exception(cond, exception_name)?);
+                lowered_ifs.push(lower_expr_with_exception(builder, cond, exception_name)?);
             }
-            Ok(PyExpr::DictComp {
-                key: Box::new(lower_expr_with_exception(key, exception_name)?),
-                value: Box::new(lower_expr_with_exception(value, exception_name)?),
-                target: target.clone(),
-                iter: Box::new(lower_expr_with_exception(iter, exception_name)?),
-                ifs: lowered_ifs,
-                span: span.clone(),
-            })
+            let comprehension = builder
+                .call_node_no_loc(
+                    "comprehension",
+                    vec![
+                        target,
+                        iter,
+                        PyList::new_bound(builder.py(), lowered_ifs).into_py(builder.py()),
+                        0u8.into_py(builder.py()),
+                    ],
+                )
+                .map_err(py_err_to_lower)?;
+            builder
+                .call_node(
+                    "DictComp",
+                    vec![
+                        key,
+                        value,
+                        PyList::new_bound(builder.py(), vec![comprehension]).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
         }
-        Expr::Slice { start, end, span } => Ok(PyExpr::Slice {
-            start: start
+        Expr::Slice { start, end, span } => {
+            let start = start
                 .as_deref()
-                .map(|expr| lower_expr_with_exception(expr, exception_name))
-                .transpose()?
-                .map(Box::new),
-            end: end
+                .map(|expr| lower_expr_with_exception(builder, expr, exception_name))
+                .transpose()?;
+            let end = end
                 .as_deref()
-                .map(|expr| lower_expr_with_exception(expr, exception_name))
-                .transpose()?
-                .map(Box::new),
-            span: span.clone(),
-        }),
+                .map(|expr| lower_expr_with_exception(builder, expr, exception_name))
+                .transpose()?;
+            builder
+                .call_node(
+                    "Slice",
+                    vec![
+                        start.unwrap_or_else(|| builder.py().None().into_py(builder.py())),
+                        end.unwrap_or_else(|| builder.py().None().into_py(builder.py())),
+                        builder.py().None().into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
     }
 }
 
-fn lower_argument(arg: &Argument, exception_name: Option<&str>) -> Result<PyArgument, LowerError> {
-    match arg {
-        Argument::Positional { value, span } => Ok(PyArgument::Positional {
-            value: lower_expr_with_exception(value, exception_name)?,
-            span: span.clone(),
-        }),
-        Argument::Keyword { name, value, span } => Ok(PyArgument::Keyword {
-            name: name.clone(),
-            value: lower_expr_with_exception(value, exception_name)?,
-            span: span.clone(),
-        }),
-        Argument::Star { value, span } => Ok(PyArgument::Star {
-            value: lower_expr_with_exception(value, exception_name)?,
-            span: span.clone(),
-        }),
-        Argument::KwStar { value, span } => Ok(PyArgument::KwStar {
-            value: lower_expr_with_exception(value, exception_name)?,
-            span: span.clone(),
-        }),
+fn lower_subprocess_object(
+    builder: &AstBuilder<'_>,
+    kind: &SubprocessKind,
+    parts: &[SubprocessPart],
+    span: &SourceSpan,
+    exception_name: Option<&str>,
+) -> Result<PyObject, LowerError> {
+    let values = lower_subprocess_parts(builder, parts, exception_name)?;
+    let command = builder
+        .call_node(
+            "JoinedStr",
+            vec![PyList::new_bound(builder.py(), values).into_py(builder.py())],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    let class_name = match kind {
+        SubprocessKind::Capture => SNAIL_SUBPROCESS_CAPTURE_CLASS,
+        SubprocessKind::Status => SNAIL_SUBPROCESS_STATUS_CLASS,
+    };
+    let func = name_expr(
+        builder,
+        class_name,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    builder
+        .call_node(
+            "Call",
+            vec![
+                func,
+                PyList::new_bound(builder.py(), vec![command]).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn lower_subprocess_parts(
+    builder: &AstBuilder<'_>,
+    parts: &[SubprocessPart],
+    exception_name: Option<&str>,
+) -> Result<Vec<PyObject>, LowerError> {
+    let mut lowered_parts = Vec::with_capacity(parts.len());
+    for part in parts {
+        match part {
+            SubprocessPart::Text(text) => {
+                let const_node = builder
+                    .call_node(
+                        "Constant",
+                        vec![text.clone().into_py(builder.py())],
+                        &dummy_span(),
+                    )
+                    .map_err(py_err_to_lower)?;
+                lowered_parts.push(const_node);
+            }
+            SubprocessPart::Expr(expr) => {
+                let value = lower_expr_with_exception(builder, expr, exception_name)?;
+                let conversion = (-1i32).into_py(builder.py());
+                let format_spec = builder.py().None();
+                let formatted = builder
+                    .call_node(
+                        "FormattedValue",
+                        vec![value, conversion, format_spec.into_py(builder.py())],
+                        &dummy_span(),
+                    )
+                    .map_err(py_err_to_lower)?;
+                lowered_parts.push(formatted);
+            }
+        }
+    }
+    Ok(lowered_parts)
+}
+
+fn lower_call_arguments(
+    builder: &AstBuilder<'_>,
+    args: &[Argument],
+    exception_name: Option<&str>,
+) -> Result<(Vec<PyObject>, Vec<PyObject>), LowerError> {
+    let mut positional = Vec::new();
+    let mut keywords = Vec::new();
+    for arg in args {
+        match arg {
+            Argument::Positional { value, .. } => {
+                positional.push(lower_expr_with_exception(builder, value, exception_name)?);
+            }
+            Argument::Keyword { name, value, .. } => {
+                let value = lower_expr_with_exception(builder, value, exception_name)?;
+                let keyword = builder
+                    .call_node_no_loc(
+                        "keyword",
+                        vec![name.to_string().into_py(builder.py()), value],
+                    )
+                    .map_err(py_err_to_lower)?;
+                keywords.push(keyword);
+            }
+            Argument::Star { value, .. } => {
+                let value = lower_expr_with_exception(builder, value, exception_name)?;
+                let starred = builder
+                    .call_node(
+                        "Starred",
+                        vec![value, builder.load_ctx().map_err(py_err_to_lower)?],
+                        &dummy_span(),
+                    )
+                    .map_err(py_err_to_lower)?;
+                positional.push(starred);
+            }
+            Argument::KwStar { value, .. } => {
+                let value = lower_expr_with_exception(builder, value, exception_name)?;
+                let keyword = builder
+                    .call_node_no_loc(
+                        "keyword",
+                        vec![builder.py().None().into_py(builder.py()), value],
+                    )
+                    .map_err(py_err_to_lower)?;
+                keywords.push(keyword);
+            }
+        }
+    }
+    Ok((positional, keywords))
+}
+
+fn empty_lambda_args(builder: &AstBuilder<'_>) -> Result<PyObject, LowerError> {
+    builder
+        .call_node_no_loc(
+            "arguments",
+            vec![
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                builder.py().None().into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                builder.py().None().into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn lambda_args_with_param(builder: &AstBuilder<'_>, name: &str) -> Result<PyObject, LowerError> {
+    let arg = builder
+        .call_node_no_loc(
+            "arg",
+            vec![
+                name.to_string().into_py(builder.py()),
+                builder.py().None().into_py(builder.py()),
+            ],
+        )
+        .map_err(py_err_to_lower)?;
+    builder
+        .call_node_no_loc(
+            "arguments",
+            vec![
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![arg]).into_py(builder.py()),
+                builder.py().None().into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                builder.py().None().into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn dummy_span() -> SourceSpan {
+    SourceSpan {
+        start: SourcePos {
+            offset: 0,
+            line: 0,
+            column: 0,
+        },
+        end: SourcePos {
+            offset: 0,
+            line: 0,
+            column: 0,
+        },
     }
 }

@@ -21,11 +21,9 @@ None - this crate has no dependencies and provides pure data structures.
 
 ## Used By
 
-- **snail-python-ast**: Uses `SourceSpan` and `StringDelimiter` for its own AST nodes
 - **snail-error**: Uses `SourceSpan` for error reporting with source locations
 - **snail-parser**: Produces `Program` and `AwkProgram` as output
-- **snail-lower**: Consumes Snail AST and transforms it to Python AST
-- **snail-codegen**: Uses `StringDelimiter` for string literal formatting
+- **snail-lower**: Consumes Snail AST and transforms it to Python `ast` nodes via pyo3
 - **snail-core**: Re-exports all types for the unified API
 
 ## Design

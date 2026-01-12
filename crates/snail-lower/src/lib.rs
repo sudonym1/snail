@@ -5,9 +5,12 @@ mod expr;
 mod helpers;
 mod operators;
 mod program;
-mod span;
+mod py_ast;
 mod stmt;
 
 // Re-export public API
 pub use constants::*;
-pub use program::{lower_awk_program, lower_awk_program_with_auto_print, lower_program};
+pub use program::{
+    lower_awk_program, lower_awk_program_with_auto_print, lower_program,
+    lower_program_with_auto_print,
+};

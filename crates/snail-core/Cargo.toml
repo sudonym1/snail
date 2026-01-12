@@ -5,8 +5,7 @@ edition.workspace = true
 
 [dependencies]
 snail-ast = { path = "../snail-ast" }
-snail-python-ast = { path = "../snail-python-ast" }
 snail-error = { path = "../snail-error" }
 snail-parser = { path = "../snail-parser" }
 snail-lower = { path = "../snail-lower" }
-snail-codegen = { path = "../snail-codegen" }
+pyo3 = { version = "0.21", features = ["abi3-py310"] }

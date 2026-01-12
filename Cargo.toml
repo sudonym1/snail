@@ -2,11 +2,9 @@
 resolver = "2"
 members = [
     "crates/snail-ast",
-    "crates/snail-python-ast",
     "crates/snail-error",
     "crates/snail-parser",
     "crates/snail-lower",
-    "crates/snail-codegen",
     "crates/snail-core",
     "crates/snail-python",
     "crates/snail-proptest",

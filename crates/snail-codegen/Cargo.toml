@@ -1,8 +1,0 @@
-[package]
-name = "snail-codegen"
-version = "0.3.4"
-edition.workspace = true
-
-[dependencies]
-snail-ast = { path = "../snail-ast" }
-snail-python-ast = { path = "../snail-python-ast" }
