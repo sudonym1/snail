@@ -65,45 +65,34 @@ Proptests are useful for finding edge cases and regressions, but are slower than
 
 ## ⚠️ MANDATORY: CI Requirements Before Committing/Pushing
 
-**CRITICAL**: Before creating ANY commit, push, or pull request, you MUST run all five CI checks below and ensure they ALL pass. No exceptions.
+**CRITICAL**: Before creating ANY commit, push, or pull request, you MUST run `make test` as the **final** command and ensure it passes. No exceptions.
 
-### Required CI Checks (ALL must pass):
+### When to Run Which Checks
+
+- **Formatting**: Run `cargo fmt` during iteration; `make test` runs `cargo fmt --check`.
+- **Rust build**: Run `RUSTFLAGS="-D warnings" cargo build` when touching Rust code; `make test` runs it.
+- **Proptests build**: Run `cargo build --features run-proptests` when changing lowering/proptests; `make test` runs it.
+- **Linting**: Run `cargo clippy -- -D warnings` before final verification; `make test` runs it.
+- **Rust tests**: Run targeted `cargo test <name>` as needed; `make test` runs `cargo test`.
+- **Python CLI tests**: Run `python -m pytest python/tests` when touching the CLI; `make test` runs it.
+
+### Required Final CI Step
 
 ```bash
-# 1. FORMATTING - Must pass with no changes
-cargo fmt --check
-
-# 2. BUILD - Must pass with NO compiler warnings (warnings treated as errors)
-RUSTFLAGS="-D warnings" cargo build
-
-# 3. BUILD WITH PROPTESTS - Must pass with all features enabled
-cargo build --features run-proptests
-
-# 4. LINTING - Must pass with NO clippy warnings
-cargo clippy -- -D warnings
-
-# 5. TESTS - Must pass completely (excludes proptests by default)
-RUSTFLAGS="-D warnings" cargo test
-
-# 6. PYTHON CLI TESTS - Must pass
-python -m pytest python/tests
+# Must be the last check before commit/push/PR
+make test
 ```
 
 ### Pre-Commit/Pre-PR Checklist:
 
-- [ ] `cargo fmt --check` passes (or run `cargo fmt` to fix formatting)
-- [ ] `RUSTFLAGS="-D warnings" cargo build` passes with zero compiler warnings
-- [ ] `cargo build --features run-proptests` passes (feature-gated proptest support)
-- [ ] `cargo clippy -- -D warnings` passes with zero clippy warnings
-- [ ] `cargo test` passes with all tests succeeding
-- [ ] `python -m pytest python/tests` passes
+- [ ] `make test` passes (run **last** before commit/push/PR)
 - [ ] If adding new syntax: `examples/all_syntax.snail` updated
 - [ ] Appropriate tests added for new functionality
 
 **DO NOT**:
-- ❌ Skip any CI check "to save time"
-- ❌ Commit/push without running all checks
-- ❌ Create a PR without verifying all checks pass
+- ❌ Skip the final `make test` run
+- ❌ Commit/push without `make test` passing
+- ❌ Create a PR without verifying `make test` passes
 - ❌ Assume tests/build still pass without running them
 
 **If any check fails**: Fix the issues before proceeding. Do not create commits or PRs with failing CI checks.
