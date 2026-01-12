@@ -1,22 +1,15 @@
-.PHONY: all test build install clean venv
+.PHONY: all test build install clean sync
 
 UV ?= uv
-VENV_DIR ?= .venv
-REQUIREMENTS ?= requirements.txt
 
 # Default target: test, build, and install
 all: test build install
 
-venv:
-	@if [ ! -d "$(VENV_DIR)" ]; then \
-		$(UV) venv $(VENV_DIR); \
-	fi
-	@if [ -f "$(REQUIREMENTS)" ]; then \
-		$(UV) pip install -r "$(REQUIREMENTS)" --python "$(VENV_DIR)/bin/python"; \
-	fi
+sync:
+	$(UV) sync --extra dev
 
 # Run all tests
-test: venv
+test: sync
 	cargo fmt --check
 	RUSTFLAGS="-D warnings" cargo build
 	RUSTFLAGS="-D warnings" cargo build --features run-proptests
@@ -26,13 +19,17 @@ test: venv
 	$(UV) run -- python -m pytest python/tests
 
 # Build release wheels
-build: venv
+build: sync
 	$(UV) run -- python -m maturin build --release
 
 # Install into the active Python environment
-install: venv
-	$(UV) run -- python -m maturin develop
+install: sync
+	$(UV) tool install .
 
 # Clean build artifacts
 clean:
 	cargo clean
+	rm -rf .venv
+	rm -rf python/snail/_native*.so
+	rm -rf uv.lock
+	find . -name __pycache__ -type d -exec rm -rf '{}' \;
