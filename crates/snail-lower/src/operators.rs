@@ -1,42 +1,69 @@
+use pyo3::prelude::*;
 use snail_ast::{BinaryOp, CompareOp, UnaryOp};
-use snail_python_ast::{PyBinaryOp, PyCompareOp, PyUnaryOp};
+use snail_error::LowerError;
 
-pub(crate) fn lower_unary_op(op: UnaryOp) -> PyUnaryOp {
-    match op {
-        UnaryOp::Plus => PyUnaryOp::Plus,
-        UnaryOp::Minus => PyUnaryOp::Minus,
-        UnaryOp::Not => PyUnaryOp::Not,
-    }
+use crate::py_ast::{AstBuilder, py_err_to_lower};
+
+pub(crate) fn lower_unary_op(
+    builder: &AstBuilder<'_>,
+    op: UnaryOp,
+) -> Result<PyObject, LowerError> {
+    let name = match op {
+        UnaryOp::Plus => "UAdd",
+        UnaryOp::Minus => "USub",
+        UnaryOp::Not => "Not",
+    };
+    builder.op(name).map_err(py_err_to_lower)
 }
 
-pub(crate) fn lower_binary_op(op: BinaryOp) -> PyBinaryOp {
-    match op {
-        BinaryOp::Or => PyBinaryOp::Or,
-        BinaryOp::And => PyBinaryOp::And,
-        BinaryOp::Add => PyBinaryOp::Add,
-        BinaryOp::Sub => PyBinaryOp::Sub,
-        BinaryOp::Mul => PyBinaryOp::Mul,
-        BinaryOp::Div => PyBinaryOp::Div,
-        BinaryOp::FloorDiv => PyBinaryOp::FloorDiv,
-        BinaryOp::Mod => PyBinaryOp::Mod,
-        BinaryOp::Pow => PyBinaryOp::Pow,
-        BinaryOp::Pipeline => {
-            panic!("Pipeline operator should be handled specially in lower_expr_with_exception")
+pub(crate) fn lower_binary_op(
+    builder: &AstBuilder<'_>,
+    op: BinaryOp,
+) -> Result<PyObject, LowerError> {
+    let name = match op {
+        BinaryOp::Add => "Add",
+        BinaryOp::Sub => "Sub",
+        BinaryOp::Mul => "Mult",
+        BinaryOp::Div => "Div",
+        BinaryOp::FloorDiv => "FloorDiv",
+        BinaryOp::Mod => "Mod",
+        BinaryOp::Pow => "Pow",
+        BinaryOp::Or | BinaryOp::And | BinaryOp::Pipeline => {
+            return Err(LowerError::new(
+                "boolean/pipeline ops should be handled specially",
+            ));
         }
-    }
+    };
+    builder.op(name).map_err(py_err_to_lower)
 }
 
-pub(crate) fn lower_compare_op(op: CompareOp) -> PyCompareOp {
-    match op {
-        CompareOp::Eq => PyCompareOp::Eq,
-        CompareOp::NotEq => PyCompareOp::NotEq,
-        CompareOp::Lt => PyCompareOp::Lt,
-        CompareOp::LtEq => PyCompareOp::LtEq,
-        CompareOp::Gt => PyCompareOp::Gt,
-        CompareOp::GtEq => PyCompareOp::GtEq,
-        CompareOp::In => PyCompareOp::In,
-        CompareOp::NotIn => PyCompareOp::NotIn,
-        CompareOp::Is => PyCompareOp::Is,
-        CompareOp::IsNot => PyCompareOp::IsNot,
-    }
+pub(crate) fn lower_bool_op(
+    builder: &AstBuilder<'_>,
+    op: BinaryOp,
+) -> Result<PyObject, LowerError> {
+    let name = match op {
+        BinaryOp::Or => "Or",
+        BinaryOp::And => "And",
+        _ => return Err(LowerError::new("expected boolean operator")),
+    };
+    builder.op(name).map_err(py_err_to_lower)
+}
+
+pub(crate) fn lower_compare_op(
+    builder: &AstBuilder<'_>,
+    op: CompareOp,
+) -> Result<PyObject, LowerError> {
+    let name = match op {
+        CompareOp::Eq => "Eq",
+        CompareOp::NotEq => "NotEq",
+        CompareOp::Lt => "Lt",
+        CompareOp::LtEq => "LtE",
+        CompareOp::Gt => "Gt",
+        CompareOp::GtEq => "GtE",
+        CompareOp::In => "In",
+        CompareOp::NotIn => "NotIn",
+        CompareOp::Is => "Is",
+        CompareOp::IsNot => "IsNot",
+    };
+    builder.op(name).map_err(py_err_to_lower)
 }

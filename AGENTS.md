@@ -103,9 +103,7 @@ The repository is organized as a Cargo workspace with the following crates:
 
 - **`snail-ast`**: Snail AST definitions (Program, AwkProgram, statements, expressions)
 - **`snail-parser`**: Pest-based parser that converts Snail source to AST
-- **`snail-lower`**: Lowers Snail AST to Python AST representation
-- **`snail-python-ast`**: Python AST node definitions (PyModule, PyStmt, PyExpr, etc.)
-- **`snail-codegen`**: Generates Python source code from Python AST
+- **`snail-lower`**: Lowers Snail AST to Python `ast` nodes via pyo3
 - **`snail-error`**: Error types (ParseError, LowerError, SnailError)
 - **`snail-core`**: High-level compilation API (compile_snail_source, etc.)
 - **`snail-python`**: Pyo3 module used by the Python package and CLI
@@ -114,7 +112,7 @@ The repository is organized as a Cargo workspace with the following crates:
 
 ### Compilation Pipeline
 
-Snail → Parser → AST → Lowering → Python AST → Python Source → in-process exec
+Snail → Parser → AST → Lowering → Python AST → in-process exec
 
 1. **Parser** (`crates/snail-parser/`):
    - Uses Pest parser generator with grammar defined in `crates/snail-parser/src/snail.pest`
@@ -129,7 +127,7 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → in-pr
    - Awk mode has special `$`-prefixed variables (`$l`, `$f`, `$n`, `$fn`, `$p`, `$m`)
 
 3. **Lowering** (`crates/snail-lower/`):
-   - Transforms Snail AST into Python AST representation (`PyModule`, `PyStmt`, `PyExpr`)
+   - Transforms Snail AST into Python `ast` nodes via pyo3
    - Handles Snail-specific features by generating helper calls (provided by `snail.runtime`):
      - `?` operator → compact try/except using `__snail_compact_try`
      - `$(cmd)` subprocess capture → `__SnailSubprocessCapture`
@@ -138,20 +136,15 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → in-pr
    - Awk variables (`$l`, `$n`, etc.) map to Python names (`__snail_line`, `__snail_nr_user`, etc.)
    - Awk mode wrapping: lower_awk_program() generates a Python main loop over input files/stdin
 
-4. **Python AST** (`crates/snail-python-ast/`):
-   - Defines Python AST node types used as intermediate representation
-   - Structures mirror Python's AST for accurate code generation
+4. **Python AST**:
+   - Uses Python's built-in `ast` nodes constructed in Rust via pyo3
 
-5. **Python Code Generation** (`crates/snail-codegen/`):
-   - `python_source()` converts Python AST to executable Python source strings
-   - Preserves indentation and Python semantics exactly
-
-6. **Compilation API** (`crates/snail-core/`):
-   - `compile_snail_source()`: compiles Snail source to Python source code
+5. **Compilation API** (`crates/snail-core/`):
+   - `compile_snail_source()`: compiles Snail source to a Python AST module
    - `compile_snail_source_with_auto_print()`: compiles with optional auto-print of last expression
    - Used by the Python module to execute code in-process
 
-7. **Python CLI** (`python/snail/cli.py`):
+6. **Python CLI** (`python/snail/cli.py`):
    - Handles `-f file.snail`, one-liner execution, and `--awk` mode
    - Executes generated Python code in-process via the `snail` extension module
    - `-P` flag disables auto-printing of last expression

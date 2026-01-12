@@ -1,7 +1,23 @@
 #![cfg(feature = "run-proptests")]
 
 use proptest::prelude::*;
+use pyo3::prelude::*;
 use snail_proptest::arbitrary::*;
+
+fn assert_python_compiles(py: Python<'_>, module: &PyObject) {
+    let ast = py.import_bound("ast").expect("failed to import ast");
+    let fixed = ast
+        .getattr("fix_missing_locations")
+        .and_then(|fix| fix.call1((module.clone_ref(py),)))
+        .expect("failed to fix locations");
+    let builtins = py
+        .import_bound("builtins")
+        .expect("failed to import builtins");
+    builtins
+        .getattr("compile")
+        .and_then(|compile| compile.call1((fixed, "<test>", "exec")))
+        .expect("Generated Python AST has syntax errors");
+}
 
 // ========== AWK-Specific Properties ==========
 
@@ -11,7 +27,9 @@ proptest! {
     #[test]
     fn awk_programs_always_lower(awk_program in awk_program()) {
         // AWK programs should always lower or return a LowerError (not panic)
-        let _ = snail_lower::lower_awk_program(&awk_program);
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_awk_program(py, &awk_program);
+        });
     }
 }
 
@@ -20,41 +38,10 @@ proptest! {
 
     #[test]
     fn awk_programs_generate_valid_python(awk_program in awk_program()) {
-        if let Ok(module) = snail_lower::lower_awk_program(&awk_program) {
-            let python_code = snail_codegen::python_source(&module);
-
-            // Should compile as valid Python
-            let check_code = format!(
-                r#"import sys
-try:
-    compile({}, '<test>', 'exec')
-except SyntaxError as e:
-    print(f'SyntaxError: {{e}}', file=sys.stderr)
-    sys.exit(1)"#,
-                format_python_string(&python_code)
-            );
-
-            let output = std::process::Command::new("python3")
-                .arg("-c")
-                .arg(&check_code)
-                .output()
-                .expect("failed to execute python3");
-
-            assert!(
-                output.status.success(),
-                "AWK generated Python has syntax errors:\n{}\n\nStderr: {}",
-                python_code,
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        Python::with_gil(|py| {
+            if let Ok(module) = snail_lower::lower_awk_program(py, &awk_program) {
+                assert_python_compiles(py, &module);
+            }
+        });
     }
-}
-
-fn format_python_string(s: &str) -> String {
-    format!(
-        "\"{}\"",
-        s.replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', "\\n")
-    )
 }

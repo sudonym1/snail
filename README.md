@@ -168,10 +168,9 @@ flowchart TB
         C2[crates/snail-ast/src/awk.rs<br/>AwkProgram AST]
     end
 
-    subgraph Lowering["Lowering & Code Generation"]
+    subgraph Lowering["Lowering"]
         D1[crates/snail-lower/<br/>AST → Python AST Transform]
         D2[python/snail/runtime/<br/>Runtime Helpers]
-        D3[crates/snail-codegen/<br/>Python AST → Source Code]
     end
 
     subgraph Execution
@@ -187,9 +186,8 @@ flowchart TB
     C1 --> D1
     C2 --> D1
     D1 --> D2
-    D1 --> D3
-    D2 --> D3
-    D3 --> E1
+    D1 --> E1
+    D2 --> E1
     E1 --> E2
     E2 --> F[Python Execution]
 
@@ -207,7 +205,7 @@ flowchart TB
   - `$(cmd)` subprocess capture → `__SnailSubprocessCapture`
   - `@(cmd)` subprocess status → `__SnailSubprocessStatus`
   - Regex literals → `__snail_regex_search` and `__snail_regex_compile`
-- **Code Generation**: Converts Python AST to Python source for in-process execution
+- **Execution**: Compiles Python AST directly for in-process execution
 - **CLI**: Python wrapper (`python/snail/cli.py`) that executes via the extension module
 
 ## 📚 Documentation

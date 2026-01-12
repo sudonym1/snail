@@ -20,13 +20,19 @@ fn parse_mode(mode: &str) -> PyResult<CompileMode> {
 }
 
 fn compile_source(
+    py: Python<'_>,
     source: &str,
     mode: CompileMode,
     auto_print: bool,
     filename: &str,
-) -> Result<String, PyErr> {
-    compile_snail_source_with_auto_print(source, mode, auto_print)
-        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))
+) -> Result<PyObject, PyErr> {
+    let module = compile_snail_source_with_auto_print(py, source, mode, auto_print)
+        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+    let ast = py.import_bound("ast")?;
+    let fixed = ast
+        .getattr("fix_missing_locations")?
+        .call1((module.clone_ref(py),))?;
+    Ok(fixed.into_py(py))
 }
 
 fn prepare_globals<'py>(
@@ -59,11 +65,11 @@ fn compile_py(
     filename: &str,
 ) -> PyResult<PyObject> {
     let mode = parse_mode(mode)?;
-    let python_source = compile_source(source, mode, auto_print, filename)?;
+    let python_ast = compile_source(py, source, mode, auto_print, filename)?;
     let builtins = py.import_bound("builtins")?;
     let code = builtins
         .getattr("compile")?
-        .call1((python_source, filename, "exec"))?;
+        .call1((python_ast, filename, "exec"))?;
     Ok(code.unbind())
 }
 
@@ -78,11 +84,11 @@ fn exec_py(
     filename: &str,
 ) -> PyResult<i32> {
     let mode = parse_mode(mode)?;
-    let python_source = compile_source(source, mode, auto_print, filename)?;
+    let python_ast = compile_source(py, source, mode, auto_print, filename)?;
     let builtins = py.import_bound("builtins")?;
     let code = builtins
         .getattr("compile")?
-        .call1((python_source, filename, "exec"))?;
+        .call1((python_ast, filename, "exec"))?;
     let globals = prepare_globals(py, filename, &argv)?;
 
     match builtins

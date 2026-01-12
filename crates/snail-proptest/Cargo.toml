@@ -7,14 +7,13 @@ edition = "2021"
 snail-ast = { path = "../snail-ast" }
 snail-parser = { path = "../snail-parser" }
 snail-lower = { path = "../snail-lower" }
-snail-python-ast = { path = "../snail-python-ast" }
-snail-codegen = { path = "../snail-codegen" }
 snail-core = { path = "../snail-core" }
 snail-error = { path = "../snail-error" }
 proptest = "1.5"
 
 [dev-dependencies]
 tempfile = "3"
+pyo3 = { version = "0.21", features = ["abi3-py310"] }
 
 [features]
 run-proptests = []

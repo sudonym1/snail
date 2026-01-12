@@ -1,6 +1,7 @@
 #![cfg(feature = "run-proptests")]
 
 use proptest::prelude::*;
+use pyo3::prelude::*;
 use snail_proptest::arbitrary::*;
 use snail_proptest::utils::*;
 
@@ -21,7 +22,9 @@ proptest! {
         };
 
         // Regex expressions should lower
-        let _ = snail_lower::lower_program(&program);
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -40,7 +43,9 @@ proptest! {
         };
 
         // Regex match expressions should lower
-        let _ = snail_lower::lower_program(&program);
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -59,7 +64,9 @@ proptest! {
         };
 
         // Subprocess expressions should lower
-        let _ = snail_lower::lower_program(&program);
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -78,7 +85,9 @@ proptest! {
         };
 
         // Structured accessor expressions should lower
-        let _ = snail_lower::lower_program(&program);
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -97,7 +106,9 @@ proptest! {
         };
 
         // F-string expressions should lower
-        let _ = snail_lower::lower_program(&program);
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -119,7 +130,9 @@ proptest! {
         };
 
         // Comprehensions should lower
-        let _ = snail_lower::lower_program(&program);
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -127,7 +140,7 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
 
     #[test]
-    fn compare_expressions_lower(expr in compare_expr(Size::new(2))) {
+    fn pipeline_expressions_lower(expr in pipeline_expr(Size::new(2))) {
         let program = snail_ast::Program {
             stmts: vec![snail_ast::Stmt::Expr {
                 value: expr,
@@ -137,8 +150,10 @@ proptest! {
             span: dummy_span(),
         };
 
-        // Compare expressions should lower
-        let _ = snail_lower::lower_program(&program);
+        // Pipeline expressions should lower
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -146,7 +161,49 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
 
     #[test]
-    fn compound_expressions_lower(expr in compound_expr(Size::new(2))) {
+    fn try_expressions_lower(expr in try_expr(Size::new(2))) {
+        let program = snail_ast::Program {
+            stmts: vec![snail_ast::Stmt::Expr {
+                value: expr,
+                semicolon_terminated: true,
+                span: dummy_span(),
+            }],
+            span: dummy_span(),
+        };
+
+        // Try expressions should lower
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(100))]
+
+    #[test]
+    fn structured_json_pipeline_lower(expr in structured_json_pipeline_expr()) {
+        let program = snail_ast::Program {
+            stmts: vec![snail_ast::Stmt::Expr {
+                value: expr,
+                semicolon_terminated: true,
+                span: dummy_span(),
+            }],
+            span: dummy_span(),
+        };
+
+        // Structured JSON pipeline expressions should lower
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(100))]
+
+    #[test]
+    fn nested_compounds_lower(expr in compound_expr(Size::new(2))) {
         let program = snail_ast::Program {
             stmts: vec![snail_ast::Stmt::Expr {
                 value: expr,
@@ -157,7 +214,9 @@ proptest! {
         };
 
         // Compound expressions should lower
-        let _ = snail_lower::lower_program(&program);
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -165,13 +224,20 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
 
     #[test]
-    fn class_statements_lower(stmt in class_stmt(Size::new(2))) {
+    fn lambda_exprs_lower(expr in lambda_expr(Size::new(2))) {
         let program = snail_ast::Program {
-            stmts: vec![stmt],
+            stmts: vec![snail_ast::Stmt::Expr {
+                value: expr,
+                semicolon_terminated: true,
+                span: dummy_span(),
+            }],
             span: dummy_span(),
         };
 
-        let _ = snail_lower::lower_program(&program);
+        // Lambda expressions should lower
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
 
@@ -179,29 +245,19 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
 
     #[test]
-    fn with_statements_lower(stmt in with_stmt(Size::new(2))) {
+    fn attribute_expressions_lower(expr in attribute_expr(Size::new(2))) {
         let program = snail_ast::Program {
-            stmts: vec![stmt],
+            stmts: vec![snail_ast::Stmt::Expr {
+                value: expr,
+                semicolon_terminated: true,
+                span: dummy_span(),
+            }],
             span: dummy_span(),
         };
 
-        let _ = snail_lower::lower_program(&program);
-    }
-}
-
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(100))]
-
-    #[test]
-    fn import_statements_lower(stmt in prop_oneof![
-        import_stmt(),
-        import_from_stmt(),
-    ]) {
-        let program = snail_ast::Program {
-            stmts: vec![stmt],
-            span: dummy_span(),
-        };
-
-        let _ = snail_lower::lower_program(&program);
+        // Attribute expressions should lower
+        Python::with_gil(|py| {
+            let _ = snail_lower::lower_program(py, &program);
+        });
     }
 }
