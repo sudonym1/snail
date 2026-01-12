@@ -29,8 +29,12 @@ make test
 
 # Make a commit.
 
-git diff
 git add -A
+if git diff --cached --quiet; then
+  echo "No changes to commit." >&2
+  exit 1
+fi
+git diff --cached
 git commit -m "Tagging release $release_tag"
 
 if [[ ${tag_exists} == false ]]; then
