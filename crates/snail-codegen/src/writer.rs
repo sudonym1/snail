@@ -3,10 +3,6 @@ use std::fmt::Write as _;
 use snail_python_ast::*;
 
 use crate::expr::{expr_source, import_name, param_source, with_item_source};
-use crate::helpers::{
-    HelperWriter, write_snail_regex_helpers, write_snail_subprocess_helpers,
-    write_snail_try_helper, write_structured_accessor_helpers,
-};
 
 pub struct PythonWriter {
     output: String,
@@ -29,22 +25,6 @@ impl PythonWriter {
         for stmt in &module.body {
             self.write_stmt(stmt);
         }
-    }
-
-    pub fn write_snail_try_helper(&mut self) {
-        write_snail_try_helper(self);
-    }
-
-    pub fn write_snail_regex_helpers(&mut self) {
-        write_snail_regex_helpers(self);
-    }
-
-    pub fn write_snail_subprocess_helpers(&mut self) {
-        write_snail_subprocess_helpers(self);
-    }
-
-    pub fn write_structured_accessor_helpers(&mut self) {
-        write_structured_accessor_helpers(self);
     }
 
     pub fn write_stmt(&mut self, stmt: &PyStmt) {
@@ -233,19 +213,5 @@ impl PythonWriter {
         };
         self.write_line(&header);
         self.write_suite(&handler.body);
-    }
-}
-
-impl HelperWriter for PythonWriter {
-    fn write_line(&mut self, line: &str) {
-        self.write_line(line);
-    }
-
-    fn indent(&self) -> usize {
-        self.indent
-    }
-
-    fn set_indent(&mut self, indent: usize) {
-        self.indent = indent;
     }
 }

@@ -1,15 +1,9 @@
 mod expr;
-mod feature_detection;
-mod helpers;
 mod writer;
 
 use snail_python_ast::*;
 
 use crate::expr::expr_source;
-use crate::feature_detection::{
-    module_uses_snail_regex, module_uses_snail_subprocess, module_uses_snail_try,
-    module_uses_structured_accessor,
-};
 use crate::writer::PythonWriter;
 
 pub fn python_source(module: &PyModule) -> String {
@@ -18,34 +12,6 @@ pub fn python_source(module: &PyModule) -> String {
 
 pub fn python_source_with_auto_print(module: &PyModule, auto_print_last: bool) -> String {
     let mut writer = PythonWriter::new();
-    let uses_try = module_uses_snail_try(module);
-    let uses_regex = module_uses_snail_regex(module);
-    let uses_subprocess = module_uses_snail_subprocess(module);
-    let uses_structured = module_uses_structured_accessor(module);
-    if uses_try {
-        writer.write_snail_try_helper();
-    }
-    if uses_regex {
-        if uses_try {
-            writer.write_line("");
-        }
-        writer.write_snail_regex_helpers();
-    }
-    if uses_subprocess {
-        if uses_try || uses_regex {
-            writer.write_line("");
-        }
-        writer.write_snail_subprocess_helpers();
-    }
-    if uses_structured {
-        if uses_try || uses_regex || uses_subprocess {
-            writer.write_line("");
-        }
-        writer.write_structured_accessor_helpers();
-    }
-    if (uses_try || uses_regex || uses_subprocess || uses_structured) && !module.body.is_empty() {
-        writer.write_line("");
-    }
 
     // Handle auto-print of last expression in CLI mode
     if auto_print_last && !module.body.is_empty() {

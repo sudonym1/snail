@@ -1,0 +1,12 @@
+[package]
+name = "snail-python"
+version = "0.2.0"
+edition.workspace = true
+
+[lib]
+name = "snail_python"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.21", features = ["extension-module", "abi3-py310"] }
+snail-core = { path = "../snail-core" }

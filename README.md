@@ -135,6 +135,9 @@ filtered = df[df["value"] > 100]
 ## 🚀 Quick Start
 
 ```bash
+# Install from PyPI
+pip install snail
+
 # Run a one-liner
 snail "print('Hello, Snail!')"
 
@@ -143,12 +146,6 @@ snail -f script.snail
 
 # Awk mode for text processing
 cat data.txt | snail --awk '/error/ { print($l) }'
-
-# See the generated Python
-snail --python "x = risky()? ; print(x)"
-
-# Self-update to latest release
-snail --update
 ```
 
 ## 🏗️ Architecture
@@ -173,13 +170,13 @@ flowchart TB
 
     subgraph Lowering["Lowering & Code Generation"]
         D1[crates/snail-lower/<br/>AST → Python AST Transform]
-        D2[crates/snail-codegen/src/helpers.rs<br/>Runtime Helpers]
+        D2[python/snail/runtime/<br/>Runtime Helpers]
         D3[crates/snail-codegen/<br/>Python AST → Source Code]
     end
 
     subgraph Execution
-        E1[crates/snail-cli/<br/>CLI Interface]
-        E2[subprocess<br/>python3 execution]
+        E1[python/snail/cli.py<br/>CLI Interface]
+        E2[pyo3 extension<br/>in-process exec]
     end
 
     A -->|Regular Mode| B1
@@ -205,13 +202,13 @@ flowchart TB
 
 - **Parser**: Uses [Pest](https://pest.rs/) parser generator with PEG grammar defined in `src/snail.pest`
 - **AST**: Separate representations for regular Snail (`Program`) and awk mode (`AwkProgram`) with source spans for error reporting
-- **Lowering**: Transforms Snail AST into Python AST, generating runtime helper functions for Snail-specific features:
-  - `?` operator → `__snail_compact_try` helper
-  - `$(cmd)` subprocess capture → `__snail_subprocess_capture`
-  - `@(cmd)` subprocess status → `__snail_subprocess_status`
+- **Lowering**: Transforms Snail AST into Python AST, emitting helper calls backed by `snail.runtime`
+  - `?` operator → `__snail_compact_try`
+  - `$(cmd)` subprocess capture → `__SnailSubprocessCapture`
+  - `@(cmd)` subprocess status → `__SnailSubprocessStatus`
   - Regex literals → `__snail_regex_search` and `__snail_regex_compile`
-- **Code Generation**: Converts Python AST to executable Python source code
-- **CLI**: Handles execution via subprocess, automatically respecting virtual environments
+- **Code Generation**: Converts Python AST to Python source for in-process execution
+- **CLI**: Python wrapper (`python/snail/cli.py`) that executes via the extension module
 
 ## 📚 Documentation
 
@@ -235,10 +232,7 @@ See [extras/vim/README.md](extras/vim/README.md) for details. Tree-sitter gramma
 
 **Python 3.10+** (required at runtime)
 
-Snail compiles to Python code and executes it via subprocess using whatever `python3` is in your PATH. This means:
-- ✅ **Virtual environments are fully supported** - just activate your venv before running snail
-- ✅ **No rebuild needed** when switching Python versions or environments
-- ✅ **Configure Python interpreter** via `PYTHON` environment variable (e.g., `PYTHON=python3.12 snail ...`)
+Snail runs in-process via a Pyo3 extension module, so it uses the active Python environment.
 
 Installation per platform:
 - **Ubuntu/Debian**: `sudo apt install python3 python3-dev`
@@ -246,7 +240,7 @@ Installation per platform:
 - **macOS**: `brew install python@3.12` (or use the system Python 3)
 - **Windows**: Download from [python.org](https://www.python.org/downloads/)
 
-**No Python packages required**: Snail vendors all necessary Python libraries (jmespath) directly into the generated code.
+**No Python packages required**: Snail vendors jmespath as part of the Python package.
 
 **Rust toolchain** (cargo and rustc)
 
@@ -270,6 +264,12 @@ rustc --version  # Should show rustc 1.70+
 python3 --version  # Should show Python 3.10+
 ```
 
+**maturin** (build tool)
+
+```bash
+pip install maturin
+```
+
 ### Build and Install
 
 ```bash
@@ -277,36 +277,25 @@ python3 --version  # Should show Python 3.10+
 git clone https://github.com/sudonym1/snail.git
 cd snail
 
-# Build the release binary
-cargo build --release
+# Create and activate a venv (recommended)
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install to ~/.local/bin (make sure it's in your PATH)
-cp target/release/snail ~/.local/bin/
+# Build and install into the venv
+maturin develop
 
-# Or use the Makefile (runs tests, builds, and installs)
-make install
-```
-
-Add `~/.local/bin` to your PATH if it's not already there:
-
-```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+# Or build wheels for distribution
+maturin build --release
 ```
 
 ### Running Tests
 
 ```bash
-# Run all tests (parser, lowering, awk mode, CLI; excludes proptests by default)
+# Run all Rust tests (parser, lowering, awk mode; excludes proptests by default)
 cargo test
 
 # Run tests including property-based tests (proptests)
 cargo test --features run-proptests
-
-# Run specific test suites
-cargo test parser
-cargo test awk
-cargo test cli
 
 # Check code formatting and linting
 cargo fmt --check
@@ -314,35 +303,26 @@ cargo clippy -- -D warnings
 
 # Build with all features enabled (required before committing)
 cargo build --features run-proptests
+
+# Run Python CLI tests
+python -m pytest python/tests
 ```
 
 **Note on Proptests**: The `snail-proptest` crate contains property-based tests that are skipped by default to keep development iteration fast. Use `--features run-proptests` to run them. Before committing, verify that `cargo build --features run-proptests` compiles successfully.
 
 ### Troubleshooting
 
-**Using a specific Python version:**
-
-Set the `PYTHON` environment variable to specify which Python interpreter to use:
-
-```bash
-# Use a specific Python version
-PYTHON=python3.12 snail "print('hello')"
-
-# Or set it globally
-export PYTHON=python3.12
-snail "print('hello')"
-```
-
 **Using with virtual environments:**
 
-Simply activate your virtual environment before running snail:
+Activate the environment before running snail so it uses the same interpreter:
 
 ```bash
 # Create and activate a venv
 python3 -m venv myenv
 source myenv/bin/activate  # On Windows: myenv\Scripts\activate
 
-# Snail will automatically use the venv's Python
+# Install and run
+pip install snail
 snail "import sys; print(sys.prefix)"
 ```
 

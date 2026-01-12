@@ -12,11 +12,17 @@ Snail is a programming language that compiles to Python, offering terse Perl/awk
 ## Build and Test Commands
 
 ```bash
-# Build the project
+# Build the Rust crates
 cargo build
 
-# Run all tests (includes parser, lowering, awk mode, CLI tests; excludes proptests by default)
+# Build/install the Python extension in the active env
+maturin develop
+
+# Run all Rust tests (parser, lowering, awk mode; excludes proptests by default)
 cargo test
+
+# Run Python CLI tests
+python -m pytest python/tests
 
 # Run tests including property-based tests (proptests)
 cargo test --features run-proptests
@@ -28,13 +34,10 @@ cargo test awk
 # Run a specific test by name
 cargo test parses_basic_program
 
-# Build and run the CLI
-cargo run -- "print('hello')"
-cargo run -- -f examples/all_syntax.snail
-cargo run -- --awk -f examples/awk.snail
-
-# Using the built binary directly
-./target/debug/snail "print('hello')"
+# Run the CLI (after maturin develop)
+snail "print('hello')"
+snail -f examples/all_syntax.snail
+snail --awk -f examples/awk.snail
 
 # Format code
 cargo fmt
@@ -81,6 +84,9 @@ cargo clippy -- -D warnings
 
 # 5. TESTS - Must pass completely (excludes proptests by default)
 RUSTFLAGS="-D warnings" cargo test
+
+# 6. PYTHON CLI TESTS - Must pass
+python -m pytest python/tests
 ```
 
 ### Pre-Commit/Pre-PR Checklist:
@@ -90,12 +96,13 @@ RUSTFLAGS="-D warnings" cargo test
 - [ ] `cargo build --features run-proptests` passes (feature-gated proptest support)
 - [ ] `cargo clippy -- -D warnings` passes with zero clippy warnings
 - [ ] `cargo test` passes with all tests succeeding
+- [ ] `python -m pytest python/tests` passes
 - [ ] If adding new syntax: `examples/all_syntax.snail` updated
 - [ ] Appropriate tests added for new functionality
 
 **DO NOT**:
 - ❌ Skip any CI check "to save time"
-- ❌ Commit/push without running all five checks
+- ❌ Commit/push without running all checks
 - ❌ Create a PR without verifying all checks pass
 - ❌ Assume tests/build still pass without running them
 
@@ -112,13 +119,13 @@ The repository is organized as a Cargo workspace with the following crates:
 - **`snail-codegen`**: Generates Python source code from Python AST
 - **`snail-error`**: Error types (ParseError, LowerError, SnailError)
 - **`snail-core`**: High-level compilation API (compile_snail_source, etc.)
-- **`snail-cli`**: Command-line interface and integration tests
+- **`snail-python`**: Pyo3 module used by the Python package and CLI
 
 ## High-Level Architecture
 
 ### Compilation Pipeline
 
-Snail → Parser → AST → Lowering → Python AST → Python Source → subprocess exec
+Snail → Parser → AST → Lowering → Python AST → Python Source → in-process exec
 
 1. **Parser** (`crates/snail-parser/`):
    - Uses Pest parser generator with grammar defined in `crates/snail-parser/src/snail.pest`
@@ -134,11 +141,11 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → subpr
 
 3. **Lowering** (`crates/snail-lower/`):
    - Transforms Snail AST into Python AST representation (`PyModule`, `PyStmt`, `PyExpr`)
-   - Handles Snail-specific features by generating helper code:
-     - `?` operator → compact try/except using `__snail_compact_try` helper
-     - `$(cmd)` subprocess capture → `__snail_subprocess_capture` helper
-     - `@(cmd)` subprocess status → `__snail_subprocess_status` helper
-     - Regex expressions → `__snail_regex_search` and `__snail_regex_compile` helpers
+   - Handles Snail-specific features by generating helper calls (provided by `snail.runtime`):
+     - `?` operator → compact try/except using `__snail_compact_try`
+     - `$(cmd)` subprocess capture → `__SnailSubprocessCapture`
+     - `@(cmd)` subprocess status → `__SnailSubprocessStatus`
+     - Regex expressions → `__snail_regex_search` and `__snail_regex_compile`
    - Awk variables (`$l`, `$n`, etc.) map to Python names (`__snail_line`, `__snail_nr_user`, etc.)
    - Awk mode wrapping: lower_awk_program() generates a Python main loop over input files/stdin
 
@@ -153,13 +160,11 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → subpr
 6. **Compilation API** (`crates/snail-core/`):
    - `compile_snail_source()`: compiles Snail source to Python source code
    - `compile_snail_source_with_auto_print()`: compiles with optional auto-print of last expression
-   - Used by CLI to generate Python code for execution
+   - Used by the Python module to execute code in-process
 
-7. **CLI** (`crates/snail-cli/src/main.rs`):
+7. **Python CLI** (`python/snail/cli.py`):
    - Handles `-f file.snail`, one-liner execution, and `--awk` mode
-   - Executes generated Python code via subprocess (respects virtual environments)
-   - Uses `python3` by default, configurable via `PYTHON` environment variable
-   - `--python` flag shows generated Python code for debugging
+   - Executes generated Python code in-process via the `snail` extension module
    - `-P` flag disables auto-printing of last expression
    - Awk mode can be triggered by `#!/usr/bin/env -S snail --awk -f` shebang
 
@@ -195,12 +200,10 @@ Snail → Parser → AST → Lowering → Python AST → Python Source → subpr
 ## Testing Strategy
 
 - **Parser tests** (`crates/snail-parser/tests/parser.rs`): Validate AST structure from source
-- **Lowering tests** (`crates/snail-cli/tests/lower.rs`): Verify Python AST generation and code output
-- **Awk mode tests** (`crates/snail-cli/tests/awk.rs`): Pattern matching, BEGIN/END, variables
-- **CLI tests** (`crates/snail-cli/tests/cli.rs`): End-to-end execution via CLI, command-line interface behavior
-- **Quote interpolation tests** (`crates/snail-cli/tests/quotes_in_expressions.rs`): String interpolation in various contexts
+- **Lowering tests** (`crates/snail-proptest/tests/properties.rs`): Verify lowering invariants
+- **Python CLI tests** (`python/tests/test_cli.py`): End-to-end execution via CLI, command-line interface behavior
 
-**Note on virtual environments:** The CLI executes Python via subprocess, automatically respecting any active virtual environment.
+**Note on virtual environments:** The CLI runs inside the active Python environment.
 
 ## Important Development Notes
 

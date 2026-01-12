@@ -4,29 +4,13 @@ Python code generation from Python AST.
 
 ## Purpose
 
-This crate is the final stage of the Snail compilation pipeline. It converts Python AST nodes into executable Python source code strings, handling proper indentation, syntax formatting, and injection of runtime helper functions.
+This crate is the final stage of the Snail compilation pipeline. It converts Python AST nodes into executable Python source code strings, handling proper indentation and syntax formatting.
 
 ## Key Components
 
 - **python_source()**: Converts a `PyModule` to Python source code
 - **python_source_with_auto_print()**: Generates code with optional auto-print of last expression
 - **PythonWriter**: Internal writer that manages indentation and code generation
-- **Helper injection functions**:
-  - `write_snail_try_helper()`: Injects the compact try (`?`) helper function
-  - `write_snail_regex_helpers()`: Injects regex search and compile helpers
-  - `write_snail_subprocess_helpers()`: Injects subprocess capture/status classes
-  - `write_structured_accessor_helpers()`: Injects structured data accessor classes and vendored jmespath
-  - `write_vendored_jmespath()`: Embeds jmespath library for structured queries
-
-## Smart Helper Injection
-
-The codegen scans the Python AST to detect which Snail features are used, and only injects the necessary helper functions:
-- Only inject try helper if `__snail_compact_try` is referenced
-- Only inject regex helpers if `__snail_regex_search` or `__snail_regex_compile` are used
-- Only inject subprocess helpers if subprocess classes are used
-- Only inject structured accessor helpers if `__SnailStructuredAccessor` or `json()` are used
-
-This minimizes generated code size and avoids unused imports.
 
 ## Auto-Print Feature
 
@@ -54,4 +38,4 @@ This provides REPL-like behavior for CLI one-liners.
 
 The code generator maintains proper Python indentation (4 spaces) and formats all Python constructs correctly. It handles edge cases like single-element tuples `(x,)`, raw strings, f-strings with escaping, and elif chains.
 
-The vendored jmespath library is embedded as inline string data to avoid runtime dependencies, making Snail programs self-contained.
+Runtime helpers (including vendored jmespath) live in the Python package under `python/snail/runtime`.

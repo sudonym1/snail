@@ -9,15 +9,15 @@ test:
 	RUSTFLAGS="-D warnings" cargo build --features run-proptests
 	cargo clippy -- -D warnings
 	RUSTFLAGS="-D warnings" cargo test
+	python -m pytest python/tests
 
-# Build release binary
+# Build release wheels
 build:
-	cargo build --release
+	maturin build --release
 
-# Install to ~/.local/bin/
-install: build
-	cp target/release/snail ~/.local/bin/snail
-	@echo "Installed snail to ~/.local/bin/snail"
+# Install into the active Python environment
+install:
+	maturin develop
 
 # Clean build artifacts
 clean:
