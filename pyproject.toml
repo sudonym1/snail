@@ -3,7 +3,7 @@ requires = ["maturin>=1.5"]
 build-backend = "maturin"
 
 [project]
-name = "snail"
+name = "snail-lang"
 version = "0.2.0"
 description = "Snail programming language interpreter"
 readme = "README.md"
