@@ -3,7 +3,7 @@ from __future__ import annotations
 import json as _json
 import sys as _sys
 
-import jmespath
+from ..vendor import jmespath
 
 
 class StructuredAccessor:

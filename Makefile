@@ -18,9 +18,11 @@ venv:
 # Run all tests
 test: venv
 	cargo fmt --check
+	RUSTFLAGS="-D warnings" cargo build
 	RUSTFLAGS="-D warnings" cargo build --features run-proptests
 	cargo clippy -- -D warnings
 	RUSTFLAGS="-D warnings" cargo test
+	$(UV) run -- python -m maturin develop
 	$(UV) run -- python -m pytest python/tests
 
 # Build release wheels
