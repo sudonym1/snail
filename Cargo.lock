@@ -134,9 +134,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.178"
+version = "0.2.180"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37c93d8daa9d8a012fd8ab92f088405fb202ea0b6ab73ee2482ae66af4f42091"
+checksum = "bcc35a38544a891a5f7c865aca548a982ccb3b8650a5b06d0fd33a10283c56fc"
 
 [[package]]
 name = "linux-raw-sys"
@@ -208,9 +208,9 @@ dependencies = [
 
 [[package]]
 name = "pest"
-version = "2.8.4"
+version = "2.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbcfd20a6d4eeba40179f05735784ad32bdaef05ce8e8af05f180d45bb3e7e22"
+checksum = "2c9eb05c21a464ea704b53158d358a31e6425db2f63a1a7312268b05fe2b75f7"
 dependencies = [
  "memchr",
  "ucd-trie",
@@ -218,9 +218,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.8.4"
+version = "2.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51f72981ade67b1ca6adc26ec221be9f463f2b5839c7508998daa17c23d94d7f"
+checksum = "68f9dbced329c441fa79d80472764b1a2c7e57123553b8519b36663a2fb234ed"
 dependencies = [
  "pest",
  "pest_generator",
@@ -228,9 +228,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.8.4"
+version = "2.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dee9efd8cdb50d719a80088b76f81aec7c41ed6d522ee750178f83883d271625"
+checksum = "3bb96d5051a78f44f43c8f712d8e810adb0ebf923fc9ed2655a7f66f63ba8ee5"
 dependencies = [
  "pest",
  "pest_meta",
@@ -241,9 +241,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.8.4"
+version = "2.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf1d70880e76bdc13ba52eafa6239ce793d85c8e43896507e43dd8984ff05b82"
+checksum = "602113b5b5e8621770cfd490cfd90b9f84ab29bd2b0e49ad83eb6d186cef2365"
 dependencies = [
  "pest",
  "sha2",
@@ -266,9 +266,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.104"
+version = "1.0.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9695f8df41bb4f3d222c95a67532365f569318332d03d5f3f67f37b20e6ebdf0"
+checksum = "535d180e0ecab6268a3e718bb9fd44db66bbbc256257165fc699dadf70d16fe7"
 dependencies = [
  "unicode-ident",
 ]
@@ -363,9 +363,9 @@ checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quote"
-version = "1.0.42"
+version = "1.0.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a338cc41d27e6cc6dce6cefc13a0729dfbb81c262b1f519331575dd80ef3067f"
+checksum = "dc74d9a594b72ae6656596548f56f667211f8a97b3d4c3d467150794690dc40a"
 dependencies = [
  "proc-macro2",
 ]
@@ -485,11 +485,11 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "snail-ast"
-version = "0.2.0"
+version = "0.3.3"
 
 [[package]]
 name = "snail-codegen"
-version = "0.2.0"
+version = "0.3.3"
 dependencies = [
  "snail-ast",
  "snail-python-ast",
@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "snail-core"
-version = "0.2.0"
+version = "0.3.3"
 dependencies = [
  "snail-ast",
  "snail-codegen",
@@ -509,14 +509,14 @@ dependencies = [
 
 [[package]]
 name = "snail-error"
-version = "0.2.0"
+version = "0.3.3"
 dependencies = [
  "snail-ast",
 ]
 
 [[package]]
 name = "snail-lower"
-version = "0.2.0"
+version = "0.3.3"
 dependencies = [
  "snail-ast",
  "snail-error",
@@ -525,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "snail-parser"
-version = "0.2.0"
+version = "0.3.3"
 dependencies = [
  "pest",
  "pest_derive",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "snail-proptest"
-version = "0.2.0"
+version = "0.3.3"
 dependencies = [
  "proptest",
  "snail-ast",
@@ -550,7 +550,7 @@ dependencies = [
 
 [[package]]
 name = "snail-python"
-version = "0.2.0"
+version = "0.3.3"
 dependencies = [
  "pyo3",
  "snail-core",
@@ -558,16 +558,16 @@ dependencies = [
 
 [[package]]
 name = "snail-python-ast"
-version = "0.2.0"
+version = "0.3.3"
 dependencies = [
  "snail-ast",
 ]
 
 [[package]]
 name = "syn"
-version = "2.0.112"
+version = "2.0.114"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21f182278bf2d2bcb3c88b1b08a37df029d71ce3d3ae26168e3c653b213b99d4"
+checksum = "d4d107df263a3013ef9b1879b0df87d706ff80f65a86ea879bd9c31f9b307c2a"
 dependencies = [
  "proc-macro2",
  "quote",
