@@ -1,24 +1,35 @@
-.PHONY: all test build install clean
+.PHONY: all test build install clean sync
+
+UV ?= uv
 
 # Default target: test, build, and install
 all: test build install
 
+sync:
+	$(UV) sync --extra dev
+
 # Run all tests
-test:
+test: sync
 	cargo fmt --check
+	RUSTFLAGS="-D warnings" cargo build
 	RUSTFLAGS="-D warnings" cargo build --features run-proptests
 	cargo clippy -- -D warnings
 	RUSTFLAGS="-D warnings" cargo test
+	$(UV) run -- python -m maturin develop
+	$(UV) run -- python -m pytest python/tests
 
-# Build release binary
-build:
-	cargo build --release
+# Build release wheels
+build: sync
+	$(UV) run -- python -m maturin build --release
 
-# Install to ~/.local/bin/
-install: build
-	cp target/release/snail ~/.local/bin/snail
-	@echo "Installed snail to ~/.local/bin/snail"
+# Install into the active Python environment
+install: sync
+	$(UV) tool install .
 
 # Clean build artifacts
 clean:
 	cargo clean
+	rm -rf .venv
+	rm -rf python/snail/_native*.so
+	rm -rf uv.lock
+	find . -name __pycache__ -type d -exec rm -rf '{}' \;

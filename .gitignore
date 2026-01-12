@@ -31,3 +31,14 @@ target
 # already existing elements were commented out
 
 #/target
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+.venv/
+
+# Maturin builds
+python/snail/_native*.so
+
+# uv
+uv.lock

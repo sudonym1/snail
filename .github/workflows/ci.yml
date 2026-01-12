@@ -16,12 +16,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: astral-sh/setup-uv@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: fmt
-        run: cargo fmt --check
-      - name: clippy
-        run: cargo clippy -- -D warnings
       - name: test
-        run: RUSTFLAGS="-D warnings" cargo test
+        run: make test

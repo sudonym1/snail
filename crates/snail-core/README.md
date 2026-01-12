@@ -9,7 +9,7 @@ This crate serves as the main entry point for Snail compilation. It re-exports a
 ## Key Components
 
 - **compile_snail_source()**: One-step compilation from Snail source to Python source
-- **compile_snail_source_with_auto_print()**: Compilation with optional auto-print for CLI mode
+- **compile_snail_source_with_auto_print()**: Compilation with optional auto-print for CLI usage
 - Re-exports from all workspace crates:
   - `snail-ast`: All AST types
   - `snail-python-ast`: All Python AST types
@@ -53,7 +53,7 @@ This enables REPL-like behavior for interactive use and CLI one-liners.
 
 ## Used By
 
-- **snail-cli**: Uses the compilation API to compile and execute Snail programs
+- **snail-python**: Uses the compilation API to compile and execute Snail programs
 - Library consumers can use this crate to embed Snail compilation in other tools
 - Tests validate end-to-end compilation correctness
 
