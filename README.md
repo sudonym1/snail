@@ -136,7 +136,7 @@ filtered = df[df["value"] > 100]
 
 ```bash
 # Install from PyPI
-pip install snail
+pip install snail-lang
 
 # Run a one-liner
 snail "print('Hello, Snail!')"
@@ -322,7 +322,7 @@ python3 -m venv myenv
 source myenv/bin/activate  # On Windows: myenv\Scripts\activate
 
 # Install and run
-pip install snail
+pip install snail-lang
 snail "import sys; print(sys.prefix)"
 ```
 
