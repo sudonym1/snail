@@ -84,6 +84,24 @@ fn rejects_user_defined_dollar_identifiers() {
 }
 
 #[test]
+fn rejects_awk_only_variables_in_regular_mode() {
+    let source = "value = $l";
+    let err = parse_program(source).expect_err("awk identifiers should fail");
+    let message = err.to_string();
+    assert!(message.contains("$l"));
+    assert!(message.contains("--awk"));
+}
+
+#[test]
+fn rejects_awk_field_indices_in_regular_mode() {
+    let source = "value = $1";
+    let err = parse_program(source).expect_err("awk fields should fail");
+    let message = err.to_string();
+    assert!(message.contains("$1"));
+    assert!(message.contains("--awk"));
+}
+
+#[test]
 fn parses_if_elif_else_chain() {
     let source = r#"
 if x { y = 1 }

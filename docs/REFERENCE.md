@@ -229,7 +229,8 @@ While processing, Snail populates awk-style variables:
 - `$m`: the last regex match object.
 
 These `$` variables are injected by the language; user-defined identifiers
-cannot start with `$`.
+cannot start with `$`. They are only available in awk mode—using them in
+regular Snail code requires `--awk`.
 
 Input files come from `sys.argv[1:]`; when none are provided, awk mode reads
 stdin. Pass `--` to the CLI to forward filenames or other arguments into the
