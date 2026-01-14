@@ -118,6 +118,9 @@ first_email = data | $[users[0].email]
 
 # Inline parsing and querying
 result = json('{"foo": 12}') | $[foo]
+
+# JSONL parsing returns a list
+names = json('{"name": "Ada"}\n{"name": "Lin"}') | $[[*].name]
 ```
 
 ### Full Python Interoperability

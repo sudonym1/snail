@@ -201,9 +201,16 @@ names = json_obj | $[users[*].name]       # yields ["Alice", "Bob"]
 result = json(r'{"foo": 12}') | $[foo]    # yields 12
 ```
 
-The `json()` function parses a JSON string and returns a queryable object. The
+The `json()` function parses JSON strings (including JSONL) and returns a
+queryable object. For JSONL input, the result is a list of parsed objects. The
 `$[query]` accessor implements `__pipeline__` to apply JMESPath queries to the
 input data.
+
+```snail
+# JSONL input parses into a list
+records = json('{"name": "Ada"}\n{"name": "Lin"}')
+names = records | $[[*].name]  # yields ["Ada", "Lin"]
+```
 
 ## Assertions and deletion
 `assert` and `del` mirror Python. Assertions may include an optional message:
