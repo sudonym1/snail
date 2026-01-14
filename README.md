@@ -104,6 +104,9 @@ class Doubler {
     def __pipeline__(self, x) { return x * 2 }
 }
 doubled = 21 | Doubler()  # yields 42
+
+# Join list items with a separator
+joined = ["a", "b"] | join(" ")  # yields "a b"
 ```
 
 ### JSON Queries with JMESPath
@@ -118,6 +121,9 @@ first_email = data | $[users[0].email]
 
 # Inline parsing and querying
 result = json('{"foo": 12}') | $[foo]
+
+# JSONL parsing returns a list
+names = json('{"name": "Ada"}\n{"name": "Lin"}') | $[[*].name]
 ```
 
 ### Full Python Interoperability

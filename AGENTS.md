@@ -12,17 +12,20 @@ Snail is a programming language that compiles to Python, offering terse Perl/awk
 ## Build and Test Commands
 
 ```bash
+# Sync Python tooling (installs dev extras into .venv)
+uv sync --extra dev
+
 # Build the Rust crates
 cargo build
 
-# Build/install the Python extension in the active env
-maturin develop
+# Build/install the Python extension in the uv environment
+uv run -- python -m maturin develop
 
 # Run all Rust tests (parser, lowering, awk mode; excludes proptests by default)
 cargo test
 
 # Run Python CLI tests
-python -m pytest python/tests
+uv run -- python -m pytest python/tests
 
 # Run tests including property-based tests (proptests)
 cargo test --features run-proptests
@@ -35,9 +38,9 @@ cargo test awk
 cargo test parses_basic_program
 
 # Run the CLI (after maturin develop)
-snail "print('hello')"
-snail -f examples/all_syntax.snail
-snail --awk -f examples/awk.snail
+uv run -- snail "print('hello')"
+uv run -- snail -f examples/all_syntax.snail
+uv run -- snail --awk -f examples/awk.snail
 
 # Format code
 cargo fmt
@@ -74,7 +77,7 @@ Proptests are useful for finding edge cases and regressions, but are slower than
 - **Proptests build**: Run `cargo build --features run-proptests` when changing lowering/proptests; `make test` runs it.
 - **Linting**: Run `cargo clippy -- -D warnings` before final verification; `make test` runs it.
 - **Rust tests**: Run targeted `cargo test <name>` as needed; `make test` runs `cargo test`.
-- **Python CLI tests**: Run `python -m pytest python/tests` when touching the CLI; `make test` runs it.
+- **Python CLI tests**: Run `uv run -- python -m pytest python/tests` when touching the CLI; `make test` runs it.
 
 ### Required Final CI Step
 
@@ -185,7 +188,7 @@ Snail → Parser → AST → Lowering → Python AST → in-process exec
 - **Lowering tests** (`crates/snail-proptest/tests/properties.rs`): Verify lowering invariants
 - **Python CLI tests** (`python/tests/test_cli.py`): End-to-end execution via CLI, command-line interface behavior
 
-**Note on virtual environments:** The CLI runs inside the active Python environment.
+**Note on virtual environments:** Python tools run inside the uv-managed environment; prefer `uv run -- ...` for Python commands.
 
 ## Important Development Notes
 

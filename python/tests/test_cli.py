@@ -41,6 +41,25 @@ def test_file_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "arg\n"
 
 
+def test_jsonl_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    jsonl = tmp_path / "data.jsonl"
+    jsonl.write_text('{"name": "Ada"}\n{"name": "Lin"}\n')
+    script = tmp_path / "script.snail"
+    script.write_text(
+        f"data = json({str(jsonl)!r})\n"
+        "print(data | $[[*].name])\n"
+    )
+    assert main(["-f", str(script)]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "['Ada', 'Lin']\n"
+
+
+def test_join_pipeline(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["print(['a', 'b'] | join(' '))"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "a b\n"
+
+
 def test_awk_mode(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

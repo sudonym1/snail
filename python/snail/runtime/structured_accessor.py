@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json as _json
+import os as _os
 import sys as _sys
 
 from ..vendor import jmespath
@@ -45,6 +46,39 @@ class JsonPipelineWrapper:
         return repr(data)
 
 
+class JoinPipelineWrapper:
+    def __init__(self, separator: str) -> None:
+        self.separator = separator
+
+    def __pipeline__(self, input_data):
+        return join(self.separator, input_data)
+
+
+def _parse_jsonl(content: str):
+    lines = [line for line in content.splitlines() if line.strip()]
+    if not lines:
+        return []
+
+    items = []
+    for line in lines:
+        try:
+            items.append(_json.loads(line))
+        except _json.JSONDecodeError as exc:
+            raise _json.JSONDecodeError(
+                f"Invalid JSONL line: {exc.msg}",
+                line,
+                exc.pos,
+            ) from exc
+    return items
+
+
+def join(separator: str = "\n", input_data=None):
+    if input_data is None:
+        return JoinPipelineWrapper(separator)
+
+    return separator.join(str(item) for item in input_data)
+
+
 def json(input_data=None):
     """Parse JSON from various input sources."""
     if input_data is None:
@@ -54,13 +88,23 @@ def json(input_data=None):
         try:
             data = _json.loads(input_data)
         except _json.JSONDecodeError:
-            with open(input_data, "r", encoding="utf-8") as handle:
-                data = _json.load(handle)
+            if _os.path.exists(input_data):
+                with open(input_data, "r", encoding="utf-8") as handle:
+                    content = handle.read()
+                try:
+                    data = _json.loads(content)
+                except _json.JSONDecodeError:
+                    data = _parse_jsonl(content)
+            else:
+                data = _parse_jsonl(input_data)
     elif hasattr(input_data, "read"):
         content = input_data.read()
         if isinstance(content, bytes):
             content = content.decode("utf-8")
-        data = _json.loads(content)
+        try:
+            data = _json.loads(content)
+        except _json.JSONDecodeError:
+            data = _parse_jsonl(content)
     elif isinstance(input_data, (dict, list, int, float, bool)) or input_data is None:
         data = input_data
     else:
