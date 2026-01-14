@@ -48,3 +48,9 @@ def test_awk_mode(
     assert main(["--awk", "/foo/ { print($l) }"]) == 0
     captured = capsys.readouterr()
     assert captured.out == "foo\n"
+
+
+def test_awk_identifiers_require_awk_mode() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["print($l)"])
+    assert "--awk" in str(excinfo.value)
