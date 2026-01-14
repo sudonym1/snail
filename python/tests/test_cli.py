@@ -45,10 +45,7 @@ def test_jsonl_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     jsonl = tmp_path / "data.jsonl"
     jsonl.write_text('{"name": "Ada"}\n{"name": "Lin"}\n')
     script = tmp_path / "script.snail"
-    script.write_text(
-        f"data = json({str(jsonl)!r})\n"
-        "print(data | $[[*].name])\n"
-    )
+    script.write_text(f"data = js({str(jsonl)!r})\nprint(data | $[[*].name])\n")
     assert main(["-f", str(script)]) == 0
     captured = capsys.readouterr()
     assert captured.out == "['Ada', 'Lin']\n"

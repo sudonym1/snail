@@ -192,26 +192,26 @@ stdin.
 
 ## JSON queries
 Snail provides first-class JSON support through JMESPath queries using the
-`json()` function and `$[query]` structured pipeline accessor syntax:
+`js()` function and `$[query]` structured pipeline accessor syntax:
 
 ```snail
 # Parse JSON and query with $[jmespath]
-json_obj = json(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}')
+json_obj = js(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}')
 first_name = json_obj | $[users[0].name]  # yields "Alice"
 names = json_obj | $[users[*].name]       # yields ["Alice", "Bob"]
 
 # Inline parsing and querying
-result = json(r'{"foo": 12}') | $[foo]    # yields 12
+result = js(r'{"foo": 12}') | $[foo]    # yields 12
 ```
 
-The `json()` function parses JSON strings (including JSONL) and returns a
+The `js()` function parses JSON strings (including JSONL) and returns a
 queryable object. For JSONL input, the result is a list of parsed objects. The
 `$[query]` accessor implements `__pipeline__` to apply JMESPath queries to the
 input data.
 
 ```snail
 # JSONL input parses into a list
-records = json('{"name": "Ada"}\n{"name": "Lin"}')
+records = js('{"name": "Ada"}\n{"name": "Lin"}')
 names = records | $[[*].name]  # yields ["Ada", "Lin"]
 ```
 

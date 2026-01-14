@@ -7,7 +7,7 @@ from .structured_accessor import (
     JsonPipelineWrapper,
     StructuredAccessor,
     join,
-    json,
+    js,
 )
 from .subprocess import SubprocessCapture, SubprocessStatus
 
@@ -23,5 +23,5 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__SnailStructuredAccessor"] = StructuredAccessor
     globals_dict["__SnailJsonObject"] = JsonObject
     globals_dict["__SnailJsonPipelineWrapper"] = JsonPipelineWrapper
-    globals_dict["json"] = json
+    globals_dict["js"] = js
     globals_dict["join"] = join

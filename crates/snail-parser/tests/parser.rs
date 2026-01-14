@@ -749,7 +749,7 @@ fn parses_raw_string_without_interpolation() {
 }
 
 #[test]
-fn parses_raw_triple_quoted_string_with_json() {
+fn parses_raw_triple_quoted_string_with_js() {
     let source = r#####"x = r"""
 {
   "hook_event_name": "Status",
@@ -798,7 +798,7 @@ fn parses_structured_accessor() {
 
 #[test]
 fn parses_structured_accessor_with_pipeline() {
-    let program = parse_program("result = json() | $[users[0].name]").expect("should parse");
+    let program = parse_program("result = js() | $[users[0].name]").expect("should parse");
     assert_eq!(program.stmts.len(), 1);
 }
 
