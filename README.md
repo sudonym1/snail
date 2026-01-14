@@ -53,7 +53,7 @@ The `?` operator makes error handling terse yet expressive:
 err = risky_operation()?
 
 # Provide a fallback value (exception available as $e)
-value = parse_json(data):{}?
+value = js(data):{}?
 details = fetch_url(url):"Error: {$e}"?
 
 # Access attributes directly
@@ -111,19 +111,19 @@ joined = ["a", "b"] | join(" ")  # yields "a b"
 
 ### JSON Queries with JMESPath
 
-Parse and query JSON data with the `json()` function and structured pipeline accessor:
+Parse and query JSON data with the `js()` function and structured pipeline accessor:
 
 ```snail
 # Parse JSON and query with $[jmespath]
-data = json($(curl -s api.example.com/users))
+data = js($(curl -s api.example.com/users))
 names = data | $[users[*].name]
 first_email = data | $[users[0].email]
 
 # Inline parsing and querying
-result = json('{"foo": 12}') | $[foo]
+result = js('{"foo": 12}') | $[foo]
 
 # JSONL parsing returns a list
-names = json('{"name": "Ada"}\n{"name": "Lin"}') | $[[*].name]
+names = js('{"name": "Ada"}\n{"name": "Lin"}') | $[[*].name]
 ```
 
 ### Full Python Interoperability
