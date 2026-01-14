@@ -104,6 +104,9 @@ class Doubler {
     def __pipeline__(self, x) { return x * 2 }
 }
 doubled = 21 | Doubler()  # yields 42
+
+# Join list items with a separator
+joined = ["a", "b"] | join(" ")  # yields "a b"
 ```
 
 ### JSON Queries with JMESPath

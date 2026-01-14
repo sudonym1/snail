@@ -46,6 +46,14 @@ class JsonPipelineWrapper:
         return repr(data)
 
 
+class JoinPipelineWrapper:
+    def __init__(self, separator: str) -> None:
+        self.separator = separator
+
+    def __pipeline__(self, input_data):
+        return join(self.separator, input_data)
+
+
 def _parse_jsonl(content: str):
     lines = [line for line in content.splitlines() if line.strip()]
     if not lines:
@@ -62,6 +70,13 @@ def _parse_jsonl(content: str):
                 exc.pos,
             ) from exc
     return items
+
+
+def join(separator: str = "\n", input_data=None):
+    if input_data is None:
+        return JoinPipelineWrapper(separator)
+
+    return separator.join(str(item) for item in input_data)
 
 
 def json(input_data=None):

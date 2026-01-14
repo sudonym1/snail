@@ -42,6 +42,9 @@ class Doubler {
 }
 
 result = 21 | Doubler()  # yields 42
+
+# Built-in pipeline helpers
+joined = ["a", "b"] | join(" ")  # yields "a b"
 ```
 
 The pipeline operator has precedence between boolean operators and comparisons,

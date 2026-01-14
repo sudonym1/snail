@@ -24,7 +24,7 @@ build: sync
 
 # Install into the active Python environment
 install: sync
-	$(UV) tool install .
+	$(UV) tool install --force --reinstall .
 
 # Clean build artifacts
 clean:
