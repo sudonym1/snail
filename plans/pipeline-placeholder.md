@@ -5,16 +5,18 @@
 Add placeholder syntax to control where piped values are inserted in function calls:
 
 ```snail
-"foo" | greet(_, "!")      # greet("foo", "!")  - placeholder marks insertion point
-"foo" | greet("Hi", _)     # greet("Hi", "foo") - piped value as second arg
-"foo" | greet()            # greet("foo")       - no placeholder = prepend (backward compat)
+"foo" | greet(_, "!")          # greet("foo", "!")       - placeholder marks insertion point
+"foo" | greet("Hi", _)         # greet("Hi", "foo")      - piped value as second arg
+"foo" | greet("Hi", suffix=_)  # greet("Hi", suffix="foo")
+"foo" | identity                # identity("foo")         - callable with single param
 ```
 
 ## Design Decisions
 
-1. **No placeholder in call**: Prepend piped value (backward compatible)
-2. **Multiple placeholders**: Error - only one `_` allowed per call
-3. **`_` outside pipeline**: Error - `_` is only valid in pipeline RHS call arguments
+1. **No placeholder in call**: Error - explicit placeholder required in call args
+2. **Multiple placeholders**: Error - only one `_` allowed per call (positional or kwarg)
+3. **Placeholder scope**: `_` is only a placeholder inside pipeline RHS call arguments
+4. **`_` elsewhere**: `_` remains a normal identifier outside pipeline call args
 
 ## Implementation Steps
 
@@ -22,7 +24,7 @@ Add placeholder syntax to control where piped values are inserted in function ca
 
 **File:** `crates/snail-parser/src/snail.pest`
 
-Add placeholder rule and include in atom (before identifier to prevent `_` being parsed as identifier):
+Add placeholder rule and include in atom (before identifier so `_` can be parsed distinctly):
 
 ```pest
 # Add new rule
@@ -72,7 +74,7 @@ Also update any exhaustive match statements in:
 
 **File:** `crates/snail-lower/src/expr.rs`
 
-Modify pipeline lowering to detect and substitute placeholders:
+Modify pipeline lowering to detect and substitute placeholders (positional args and kwarg values):
 
 ```rust
 if *op == BinaryOp::Pipeline {
@@ -81,24 +83,21 @@ if *op == BinaryOp::Pipeline {
     // Check if RHS is a call with placeholder(s)
     match right.as_ref() {
         Expr::Call { func, args, kwargs, span: call_span } => {
-            // Count placeholders in args
-            let placeholder_count = count_placeholders(args);
+            // Count placeholders in positional args and kwarg values
+            let placeholder_count = count_placeholders(args, kwargs);
 
             if placeholder_count > 1 {
-                return Err(LowerError::MultiplePlaceholders { span: *call_span });
+                return Err(LowerError::MultiplePlaceholders { span: offending_placeholder_span });
             }
 
             if placeholder_count == 1 {
                 // Substitute placeholder with piped value
-                let new_args = substitute_placeholder(args, &left_expr);
+                let (new_args, new_kwargs) = substitute_placeholder(args, kwargs, &left_expr);
                 // Lower the call with substituted args
-                lower_call(builder, func, &new_args, kwargs, call_span, exception_name)
+                lower_call(builder, func, &new_args, &new_kwargs, call_span, exception_name)
             } else {
-                // No placeholder - prepend piped value (current behavior)
-                let func_expr = lower_expr_with_exception(builder, func, exception_name)?;
-                let mut call_args = vec![left_expr];
-                // ... add rest of args
-                lower_call_with_prepended_arg(...)
+                // No placeholder - explicit placeholder required for call args
+                return Err(LowerError::MissingPipelinePlaceholder { span: *call_span });
             }
         }
         Expr::Subprocess { ... } => {
@@ -113,15 +112,15 @@ if *op == BinaryOp::Pipeline {
 }
 ```
 
-### Step 5: Error on placeholder outside pipeline
+### Step 5: Lower placeholder outside pipeline as identifier
 
 **File:** `crates/snail-lower/src/expr.rs`
 
-Add match arm for standalone Placeholder that returns an error:
+Ensure a standalone placeholder lowers to the identifier `_` when not in a pipeline RHS call argument:
 
 ```rust
 Expr::Placeholder { span } => {
-    Err(LowerError::PlaceholderOutsidePipeline { span: *span })
+    lower_identifier(builder, "_", *span)
 }
 ```
 
@@ -134,8 +133,8 @@ Add new error variants:
 ```rust
 pub enum LowerError {
     // ... existing variants
-    PlaceholderOutsidePipeline { span: SourceSpan },
     MultiplePlaceholders { span: SourceSpan },
+    MissingPipelinePlaceholder { span: SourceSpan },
 }
 ```
 
@@ -151,13 +150,17 @@ assert result == "Hello World!"
 
 result2 = "!" | greet("World", _)
 assert result2 == "Hello World!"
+
+result3 = "World" | greet("Hello ", suffix=_)
+assert result3 == "Hello World"
 ```
 
 **Tests to add:**
-- Parser tests for `_` in various positions
-- Lowering tests for placeholder substitution
-- Error tests for multiple placeholders
-- Error tests for placeholder outside pipeline
+- Parser tests for `_` as placeholder and `_` as identifier
+- Lowering tests for positional and kwarg placeholder substitution
+- Error test for multiple placeholders in a call
+- Error test for call missing placeholder
+- Integration tests for placeholder usage and `_` identifier outside pipelines
 
 ## Files to Modify
 
@@ -169,8 +172,8 @@ assert result2 == "Hello World!"
 | `crates/snail-parser/src/lib.rs` | Handle Placeholder in exhaustive matches |
 | `crates/snail-parser/src/util.rs` | Handle Placeholder in exhaustive matches |
 | `crates/snail-parser/src/string.rs` | Handle Placeholder in exhaustive matches |
-| `crates/snail-lower/src/expr.rs` | Placeholder substitution in pipeline, error on standalone |
-| `crates/snail-error/src/lib.rs` | Add error types |
+| `crates/snail-lower/src/expr.rs` | Placeholder substitution in pipeline, lower `_` as identifier elsewhere |
+| `crates/snail-error/src/lib.rs` | Add error type |
 | `examples/all_syntax.snail` | Add examples |
 
 ## Verification
@@ -180,7 +183,9 @@ assert result2 == "Hello World!"
 3. `uv run -- python -m maturin develop` - Extension builds
 4. `uv run -- snail 'def f(a,b){a+b}; "x" | f(_, "y")'` - Returns "xy"
 5. `uv run -- snail 'def f(a,b){a+b}; "y" | f("x", _)'` - Returns "xy"
-6. `uv run -- snail 'def f(a,b){a+b}; "x" | f("y")'` - Returns "xy" (prepend)
-7. `uv run -- snail '_ = 5'` - Error: placeholder outside pipeline
-8. `uv run -- snail '"x" | f(_, _)'` - Error: multiple placeholders
-9. `make test` - Full CI passes
+6. `uv run -- snail 'def id(x){x}; "x" | id'` - Returns "x" (single-arg call)
+7. `uv run -- snail 'def f(a,b){a+b}; "x" | f(a="y", b=_)'` - Returns "xy" (kwarg)
+8. `uv run -- snail '_ = 5; _ + 1'` - Returns 6 (identifier)
+9. `uv run -- snail '"x" | f("y")'` - Error: missing placeholder in call
+10. `uv run -- snail '"x" | f(_, b=_)'` - Error: multiple placeholders
+11. `make test` - Full CI passes
