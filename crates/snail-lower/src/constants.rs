@@ -5,9 +5,7 @@ pub const SNAIL_SUBPROCESS_CAPTURE_CLASS: &str = "__SnailSubprocessCapture";
 pub const SNAIL_SUBPROCESS_STATUS_CLASS: &str = "__SnailSubprocessStatus";
 pub const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
 pub const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
-pub const SNAIL_STRUCTURED_ACCESSOR_CLASS: &str = "__SnailStructuredAccessor";
-pub const SNAIL_JSON_OBJECT_CLASS: &str = "__SnailJsonObject";
-pub const SNAIL_JSON_PIPELINE_WRAPPER_CLASS: &str = "__SnailJsonPipelineWrapper";
+pub const SNAIL_JMESPATH_QUERY: &str = "__snail_jmespath_query";
 
 // Awk-related constants (public within crate)
 pub(crate) const SNAIL_AWK_LINE: &str = "$l";

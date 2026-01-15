@@ -260,6 +260,7 @@ pub(crate) fn lower_expr_with_exception(
             span,
         } => {
             if *op == BinaryOp::Pipeline {
+                // Pipeline: a | b lowers to b(a)
                 let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
                 let right_obj = match right.as_ref() {
                     Expr::Subprocess {
@@ -269,23 +270,12 @@ pub(crate) fn lower_expr_with_exception(
                     } => lower_subprocess_object(builder, kind, parts, s_span, exception_name)?,
                     _ => lower_expr_with_exception(builder, right, exception_name)?,
                 };
-                let attr = builder
-                    .call_node(
-                        "Attribute",
-                        vec![
-                            right_obj,
-                            "__pipeline__".to_string().into_py(builder.py()),
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)?;
                 let args = vec![left_expr];
                 builder
                     .call_node(
                         "Call",
                         vec![
-                            attr,
+                            right_obj,
                             PyList::new_bound(builder.py(), args).into_py(builder.py()),
                             PyList::empty_bound(builder.py()).into_py(builder.py()),
                         ],
@@ -470,32 +460,15 @@ pub(crate) fn lower_expr_with_exception(
             span,
         } => lower_regex_match(builder, value, pattern, span, exception_name),
         Expr::Subprocess { kind, parts, span } => {
+            // Standalone subprocess: $(cmd) lowers to SubprocessCapture(cmd)()
             let subprocess_obj =
                 lower_subprocess_object(builder, kind, parts, span, exception_name)?;
-            let attr = builder
-                .call_node(
-                    "Attribute",
-                    vec![
-                        subprocess_obj,
-                        "__pipeline__".to_string().into_py(builder.py()),
-                        builder.load_ctx().map_err(py_err_to_lower)?,
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)?;
-            let none_arg = builder
-                .call_node(
-                    "Constant",
-                    vec![builder.py().None().into_py(builder.py())],
-                    span,
-                )
-                .map_err(py_err_to_lower)?;
             builder
                 .call_node(
                     "Call",
                     vec![
-                        attr,
-                        PyList::new_bound(builder.py(), vec![none_arg]).into_py(builder.py()),
+                        subprocess_obj,
+                        PyList::empty_bound(builder.py()).into_py(builder.py()),
                         PyList::empty_bound(builder.py()).into_py(builder.py()),
                     ],
                     span,
@@ -503,10 +476,11 @@ pub(crate) fn lower_expr_with_exception(
                 .map_err(py_err_to_lower)
         }
         Expr::StructuredAccessor { query, span } => {
+            // $[query] lowers to __snail_jmespath_query(query) which returns a callable
             let escaped_query = escape_for_python_string(query);
             let func = name_expr(
                 builder,
-                SNAIL_STRUCTURED_ACCESSOR_CLASS,
+                SNAIL_JMESPATH_QUERY,
                 span,
                 builder.load_ctx().map_err(py_err_to_lower)?,
             )?;
