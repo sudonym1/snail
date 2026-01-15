@@ -3,7 +3,6 @@ from __future__ import annotations
 import json as _json
 import os as _os
 import sys as _sys
-from functools import partial
 
 from ..vendor import jmespath
 
@@ -36,22 +35,6 @@ def _parse_jsonl(content: str):
                 exc.pos,
             ) from exc
     return items
-
-
-def _join_apply(separator: str, input_data):
-    return separator.join(str(item) for item in input_data)
-
-
-def join(separator: str = "\n", input_data=None):
-    """Join iterable elements with separator.
-
-    Two calling patterns:
-    - join(' ', data) -> returns joined string directly
-    - join(' ') -> returns callable for pipeline use
-    """
-    if input_data is None:
-        return partial(_join_apply, separator)
-    return _join_apply(separator, input_data)
 
 
 def js(input_data=None):

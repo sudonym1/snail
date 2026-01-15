@@ -43,9 +43,6 @@ class Doubler {
 
 result = 21 | Doubler()  # yields 42
 
-# Built-in pipeline helpers
-joined = ["a", "b"] | join(" ")  # yields "a b"
-
 # Use placeholders to control where piped values land in calls
 greeting = "World" | greet("Hello ", _)  # greet("Hello ", "World")
 excited = "World" | greet(_, "!")        # greet("World", "!")
@@ -56,8 +53,7 @@ The pipeline operator has precedence between boolean operators and comparisons,
 allowing natural chaining of transformations.
 
 When piping into a call expression, the left-hand value is passed to the
-callable result (`data | join(" ")` invokes the function returned by
-`join(" ")`). If the call contains a single `_` placeholder, Snail substitutes
+callable result. If the call contains a single `_` placeholder, Snail substitutes
 the piped value at that position (including keyword arguments). Only one
 placeholder is allowed in a piped call. Outside of pipeline calls, `_` behaves
 as a normal identifier.

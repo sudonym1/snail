@@ -6,7 +6,6 @@ from .compact_try import compact_try
 from .regex import regex_compile, regex_search
 from .structured_accessor import (
     __snail_jmespath_query,
-    join,
     js,
 )
 from .subprocess import SubprocessCapture, SubprocessStatus
@@ -27,4 +26,3 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_jmespath_query"] = __snail_jmespath_query
     globals_dict["__snail_partial"] = __snail_partial
     globals_dict["js"] = js
-    globals_dict["join"] = join

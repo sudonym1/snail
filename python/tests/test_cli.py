@@ -51,12 +51,6 @@ def test_jsonl_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "['Ada', 'Lin']\n"
 
 
-def test_join_pipeline(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["print(['a', 'b'] | join(' '))"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == "a b\n"
-
-
 def test_pipeline_placeholder(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [
