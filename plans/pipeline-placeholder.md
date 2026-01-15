@@ -9,14 +9,16 @@ Add placeholder syntax to control where piped values are inserted in function ca
 "foo" | greet("Hi", _)         # greet("Hi", "foo")      - piped value as second arg
 "foo" | greet("Hi", suffix=_)  # greet("Hi", suffix="foo")
 "foo" | identity                # identity("foo")         - callable with single param
+"foo" | make_adder(1)            # make_adder(1)("foo")     - call then apply piped value
 ```
 
 ## Design Decisions
 
-1. **No placeholder in call**: Error - explicit placeholder required in call args
-2. **Multiple placeholders**: Error - only one `_` allowed per call (positional or kwarg)
+1. **No placeholder in call**: Treat RHS as callable. If RHS is a call expression, evaluate it first, then call the result with the piped value (e.g. `x | foo(1,2,3)` → `foo(1,2,3)(x)`).
+2. **Multiple placeholders**: Error - only one `_` allowed per call (positional, kwarg, or nested in arg expressions)
 3. **Placeholder scope**: `_` is only a placeholder inside pipeline RHS call arguments
 4. **`_` elsewhere**: `_` remains a normal identifier outside pipeline call args
+5. **Leading underscores**: Identifiers like `_tmp` remain valid; only a standalone `_` token is the placeholder
 
 ## Implementation Steps
 
@@ -83,21 +85,24 @@ if *op == BinaryOp::Pipeline {
     // Check if RHS is a call with placeholder(s)
     match right.as_ref() {
         Expr::Call { func, args, kwargs, span: call_span } => {
-            // Count placeholders in positional args and kwarg values
+            // Count placeholders recursively in positional args and kwarg values
             let placeholder_count = count_placeholders(args, kwargs);
 
             if placeholder_count > 1 {
-                return Err(LowerError::MultiplePlaceholders { span: offending_placeholder_span });
+                // Report the first placeholder occurrence
+                return Err(LowerError::MultiplePlaceholders { span: first_placeholder_span });
             }
 
             if placeholder_count == 1 {
-                // Substitute placeholder with piped value
+                // Use a runtime helper (e.g., __snail_partial) to inject the piped value
                 let (new_args, new_kwargs) = substitute_placeholder(args, kwargs, &left_expr);
-                // Lower the call with substituted args
-                lower_call(builder, func, &new_args, &new_kwargs, call_span, exception_name)
+                let partial_call = lower_partial_call(builder, func, &new_args, &new_kwargs, call_span)?;
+                // Call the resulting partial with no additional args
+                builder.call_node("Call", vec![partial_call, vec![], ...])
             } else {
-                // No placeholder - explicit placeholder required for call args
-                return Err(LowerError::MissingPipelinePlaceholder { span: *call_span });
+                // No placeholder - evaluate call, then call its result with piped value
+                let callee = lower_call(builder, func, args, kwargs, call_span, exception_name)?;
+                builder.call_node("Call", vec![callee, vec![left_expr], ...])
             }
         }
         Expr::Subprocess { ... } => {
@@ -112,7 +117,13 @@ if *op == BinaryOp::Pipeline {
 }
 ```
 
-### Step 5: Lower placeholder outside pipeline as identifier
+### Step 5: Add runtime helper for partial
+
+**File:** `python/snail/runtime.py`
+
+Add a helper (e.g., `__snail_partial`) that wraps `functools.partial` so lowering can emit a stable helper call.
+
+### Step 6: Lower placeholder outside pipeline as identifier
 
 **File:** `crates/snail-lower/src/expr.rs`
 
@@ -124,7 +135,7 @@ Expr::Placeholder { span } => {
 }
 ```
 
-### Step 6: Add new error types
+### Step 7: Add new error types
 
 **File:** `crates/snail-error/src/lib.rs`
 
@@ -134,11 +145,10 @@ Add new error variants:
 pub enum LowerError {
     // ... existing variants
     MultiplePlaceholders { span: SourceSpan },
-    MissingPipelinePlaceholder { span: SourceSpan },
 }
 ```
 
-### Step 7: Update examples and tests
+### Step 8: Update examples and tests
 
 **File:** `examples/all_syntax.snail`
 
@@ -156,11 +166,11 @@ assert result3 == "Hello World"
 ```
 
 **Tests to add:**
-- Parser tests for `_` as placeholder and `_` as identifier
-- Lowering tests for positional and kwarg placeholder substitution
-- Error test for multiple placeholders in a call
-- Error test for call missing placeholder
+- Parser tests for `_` as placeholder, `_` as identifier, and `_tmp` identifier
+- Lowering tests for positional/kwarg placeholder substitution (including nested expressions)
+- Lowering tests for call-without-placeholder behavior (`foo(1,2,3)(x)`)
 - Integration tests for placeholder usage and `_` identifier outside pipelines
+
 
 ## Files to Modify
 
@@ -173,6 +183,7 @@ assert result3 == "Hello World"
 | `crates/snail-parser/src/util.rs` | Handle Placeholder in exhaustive matches |
 | `crates/snail-parser/src/string.rs` | Handle Placeholder in exhaustive matches |
 | `crates/snail-lower/src/expr.rs` | Placeholder substitution in pipeline, lower `_` as identifier elsewhere |
+| `python/snail/runtime.py` | Add `__snail_partial` helper |
 | `crates/snail-error/src/lib.rs` | Add error type |
 | `examples/all_syntax.snail` | Add examples |
 
@@ -186,6 +197,6 @@ assert result3 == "Hello World"
 6. `uv run -- snail 'def id(x){x}; "x" | id'` - Returns "x" (single-arg call)
 7. `uv run -- snail 'def f(a,b){a+b}; "x" | f(a="y", b=_)'` - Returns "xy" (kwarg)
 8. `uv run -- snail '_ = 5; _ + 1'` - Returns 6 (identifier)
-9. `uv run -- snail '"x" | f("y")'` - Error: missing placeholder in call
+9. `uv run -- snail 'def mk(){return |x| x + "!"}; "x" | mk()'` - Returns `x!`
 10. `uv run -- snail '"x" | f(_, b=_)'` - Error: multiple placeholders
 11. `make test` - Full CI passes
