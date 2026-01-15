@@ -83,3 +83,36 @@ def test_awk_identifiers_require_awk_mode() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(["print($l)"])
     assert "--awk" in str(excinfo.value)
+
+
+# --- Tests for example files ---
+
+EXAMPLES_DIR = ROOT / "examples"
+
+
+def test_example_all_syntax(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that examples/all_syntax.snail runs successfully."""
+    result = main(["-f", str(EXAMPLES_DIR / "all_syntax.snail")])
+    assert result == 0, f"all_syntax.snail failed with exit code {result}"
+    captured = capsys.readouterr()
+    # Verify some expected output to ensure the script actually ran
+    assert "automatically printed" in captured.out
+
+
+def test_example_json(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that examples/json.snail runs successfully."""
+    result = main(["-P", "-f", str(EXAMPLES_DIR / "json.snail")])
+    assert result == 0, f"json.snail failed with exit code {result}"
+
+
+def test_example_awk(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that examples/awk.snail runs successfully."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO("demo line\nother line\n"))
+    result = main(["--awk", "-f", str(EXAMPLES_DIR / "awk.snail")])
+    assert result == 0, f"awk.snail failed with exit code {result}"
+    captured = capsys.readouterr()
+    # Verify expected output from the awk script
+    assert "demo begin" in captured.out
+    assert "demo end" in captured.out

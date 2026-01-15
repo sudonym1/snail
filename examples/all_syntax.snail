@@ -100,9 +100,9 @@ def greet(name, suffix) { return "Hello {name}{suffix}" }
 placeholder_first = "World" | greet(_, "!")
 assert placeholder_first == "Hello World!"
 placeholder_second = "World" | greet("Hello ", _)
-assert placeholder_second == "Hello World"
+assert placeholder_second == "Hello Hello World"
 placeholder_named = "World" | greet("Hello ", suffix=_)
-assert placeholder_named == "Hello World"
+assert placeholder_named == "Hello Hello World"
 first = data[0]
 mid = data[1:3]
 head = data[:2]
@@ -237,7 +237,7 @@ temp_value = 42
 del temp_value
 
 class Doubler {
-    def __pipeline__(self, x) {
+    def __call__(self, x) {
         return x * 2
     }
 }
