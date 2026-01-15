@@ -3,9 +3,7 @@ from __future__ import annotations
 from .compact_try import compact_try
 from .regex import regex_compile, regex_search
 from .structured_accessor import (
-    JsonObject,
-    JsonPipelineWrapper,
-    StructuredAccessor,
+    __snail_jmespath_query,
     join,
     js,
 )
@@ -20,8 +18,6 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_regex_compile"] = regex_compile
     globals_dict["__SnailSubprocessCapture"] = SubprocessCapture
     globals_dict["__SnailSubprocessStatus"] = SubprocessStatus
-    globals_dict["__SnailStructuredAccessor"] = StructuredAccessor
-    globals_dict["__SnailJsonObject"] = JsonObject
-    globals_dict["__SnailJsonPipelineWrapper"] = JsonPipelineWrapper
+    globals_dict["__snail_jmespath_query"] = __snail_jmespath_query
     globals_dict["js"] = js
     globals_dict["join"] = join

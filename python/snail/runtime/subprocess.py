@@ -7,7 +7,7 @@ class SubprocessCapture:
     def __init__(self, cmd: str) -> None:
         self.cmd = cmd
 
-    def __pipeline__(self, input_data):
+    def __call__(self, input_data=None):
         try:
             if input_data is None:
                 completed = subprocess.run(
@@ -42,7 +42,7 @@ class SubprocessStatus:
     def __init__(self, cmd: str) -> None:
         self.cmd = cmd
 
-    def __pipeline__(self, input_data):
+    def __call__(self, input_data=None):
         try:
             if input_data is None:
                 subprocess.run(self.cmd, shell=True, check=True)
