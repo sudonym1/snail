@@ -238,17 +238,17 @@ pipeline_result = 21 | Doubler()
 print("pipeline_result", pipeline_result)
 
 # Structured pipeline accessor with JSON
-# json() parses immediately and returns a queryable object
-json_obj = json(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}')
+# js() parses immediately and returns a queryable object
+json_obj = js(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}')
 first_name = json_obj | $[users[0].name]
 assert first_name == "Alice"
 
-# Can also inline the json() call
-names = json(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}') | $[users[*].name]
+# Can also inline the js() call
+names = js(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}') | $[users[*].name]
 assert names == ["Alice", "Bob"]
 
 # Simple extraction
-simple = json(r'{"foo": 12}') | $[foo]
+simple = js(r'{"foo": 12}') | $[foo]
 assert simple == 12
 
 print("structured pipeline", first_name, names, simple)

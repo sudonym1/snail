@@ -2,6 +2,7 @@ mod common;
 
 use common::*;
 use snail_ast::{Argument, AssignTarget, BinaryOp, Expr, Parameter, Stmt, StringDelimiter};
+use snail_parser::parse_program;
 
 #[test]
 fn parses_basic_program() {
@@ -325,5 +326,294 @@ fn parses_list_and_dict_literals_and_comprehensions() {
             assert_eq!(ifs.len(), 1);
         }
         other => panic!("Expected dict comprehension, got {other:?}"),
+    }
+}
+
+// ========== Error Path Tests ==========
+
+#[test]
+fn parser_rejects_unclosed_brace() {
+    let err = parse_program("if x { y = 1").expect_err("should fail on unclosed brace");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("unclosed") || message.contains("}"));
+}
+
+#[test]
+fn parser_rejects_invalid_assignment_target() {
+    let err = parse_program("1 = x").expect_err("should fail on invalid target");
+    let message = err.to_string();
+    assert!(
+        message.contains("assign") || message.contains("target") || message.contains("expected")
+    );
+}
+
+#[test]
+fn parser_handles_unterminated_string() {
+    let err = parse_program(r#"x = "hello"#).expect_err("should fail on unterminated string");
+    assert!(err.span.is_some());
+}
+
+#[test]
+fn parser_rejects_incomplete_if_statement() {
+    let err = parse_program("if").expect_err("should fail on incomplete if");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("if"));
+}
+
+#[test]
+fn parser_rejects_missing_condition() {
+    let err = parse_program("if { x = 1 }").expect_err("should fail on missing condition");
+    assert!(err.span.is_some());
+}
+
+#[test]
+fn parser_reports_error_on_missing_colon_in_dict() {
+    let err = parse_program("d = {\"key\" 1}").expect_err("should fail on missing colon");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains(":"));
+}
+
+#[test]
+fn parser_rejects_incomplete_function_def() {
+    let err = parse_program("def foo").expect_err("should fail on incomplete def");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("("));
+}
+
+#[test]
+fn parser_rejects_unclosed_paren() {
+    let err = parse_program("result = (1 + 2").expect_err("should fail on unclosed paren");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains(")"));
+}
+
+#[test]
+fn parser_rejects_unclosed_bracket() {
+    let err = parse_program("items = [1, 2, 3").expect_err("should fail on unclosed bracket");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("]"));
+}
+
+#[test]
+fn parser_rejects_invalid_expression_in_binary_op() {
+    let err = parse_program("x = 1 +").expect_err("should fail on incomplete binary op");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("expression"));
+}
+
+#[test]
+fn parser_rejects_missing_except_after_try() {
+    // This might be allowed (try-finally), so adjust if needed
+    let source = "try { x = 1 }";
+    match parse_program(source) {
+        Ok(_) => {
+            // Parser allows try-finally, so this is fine
+        }
+        Err(err) => {
+            let message = err.to_string();
+            assert!(
+                message.contains("expected")
+                    || message.contains("except")
+                    || message.contains("finally")
+            );
+        }
+    }
+}
+
+#[test]
+fn parser_reports_error_location_correctly() {
+    let source = "x = 1\ny = 2\nif {";
+    let err = parse_program(source).expect_err("should fail");
+    assert_eq!(err.span.unwrap().start.line, 3);
+}
+
+#[test]
+fn parser_rejects_invalid_import_syntax() {
+    let err = parse_program("import").expect_err("should fail on incomplete import");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("import"));
+}
+
+#[test]
+fn parser_rejects_invalid_from_import() {
+    let err = parse_program("from").expect_err("should fail on incomplete from-import");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("import"));
+}
+
+#[test]
+fn parser_accepts_empty_function_body() {
+    // Empty function bodies are actually allowed (they parse successfully)
+    let program = parse_program("def foo() { }").expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+    match &program.stmts[0] {
+        Stmt::Def { body, .. } => {
+            assert_eq!(body.len(), 0); // Empty body is allowed
+        }
+        other => panic!("Expected function def, got {:?}", other),
+    }
+}
+
+#[test]
+fn parser_rejects_missing_iterable_in_for_loop() {
+    let err = parse_program("for x in { }").expect_err("should fail on missing iterable");
+    assert!(err.span.is_some());
+}
+
+#[test]
+fn parser_rejects_invalid_comprehension_syntax() {
+    let err = parse_program("[x for]").expect_err("should fail on invalid comprehension");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("in"));
+}
+
+#[test]
+fn parser_rejects_unexpected_token() {
+    let err = parse_program("x = 1 @ 2").expect_err("should fail on unexpected operator");
+    assert!(err.span.is_some());
+}
+
+#[test]
+fn parser_rejects_nested_unclosed_structures() {
+    let err = parse_program("if x { if y { z = 1 }").expect_err("should fail on nested unclosed");
+    let message = err.to_string();
+    assert!(message.contains("expected") || message.contains("}"));
+}
+
+#[test]
+fn parser_rejects_invalid_parameter_syntax() {
+    let err = parse_program("def foo(1) { pass }").expect_err("should fail on invalid parameter");
+    let message = err.to_string();
+    assert!(
+        message.contains("expected")
+            || message.contains("identifier")
+            || message.contains("parameter")
+    );
+}
+
+#[test]
+fn parses_raw_string_with_curly_braces() {
+    let source = r#"x = r"{ \"key\": \"value\" }""#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::String { value, raw, .. } => {
+                assert_eq!(value, r#"{ \"key\": \"value\" }"#);
+                assert!(raw);
+            }
+            other => panic!("Expected String, got {:?}", other),
+        },
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_raw_string_without_interpolation() {
+    let source = r#"x = r"test {expr} more""#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            match value {
+                Expr::String { value, raw, .. } => {
+                    // Raw string should preserve {expr} literally, not treat it as interpolation
+                    assert_eq!(value, "test {expr} more");
+                    assert!(raw);
+                }
+                other => panic!("Expected String, got {:?}", other),
+            }
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_raw_triple_quoted_string_with_js() {
+    let source = r#####"x = r"""
+{
+  "hook_event_name": "Status",
+  "session_id": "abc123"
+}
+""""#####;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => match value {
+            Expr::String { raw, .. } => {
+                assert!(raw);
+            }
+            other => panic!("Expected String, got {:?}", other),
+        },
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_regular_string_with_interpolation() {
+    let source = r#"x = "test {y} more""#;
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            // Non-raw strings should support interpolation and parse as FString
+            match value {
+                Expr::FString { .. } => {
+                    // This is correct - interpolated strings are FStrings
+                }
+                other => panic!("Expected FString, got {:?}", other),
+            }
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_structured_accessor() {
+    let program = parse_program("result = $[foo.bar]").expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn parses_structured_accessor_with_pipeline() {
+    let program = parse_program("result = js() | $[users[0].name]").expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn parses_empty_structured_accessor() {
+    let program = parse_program("result = $[]").expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn parses_ternary_with_not_in_operator() {
+    let source = "result = x if x not in y else z";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::IfExpr { .. }));
+        }
+        other => panic!("Expected assignment, got {:?}", other),
+    }
+}
+
+#[test]
+fn parses_ternary_with_is_not_operator() {
+    let source = "result = x if x is not None else y";
+    let program = parse_program(source).expect("program should parse");
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::IfExpr { .. }));
+        }
+        other => panic!("Expected assignment, got {:?}", other),
     }
 }

@@ -32,17 +32,17 @@ class JsonObject:
 
 
 class JsonPipelineWrapper:
-    """Wrapper for json() to support pipeline operator without blocking stdin."""
+    """Wrapper for js() to support pipeline operator without blocking stdin."""
 
     def __pipeline__(self, input_data):
-        return json(input_data)
+        return js(input_data)
 
     def __structured__(self, query: str):
-        data = json(_sys.stdin)
+        data = js(_sys.stdin)
         return data.__structured__(query)
 
     def __repr__(self) -> str:
-        data = json(_sys.stdin)
+        data = js(_sys.stdin)
         return repr(data)
 
 
@@ -79,7 +79,7 @@ def join(separator: str = "\n", input_data=None):
     return separator.join(str(item) for item in input_data)
 
 
-def json(input_data=None):
+def js(input_data=None):
     """Parse JSON from various input sources."""
     if input_data is None:
         return JsonPipelineWrapper()
@@ -109,7 +109,7 @@ def json(input_data=None):
         data = input_data
     else:
         raise TypeError(
-            f"json() input must be JSON-compatible, got {type(input_data).__name__}"
+            f"js() input must be JSON-compatible, got {type(input_data).__name__}"
         )
 
     return JsonObject(data)
