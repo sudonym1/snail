@@ -107,6 +107,10 @@ doubled = 21 | Doubler()  # yields 42
 
 # Join list items with a separator
 joined = ["a", "b"] | join(" ")  # yields "a b"
+
+# Use placeholders to control where piped values land in calls
+greeting = "World" | greet("Hello ", _)  # greet("Hello ", "World")
+excited = "World" | greet(_, "!")        # greet("World", "!")
 ```
 
 ### JSON Queries with JMESPath
