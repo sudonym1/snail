@@ -96,6 +96,13 @@ piped = "test" | $(cat)
 assert piped == "test"
 chained = "a\nb" | $(grep a) | $(cat)
 assert chained == "a"
+def greet(name, suffix) { return "Hello {name}{suffix}" }
+placeholder_first = "World" | greet(_, "!")
+assert placeholder_first == "Hello World!"
+placeholder_second = "World" | greet("Hello ", _)
+assert placeholder_second == "Hello World"
+placeholder_named = "World" | greet("Hello ", suffix=_)
+assert placeholder_named == "Hello World"
 first = data[0]
 mid = data[1:3]
 head = data[:2]

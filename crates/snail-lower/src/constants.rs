@@ -6,6 +6,7 @@ pub const SNAIL_SUBPROCESS_STATUS_CLASS: &str = "__SnailSubprocessStatus";
 pub const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";
 pub const SNAIL_REGEX_COMPILE: &str = "__snail_regex_compile";
 pub const SNAIL_JMESPATH_QUERY: &str = "__snail_jmespath_query";
+pub const SNAIL_PARTIAL_HELPER: &str = "__snail_partial";
 
 // Awk-related constants (public within crate)
 pub(crate) const SNAIL_AWK_LINE: &str = "$l";

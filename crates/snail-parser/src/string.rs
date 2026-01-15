@@ -313,6 +313,7 @@ pub fn join_fstring_text(parts: Vec<FStringPart>) -> String {
 pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
     match expr {
         Expr::Name { span, .. }
+        | Expr::Placeholder { span, .. }
         | Expr::Number { span, .. }
         | Expr::String { span, .. }
         | Expr::Bool { span, .. }

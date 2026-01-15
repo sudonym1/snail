@@ -47,6 +47,9 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
         }),
+        Rule::placeholder => Ok(Expr::Placeholder {
+            span: span_from_pair(&pair, source),
+        }),
         Rule::identifier => Ok(Expr::Name {
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
@@ -571,6 +574,9 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         }
         Rule::injected_var => Ok(Expr::Name {
             name: inner_pair.as_str().to_string(),
+            span: span_from_pair(&inner_pair, source),
+        }),
+        Rule::placeholder => Ok(Expr::Placeholder {
             span: span_from_pair(&inner_pair, source),
         }),
         Rule::identifier => Ok(Expr::Name {

@@ -278,6 +278,7 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
                 return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
             }
         }
+        Expr::Placeholder { .. } => {}
         Expr::FieldIndex { span, .. } => {
             return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
         }

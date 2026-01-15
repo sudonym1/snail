@@ -156,6 +156,9 @@ pub enum Expr {
         name: String,
         span: SourceSpan,
     },
+    Placeholder {
+        span: SourceSpan,
+    },
     Number {
         value: String,
         span: SourceSpan,

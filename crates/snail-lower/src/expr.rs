@@ -187,6 +187,12 @@ pub(crate) fn lower_expr_with_exception(
                 builder.load_ctx().map_err(py_err_to_lower)?,
             )
         }
+        Expr::Placeholder { span } => name_expr(
+            builder,
+            "_",
+            span,
+            builder.load_ctx().map_err(py_err_to_lower)?,
+        ),
         Expr::FieldIndex { index, span } => {
             if index == "0" {
                 return name_expr(
@@ -260,28 +266,114 @@ pub(crate) fn lower_expr_with_exception(
             span,
         } => {
             if *op == BinaryOp::Pipeline {
-                // Pipeline: a | b lowers to b(a)
-                let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
-                let right_obj = match right.as_ref() {
+                // Pipeline: a | b lowers to b(a) with placeholder support for call args.
+                match right.as_ref() {
+                    Expr::Call {
+                        func,
+                        args,
+                        span: call_span,
+                    } => {
+                        let placeholder_info = placeholder_info_in_arguments(args);
+                        if placeholder_info.count > 1 {
+                            let span = placeholder_info
+                                .first_span
+                                .unwrap_or_else(|| call_span.clone());
+                            return Err(LowerError::multiple_placeholders(span));
+                        }
+                        if placeholder_info.count == 1 {
+                            let replaced_args = substitute_placeholder_in_arguments(args, left);
+                            let func_expr =
+                                lower_expr_with_exception(builder, func, exception_name)?;
+                            let (args, keywords) =
+                                lower_call_arguments(builder, &replaced_args, exception_name)?;
+                            let mut helper_args = Vec::with_capacity(args.len() + 1);
+                            helper_args.push(func_expr);
+                            helper_args.extend(args);
+                            let helper = name_expr(
+                                builder,
+                                SNAIL_PARTIAL_HELPER,
+                                call_span,
+                                builder.load_ctx().map_err(py_err_to_lower)?,
+                            )?;
+                            let partial_call = builder
+                                .call_node(
+                                    "Call",
+                                    vec![
+                                        helper,
+                                        PyList::new_bound(builder.py(), helper_args)
+                                            .into_py(builder.py()),
+                                        PyList::new_bound(builder.py(), keywords)
+                                            .into_py(builder.py()),
+                                    ],
+                                    call_span,
+                                )
+                                .map_err(py_err_to_lower)?;
+                            return builder
+                                .call_node(
+                                    "Call",
+                                    vec![
+                                        partial_call,
+                                        PyList::empty_bound(builder.py()).into_py(builder.py()),
+                                        PyList::empty_bound(builder.py()).into_py(builder.py()),
+                                    ],
+                                    span,
+                                )
+                                .map_err(py_err_to_lower);
+                        }
+
+                        let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
+                        let right_obj = lower_expr_with_exception(builder, right, exception_name)?;
+                        let args = vec![left_expr];
+                        builder
+                            .call_node(
+                                "Call",
+                                vec![
+                                    right_obj,
+                                    PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                                    PyList::empty_bound(builder.py()).into_py(builder.py()),
+                                ],
+                                span,
+                            )
+                            .map_err(py_err_to_lower)
+                    }
                     Expr::Subprocess {
                         kind,
                         parts,
                         span: s_span,
-                    } => lower_subprocess_object(builder, kind, parts, s_span, exception_name)?,
-                    _ => lower_expr_with_exception(builder, right, exception_name)?,
-                };
-                let args = vec![left_expr];
-                builder
-                    .call_node(
-                        "Call",
-                        vec![
-                            right_obj,
-                            PyList::new_bound(builder.py(), args).into_py(builder.py()),
-                            PyList::empty_bound(builder.py()).into_py(builder.py()),
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)
+                    } => {
+                        let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
+                        let right_obj =
+                            lower_subprocess_object(builder, kind, parts, s_span, exception_name)?;
+                        let args = vec![left_expr];
+                        builder
+                            .call_node(
+                                "Call",
+                                vec![
+                                    right_obj,
+                                    PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                                    PyList::empty_bound(builder.py()).into_py(builder.py()),
+                                ],
+                                span,
+                            )
+                            .map_err(py_err_to_lower)
+                    }
+                    _ => {
+                        let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
+                        let right_obj = lower_expr_with_exception(builder, right, exception_name)?;
+                        let args = vec![left_expr];
+                        builder
+                            .call_node(
+                                "Call",
+                                vec![
+                                    right_obj,
+                                    PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                                    PyList::empty_bound(builder.py()).into_py(builder.py()),
+                                ],
+                                span,
+                            )
+                            .map_err(py_err_to_lower)
+                    }
+                }
             } else if *op == BinaryOp::Or || *op == BinaryOp::And {
                 let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
                 let right_expr = lower_expr_with_exception(builder, right, exception_name)?;
@@ -836,6 +928,408 @@ fn lower_call_arguments(
         }
     }
     Ok((positional, keywords))
+}
+
+#[derive(Default)]
+struct PlaceholderInfo {
+    count: usize,
+    first_span: Option<SourceSpan>,
+}
+
+fn placeholder_info_in_arguments(args: &[Argument]) -> PlaceholderInfo {
+    let mut info = PlaceholderInfo::default();
+    for arg in args {
+        match arg {
+            Argument::Positional { value, .. }
+            | Argument::Keyword { value, .. }
+            | Argument::Star { value, .. }
+            | Argument::KwStar { value, .. } => count_placeholders(value, &mut info),
+        }
+    }
+    info
+}
+
+fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
+    match expr {
+        Expr::Placeholder { span } => {
+            if info.first_span.is_none() {
+                info.first_span = Some(span.clone());
+            }
+            info.count += 1;
+        }
+        Expr::Name { .. }
+        | Expr::Number { .. }
+        | Expr::String { .. }
+        | Expr::Bool { .. }
+        | Expr::None { .. }
+        | Expr::StructuredAccessor { .. }
+        | Expr::FieldIndex { .. } => {}
+        Expr::FString { parts, .. } => {
+            for part in parts {
+                if let FStringPart::Expr(expr) = part {
+                    count_placeholders(expr, info);
+                }
+            }
+        }
+        Expr::Unary { expr, .. } => count_placeholders(expr, info),
+        Expr::Binary { left, right, .. } => {
+            count_placeholders(left, info);
+            count_placeholders(right, info);
+        }
+        Expr::Compare {
+            left, comparators, ..
+        } => {
+            count_placeholders(left, info);
+            for expr in comparators {
+                count_placeholders(expr, info);
+            }
+        }
+        Expr::IfExpr {
+            test, body, orelse, ..
+        } => {
+            count_placeholders(test, info);
+            count_placeholders(body, info);
+            count_placeholders(orelse, info);
+        }
+        Expr::TryExpr { expr, fallback, .. } => {
+            count_placeholders(expr, info);
+            if let Some(fallback) = fallback {
+                count_placeholders(fallback, info);
+            }
+        }
+        Expr::Compound { expressions, .. } => {
+            for expr in expressions {
+                count_placeholders(expr, info);
+            }
+        }
+        Expr::Regex { pattern, .. } => count_placeholders_in_regex(pattern, info),
+        Expr::RegexMatch { value, pattern, .. } => {
+            count_placeholders(value, info);
+            count_placeholders_in_regex(pattern, info);
+        }
+        Expr::Subprocess { parts, .. } => {
+            for part in parts {
+                if let SubprocessPart::Expr(expr) = part {
+                    count_placeholders(expr, info);
+                }
+            }
+        }
+        Expr::Call { func, args, .. } => {
+            count_placeholders(func, info);
+            for arg in args {
+                match arg {
+                    Argument::Positional { value, .. }
+                    | Argument::Keyword { value, .. }
+                    | Argument::Star { value, .. }
+                    | Argument::KwStar { value, .. } => count_placeholders(value, info),
+                }
+            }
+        }
+        Expr::Attribute { value, .. } => count_placeholders(value, info),
+        Expr::Index { value, index, .. } => {
+            count_placeholders(value, info);
+            count_placeholders(index, info);
+        }
+        Expr::Paren { expr, .. } => count_placeholders(expr, info),
+        Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
+            for expr in elements {
+                count_placeholders(expr, info);
+            }
+        }
+        Expr::Dict { entries, .. } => {
+            for (key, value) in entries {
+                count_placeholders(key, info);
+                count_placeholders(value, info);
+            }
+        }
+        Expr::Slice { start, end, .. } => {
+            if let Some(start) = start {
+                count_placeholders(start, info);
+            }
+            if let Some(end) = end {
+                count_placeholders(end, info);
+            }
+        }
+        Expr::ListComp {
+            element, iter, ifs, ..
+        } => {
+            count_placeholders(element, info);
+            count_placeholders(iter, info);
+            for expr in ifs {
+                count_placeholders(expr, info);
+            }
+        }
+        Expr::DictComp {
+            key,
+            value,
+            iter,
+            ifs,
+            ..
+        } => {
+            count_placeholders(key, info);
+            count_placeholders(value, info);
+            count_placeholders(iter, info);
+            for expr in ifs {
+                count_placeholders(expr, info);
+            }
+        }
+    }
+}
+
+fn count_placeholders_in_regex(pattern: &RegexPattern, info: &mut PlaceholderInfo) {
+    if let RegexPattern::Interpolated(parts) = pattern {
+        for part in parts {
+            if let FStringPart::Expr(expr) = part {
+                count_placeholders(expr, info);
+            }
+        }
+    }
+}
+
+fn substitute_placeholder_in_arguments(args: &[Argument], replacement: &Expr) -> Vec<Argument> {
+    args.iter()
+        .map(|arg| match arg {
+            Argument::Positional { value, span } => Argument::Positional {
+                value: substitute_placeholder(value, replacement),
+                span: span.clone(),
+            },
+            Argument::Keyword { name, value, span } => Argument::Keyword {
+                name: name.clone(),
+                value: substitute_placeholder(value, replacement),
+                span: span.clone(),
+            },
+            Argument::Star { value, span } => Argument::Star {
+                value: substitute_placeholder(value, replacement),
+                span: span.clone(),
+            },
+            Argument::KwStar { value, span } => Argument::KwStar {
+                value: substitute_placeholder(value, replacement),
+                span: span.clone(),
+            },
+        })
+        .collect()
+}
+
+fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
+    match expr {
+        Expr::Placeholder { .. } => replacement.clone(),
+        Expr::Name { .. }
+        | Expr::Number { .. }
+        | Expr::String { .. }
+        | Expr::Bool { .. }
+        | Expr::None { .. }
+        | Expr::StructuredAccessor { .. }
+        | Expr::FieldIndex { .. } => expr.clone(),
+        Expr::FString { parts, span } => Expr::FString {
+            parts: parts
+                .iter()
+                .map(|part| match part {
+                    FStringPart::Text(text) => FStringPart::Text(text.clone()),
+                    FStringPart::Expr(expr) => {
+                        FStringPart::Expr(Box::new(substitute_placeholder(expr, replacement)))
+                    }
+                })
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::Unary { op, expr, span } => Expr::Unary {
+            op: *op,
+            expr: Box::new(substitute_placeholder(expr, replacement)),
+            span: span.clone(),
+        },
+        Expr::Binary {
+            left,
+            op,
+            right,
+            span,
+        } => Expr::Binary {
+            left: Box::new(substitute_placeholder(left, replacement)),
+            op: *op,
+            right: Box::new(substitute_placeholder(right, replacement)),
+            span: span.clone(),
+        },
+        Expr::Compare {
+            left,
+            ops,
+            comparators,
+            span,
+        } => Expr::Compare {
+            left: Box::new(substitute_placeholder(left, replacement)),
+            ops: ops.clone(),
+            comparators: comparators
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::IfExpr {
+            test,
+            body,
+            orelse,
+            span,
+        } => Expr::IfExpr {
+            test: Box::new(substitute_placeholder(test, replacement)),
+            body: Box::new(substitute_placeholder(body, replacement)),
+            orelse: Box::new(substitute_placeholder(orelse, replacement)),
+            span: span.clone(),
+        },
+        Expr::TryExpr {
+            expr,
+            fallback,
+            span,
+        } => Expr::TryExpr {
+            expr: Box::new(substitute_placeholder(expr, replacement)),
+            fallback: fallback
+                .as_ref()
+                .map(|expr| Box::new(substitute_placeholder(expr, replacement))),
+            span: span.clone(),
+        },
+        Expr::Compound { expressions, span } => Expr::Compound {
+            expressions: expressions
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::Regex { pattern, span } => Expr::Regex {
+            pattern: substitute_placeholder_in_regex(pattern, replacement),
+            span: span.clone(),
+        },
+        Expr::RegexMatch {
+            value,
+            pattern,
+            span,
+        } => Expr::RegexMatch {
+            value: Box::new(substitute_placeholder(value, replacement)),
+            pattern: substitute_placeholder_in_regex(pattern, replacement),
+            span: span.clone(),
+        },
+        Expr::Subprocess { kind, parts, span } => Expr::Subprocess {
+            kind: *kind,
+            parts: parts
+                .iter()
+                .map(|part| match part {
+                    SubprocessPart::Text(text) => SubprocessPart::Text(text.clone()),
+                    SubprocessPart::Expr(expr) => {
+                        SubprocessPart::Expr(Box::new(substitute_placeholder(expr, replacement)))
+                    }
+                })
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::Call { func, args, span } => Expr::Call {
+            func: Box::new(substitute_placeholder(func, replacement)),
+            args: substitute_placeholder_in_arguments(args, replacement),
+            span: span.clone(),
+        },
+        Expr::Attribute { value, attr, span } => Expr::Attribute {
+            value: Box::new(substitute_placeholder(value, replacement)),
+            attr: attr.clone(),
+            span: span.clone(),
+        },
+        Expr::Index { value, index, span } => Expr::Index {
+            value: Box::new(substitute_placeholder(value, replacement)),
+            index: Box::new(substitute_placeholder(index, replacement)),
+            span: span.clone(),
+        },
+        Expr::Paren { expr, span } => Expr::Paren {
+            expr: Box::new(substitute_placeholder(expr, replacement)),
+            span: span.clone(),
+        },
+        Expr::List { elements, span } => Expr::List {
+            elements: elements
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::Tuple { elements, span } => Expr::Tuple {
+            elements: elements
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::Dict { entries, span } => Expr::Dict {
+            entries: entries
+                .iter()
+                .map(|(key, value)| {
+                    (
+                        substitute_placeholder(key, replacement),
+                        substitute_placeholder(value, replacement),
+                    )
+                })
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::Set { elements, span } => Expr::Set {
+            elements: elements
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::Slice { start, end, span } => Expr::Slice {
+            start: start
+                .as_ref()
+                .map(|expr| Box::new(substitute_placeholder(expr, replacement))),
+            end: end
+                .as_ref()
+                .map(|expr| Box::new(substitute_placeholder(expr, replacement))),
+            span: span.clone(),
+        },
+        Expr::ListComp {
+            element,
+            target,
+            iter,
+            ifs,
+            span,
+        } => Expr::ListComp {
+            element: Box::new(substitute_placeholder(element, replacement)),
+            target: target.clone(),
+            iter: Box::new(substitute_placeholder(iter, replacement)),
+            ifs: ifs
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::DictComp {
+            key,
+            value,
+            target,
+            iter,
+            ifs,
+            span,
+        } => Expr::DictComp {
+            key: Box::new(substitute_placeholder(key, replacement)),
+            value: Box::new(substitute_placeholder(value, replacement)),
+            target: target.clone(),
+            iter: Box::new(substitute_placeholder(iter, replacement)),
+            ifs: ifs
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+    }
+}
+
+fn substitute_placeholder_in_regex(pattern: &RegexPattern, replacement: &Expr) -> RegexPattern {
+    match pattern {
+        RegexPattern::Literal(text) => RegexPattern::Literal(text.clone()),
+        RegexPattern::Interpolated(parts) => RegexPattern::Interpolated(
+            parts
+                .iter()
+                .map(|part| match part {
+                    FStringPart::Text(text) => FStringPart::Text(text.clone()),
+                    FStringPart::Expr(expr) => {
+                        FStringPart::Expr(Box::new(substitute_placeholder(expr, replacement)))
+                    }
+                })
+                .collect(),
+        ),
+    }
 }
 
 fn empty_lambda_args(builder: &AstBuilder<'_>) -> Result<PyObject, LowerError> {
