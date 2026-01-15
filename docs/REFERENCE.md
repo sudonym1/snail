@@ -30,13 +30,13 @@ from math import sqrt as root
   `data[1:3]`, `data[:2]`, and `data[2:]`.
 
 ## Pipeline operator
-Snail repurposes the `|` operator for generic data pipelining through the
-`__pipeline__` dunder method. Any object can define how it consumes values from
-the left-hand side:
+Snail repurposes the `|` operator for generic data pipelining through
+pipeline-aware callables. Any object can define how it consumes values from the
+left-hand side by implementing `__call__`:
 
 ```snail
 class Doubler {
-    def __pipeline__(self, x) {
+    def __call__(self, x) {
         return x * 2
     }
 }
@@ -49,10 +49,18 @@ joined = ["a", "b"] | join(" ")  # yields "a b"
 # Use placeholders to control where piped values land in calls
 greeting = "World" | greet("Hello ", _)  # greet("Hello ", "World")
 excited = "World" | greet(_, "!")        # greet("World", "!")
+formal = "World" | greet("Hello ", suffix=_)  # greet("Hello ", "World")
 ```
 
 The pipeline operator has precedence between boolean operators and comparisons,
 allowing natural chaining of transformations.
+
+When piping into a call expression, the left-hand value is passed to the
+callable result (`data | join(" ")` invokes the function returned by
+`join(" ")`). If the call contains a single `_` placeholder, Snail substitutes
+the piped value at that position (including keyword arguments). Only one
+placeholder is allowed in a piped call. Outside of pipeline calls, `_` behaves
+as a normal identifier.
 
 ## Functions, parameters, and calls
 Define functions with braces instead of indentation:
@@ -174,8 +182,7 @@ status_fail = @(false)?           # yields return code because of __fallback__
 ```
 
 ### Subprocess pipelines
-Subprocess expressions implement `__pipeline__`, enabling data to be piped to
-their stdin:
+Subprocess expressions are callables, enabling data to be piped to their stdin:
 ```snail
 # Pipe string to command
 result = "hello" | $(cat)         # "hello"
@@ -210,7 +217,7 @@ result = js(r'{"foo": 12}') | $[foo]    # yields 12
 
 The `js()` function parses JSON strings (including JSONL) and returns a
 queryable object. For JSONL input, the result is a list of parsed objects. The
-`$[query]` accessor implements `__pipeline__` to apply JMESPath queries to the
+`$[query]` accessor produces a callable that applies the JMESPath query to the
 input data.
 
 ```snail

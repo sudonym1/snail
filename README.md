@@ -90,7 +90,7 @@ Built-in variables: `$l` (line), `$f` (fields), `$n` (line number), `$fn` (per-f
 
 ### Pipeline Operator
 
-The `|` operator enables data pipelining through objects that implement `__pipeline__`:
+The `|` operator enables data pipelining through pipeline-aware callables:
 
 ```snail
 # Pipe data to subprocess stdin
@@ -101,7 +101,7 @@ output = "foo\nbar" | $(grep foo) | $(wc -l)
 
 # Custom pipeline handlers
 class Doubler {
-    def __pipeline__(self, x) { return x * 2 }
+    def __call__(self, x) { return x * 2 }
 }
 doubled = 21 | Doubler()  # yields 42
 
@@ -111,7 +111,15 @@ joined = ["a", "b"] | join(" ")  # yields "a b"
 # Use placeholders to control where piped values land in calls
 greeting = "World" | greet("Hello ", _)  # greet("Hello ", "World")
 excited = "World" | greet(_, "!")        # greet("World", "!")
+formal = "World" | greet("Hello ", suffix=_)  # greet("Hello ", "World")
 ```
+
+When a pipeline targets a call expression, the left-hand value is passed to the
+resulting callable (`data | join(" ")` calls the function returned by
+`join(" ")`). If the call includes a single `_` placeholder, Snail substitutes
+the piped value at that position (including keyword arguments). Only one
+placeholder is allowed in a piped call. Outside of pipeline calls, `_` remains a
+normal identifier.
 
 ### JSON Queries with JMESPath
 
