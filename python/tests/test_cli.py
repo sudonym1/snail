@@ -57,6 +57,25 @@ def test_join_pipeline(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "a b\n"
 
 
+def test_pipeline_placeholder(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def greet(name, suffix) { return name + suffix }",
+            "print('Hi' | greet(_, '!'))",
+            "print('Hi' | greet('Hello ', _))",
+        ]
+    )
+    assert main([script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "Hi!\nHello Hi\n"
+
+
+def test_placeholder_as_identifier(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["_ = 5\nprint(_ + 1)"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "6\n"
+
+
 def test_awk_mode(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

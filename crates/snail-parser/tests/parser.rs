@@ -164,6 +164,21 @@ fn parses_def_and_call() {
 }
 
 #[test]
+fn parses_placeholder_identifier() {
+    let source = "value = _\nnext = _tmp\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+
+    let (targets, value) = expect_assign(&program.stmts[0]);
+    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "value"));
+    assert!(matches!(value, Expr::Placeholder { .. }));
+
+    let (targets, value) = expect_assign(&program.stmts[1]);
+    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "next"));
+    expect_name(value, "_tmp");
+}
+
+#[test]
 fn parses_compound_expression() {
     let source = "result = (\n  first;\n  second;\n  third\n)";
     let program = parse_ok(source);

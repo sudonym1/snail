@@ -138,6 +138,7 @@ pub fn parse_error_from_pest_with_offset(
 pub fn expr_span(expr: &snail_ast::Expr) -> &SourceSpan {
     match expr {
         snail_ast::Expr::Name { span, .. }
+        | snail_ast::Expr::Placeholder { span, .. }
         | snail_ast::Expr::Number { span, .. }
         | snail_ast::Expr::String { span, .. }
         | snail_ast::Expr::FString { span, .. }

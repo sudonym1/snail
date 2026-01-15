@@ -42,21 +42,29 @@ impl fmt::Display for ParseError {
 impl Error for ParseError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LowerError {
-    pub message: String,
+pub enum LowerError {
+    Message(String),
+    MultiplePlaceholders { span: SourceSpan },
 }
 
 impl LowerError {
     pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
+        Self::Message(message.into())
+    }
+
+    pub fn multiple_placeholders(span: SourceSpan) -> Self {
+        Self::MultiplePlaceholders { span }
     }
 }
 
 impl fmt::Display for LowerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
+        match self {
+            LowerError::Message(message) => write!(f, "{message}"),
+            LowerError::MultiplePlaceholders { .. } => {
+                write!(f, "pipeline calls may include at most one placeholder")
+            }
+        }
     }
 }
 
@@ -101,7 +109,7 @@ impl From<LowerError> for SnailError {
 pub fn format_snail_error(err: &SnailError, filename: &str) -> String {
     match err {
         SnailError::Parse(parse) => format_parse_error(parse, filename),
-        SnailError::Lower(lower) => format!("error: {}", lower.message),
+        SnailError::Lower(lower) => format!("error: {lower}"),
     }
 }
 

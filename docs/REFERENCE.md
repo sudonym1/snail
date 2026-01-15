@@ -45,6 +45,10 @@ result = 21 | Doubler()  # yields 42
 
 # Built-in pipeline helpers
 joined = ["a", "b"] | join(" ")  # yields "a b"
+
+# Use placeholders to control where piped values land in calls
+greeting = "World" | greet("Hello ", _)  # greet("Hello ", "World")
+excited = "World" | greet(_, "!")        # greet("World", "!")
 ```
 
 The pipeline operator has precedence between boolean operators and comparisons,

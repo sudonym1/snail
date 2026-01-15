@@ -152,6 +152,7 @@ atom = _{
   | exception_var
   | field_index_var
   | injected_var
+  | placeholder
   | identifier
   | list_comp
   | list_literal
@@ -220,6 +221,9 @@ escaped_char = { "\\" ~ ANY }
 double_string_char = { (!("\\" | "\"" | "{") ~ ANY) }
 single_string_char = { (!("\\" | "'" | "{") ~ ANY) }
 regex = @{ "/" ~ ( "\\/" | !"/" ~ ANY )* ~ "/" }
+
+// Placeholder for pipeline insertion
+placeholder = { "_" ~ !ident_continue }
 
 // Identifiers: must not be keywords
 identifier = @{ !keyword ~ ident_start ~ ident_continue* }
