@@ -10,8 +10,9 @@ awk_end = { "END" ~ block }
 awk_rule = { block | awk_pattern ~ block? }
 awk_pattern = { expr }
 
-// Statements: separated by semicolons or newlines
-stmt_list = { stmt ~ (stmt_sep ~ stmt)* ~ stmt_sep? }
+// Statements: separated by semicolons or newlines (compound statements can be adjacent)
+stmt_list = { stmt_nonlast* ~ stmt }
+stmt_nonlast = _{ simple_stmt ~ stmt_sep | compound_stmt ~ (stmt_sep | &stmt) }
 stmt_sep = _{ ";" ~ NEWLINE* | NEWLINE+ }
 
 stmt = _{ compound_stmt | simple_stmt }

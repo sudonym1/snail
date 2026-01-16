@@ -69,6 +69,32 @@ fn parses_semicolon_before_newline() {
 }
 
 #[test]
+fn parses_compound_stmt_without_separator() {
+    let source = "if foo { bar; } baz";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+
+    match &program.stmts[0] {
+        Stmt::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
+        } => {
+            expect_name(cond, "foo");
+            assert_eq!(body.len(), 1);
+            expect_name(expect_expr_stmt(&body[0]), "bar");
+            assert!(elifs.is_empty());
+            assert!(else_body.is_none());
+        }
+        other => panic!("Expected if statement, got {other:?}"),
+    }
+
+    expect_name(expect_expr_stmt(&program.stmts[1]), "baz");
+}
+
+#[test]
 fn parses_if_elif_else_chain() {
     let source = "if x { y = 1 }\nelif y { y = 2 }\nelse { y = 3 }\n";
     let program = parse_ok(source);
