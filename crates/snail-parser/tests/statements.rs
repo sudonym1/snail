@@ -183,10 +183,10 @@ fn parses_assert_and_del() {
 }
 
 #[test]
-fn parses_tuples_sets_and_slices() {
-    let source = "items = [1, 2, 3, 4]\npair = (1, 2)\nsingle = (1,)\nempty = ()\nflags = {True, False}\nmid = items[1:3]\nhead = items[:2]\ntail = items[2:]\n";
+fn parses_tuples_and_slices() {
+    let source = "items = [1, 2, 3, 4]\npair = (1, 2)\nsingle = (1,)\nempty = ()\nmid = items[1:3]\nhead = items[:2]\ntail = items[2:]\n";
     let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 8);
+    assert_eq!(program.stmts.len(), 7);
 
     let (_, value) = expect_assign(&program.stmts[0]);
     match value {
@@ -214,18 +214,6 @@ fn parses_tuples_sets_and_slices() {
 
     let (_, value) = expect_assign(&program.stmts[4]);
     match value {
-        Expr::Set { elements, .. } => {
-            assert_eq!(elements.len(), 2);
-            match &elements[0] {
-                Expr::Bool { value, .. } => assert!(*value),
-                other => panic!("Expected True, got {other:?}"),
-            }
-        }
-        other => panic!("Expected set, got {other:?}"),
-    }
-
-    let (_, value) = expect_assign(&program.stmts[5]);
-    match value {
         Expr::Index { value, index, .. } => {
             expect_name(value.as_ref(), "items");
             match index.as_ref() {
@@ -239,7 +227,7 @@ fn parses_tuples_sets_and_slices() {
         other => panic!("Expected index, got {other:?}"),
     }
 
-    let (_, value) = expect_assign(&program.stmts[6]);
+    let (_, value) = expect_assign(&program.stmts[5]);
     match value {
         Expr::Index { index, .. } => match index.as_ref() {
             Expr::Slice { start, end, .. } => {
@@ -251,7 +239,7 @@ fn parses_tuples_sets_and_slices() {
         other => panic!("Expected index, got {other:?}"),
     }
 
-    let (_, value) = expect_assign(&program.stmts[7]);
+    let (_, value) = expect_assign(&program.stmts[6]);
     match value {
         Expr::Index { index, .. } => match index.as_ref() {
             Expr::Slice { start, end, .. } => {

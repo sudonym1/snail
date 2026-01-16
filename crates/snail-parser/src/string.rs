@@ -324,7 +324,6 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
         | Expr::List { span, .. }
         | Expr::Tuple { span, .. }
         | Expr::Dict { span, .. }
-        | Expr::Set { span, .. }
         | Expr::Slice { span, .. } => {
             *span = shift_span(span, offset, source);
         }

@@ -355,7 +355,7 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
         Expr::Paren { expr, .. } => {
             validate_expr(expr, source)?;
         }
-        Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
+        Expr::List { elements, .. } | Expr::Tuple { elements, .. } => {
             for expr in elements {
                 validate_expr(expr, source)?;
             }

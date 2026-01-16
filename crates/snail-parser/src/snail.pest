@@ -162,7 +162,6 @@ atom = _{
   | list_literal
   | dict_comp
   | dict_literal
-  | set_literal
   | tuple_literal
   | compound_expr
   | "(" ~ expr ~ ")"
@@ -192,7 +191,6 @@ list_comp = { "[" ~ expr ~ comp_for ~ "]" }
 list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 dict_comp = { "{" ~ expr ~ ":" ~ expr ~ comp_for ~ "}" }
 dict_literal = { "{" ~ (dict_entry ~ ("," ~ dict_entry)*)? ~ "}" }
-set_literal = { "{" ~ expr ~ ("," ~ expr)* ~ ","? ~ "}" }
 dict_entry = { expr ~ ":" ~ expr }
 
 // Comprehension clauses

@@ -181,7 +181,6 @@ pub fn expr_with_size(size: Size) -> impl Strategy<Value = Expr> {
             2 => list_expr(size.half()),
             2 => tuple_expr(size.half()),
             2 => dict_expr(size.half()),
-            1 => set_expr(size.half()),
             // Comprehensions
             1 => list_comp_expr(size.half()),
             1 => dict_comp_expr(size.half()),
@@ -350,13 +349,6 @@ pub fn compare_expr(size: Size) -> impl Strategy<Value = Expr> {
             comparators: vec![right],
             span: dummy_span(),
         }
-    })
-}
-
-pub fn set_expr(size: Size) -> impl Strategy<Value = Expr> {
-    prop::collection::vec(expr_with_size(size), 1..=5).prop_map(|elements| Expr::Set {
-        elements,
-        span: dummy_span(),
     })
 }
 

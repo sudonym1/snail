@@ -70,7 +70,6 @@ pairs = {"a": 1, "b": 2}
 pair = (1, 2)
 single = (1,)
 empty = ()
-flags_set = {True, False}
 evens = [n for n in nums if n % 2 == 0]
 lookup = {n: n * 2 for n in nums if n > 1}
 raw_text = r"raw\\ntext"
@@ -217,7 +216,6 @@ print("for_done", for_done)
 print("pair", pair)
 print("single", single)
 print("empty", empty)
-print("flags_set", flags_set)
 print("mid", mid)
 print("head", head)
 print("tail", tail)
