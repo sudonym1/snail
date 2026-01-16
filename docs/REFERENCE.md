@@ -15,6 +15,29 @@ import math, sys as sysmod
 from math import sqrt as root
 ```
 
+### Auto-import
+Common standard library modules are available without explicit imports:
+- `sys` — system-specific parameters and functions
+- `os` — operating system interface
+- `Path` — `pathlib.Path` for filesystem paths
+
+```snail
+# No import needed
+print(sys.version)
+print(os.getcwd())
+config = Path("config.json")
+```
+
+Auto-imports are lazy: modules are only loaded when first accessed. To disable
+auto-import (for example, to ensure scripts are explicit about dependencies),
+use the `-I` or `--no-auto-import` flag:
+```bash
+snail -I "print(sys.version)"  # NameError: name 'sys' is not defined
+```
+
+User assignments shadow auto-imported names, so `sys = "custom"` works as
+expected without conflict.
+
 ## Statements and expressions
 - Assignments mirror Python (`value = 1`). Multiple statements can be separated
   with semicolons.

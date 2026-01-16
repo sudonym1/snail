@@ -85,6 +85,59 @@ def test_awk_identifiers_require_awk_mode() -> None:
     assert "--awk" in str(excinfo.value)
 
 
+# --- Tests for auto-import ---
+
+
+def test_auto_import_sys(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that sys is available without explicit import."""
+    assert main(["-P", "print(sys.version_info.major)"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip().isdigit()
+
+
+def test_auto_import_os(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that os is available without explicit import."""
+    assert main(["-P", "print(os.name)"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() in ("posix", "nt")
+
+
+def test_no_auto_import_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that --no-auto-import disables auto-import."""
+    with pytest.raises(NameError) as excinfo:
+        main(["--no-auto-import", "print(sys.version)"])
+    assert "sys" in str(excinfo.value)
+
+
+def test_no_auto_import_short_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that -I disables auto-import."""
+    with pytest.raises(NameError) as excinfo:
+        main(["-I", "print(os.name)"])
+    assert "os" in str(excinfo.value)
+
+
+def test_auto_import_user_shadow(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that user can shadow auto-imported names."""
+    assert main(["-P", 'sys = "custom"\nprint(sys)']) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "custom"
+
+
+def test_auto_import_path(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that Path is available without explicit import."""
+    assert main(["-P", "print(Path('.').resolve())"]) == 0
+    captured = capsys.readouterr()
+    # Should print an absolute path
+    assert captured.out.strip().startswith("/")
+
+
+def test_no_auto_import_path(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that -I disables Path auto-import."""
+    with pytest.raises(NameError) as excinfo:
+        main(["-I", "print(Path('.'))"])
+    assert "Path" in str(excinfo.value)
+
+
 # --- Tests for example files ---
 
 EXAMPLES_DIR = ROOT / "examples"

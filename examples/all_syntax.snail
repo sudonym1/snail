@@ -260,6 +260,15 @@ assert simple == 12
 
 print("structured pipeline", first_name, names, simple)
 
+# Auto-import: sys, os, and Path are available without explicit import
+# (sys is also explicitly imported above as sysmod for demonstration)
+auto_sys_version = sys.version_info.major
+auto_os_name = os.name
+auto_path_cwd = Path(".").resolve()
+print("auto-import sys.version_info.major", auto_sys_version)
+print("auto-import os.name", auto_os_name)
+print("auto-import Path", auto_path_cwd)
+
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
 print(sysmod.version)

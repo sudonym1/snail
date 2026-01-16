@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import functools
+import importlib
+from typing import Any
 
 from .compact_try import compact_try
 from .regex import regex_compile, regex_search
@@ -10,7 +12,36 @@ from .structured_accessor import (
 )
 from .subprocess import SubprocessCapture, SubprocessStatus
 
-__all__ = ["install_helpers"]
+__all__ = ["install_helpers", "AutoImportDict", "AUTO_IMPORT_NAMES"]
+
+# Names that can be auto-imported when first referenced.
+# Maps name -> (module, attribute) where attribute is None for whole-module imports.
+AUTO_IMPORT_NAMES: dict[str, tuple[str, str | None]] = {
+    # Whole module imports: import X
+    "sys": ("sys", None),
+    "os": ("os", None),
+    # Attribute imports: from X import Y
+    "Path": ("pathlib", "Path"),
+}
+
+
+class AutoImportDict(dict):
+    """A dict subclass that lazily imports allowed names on first access.
+
+    When a key lookup fails, if the key is in AUTO_IMPORT_NAMES,
+    the corresponding module/attribute is imported and stored in the dict.
+    Supports both whole-module imports (import sys) and attribute imports
+    (from pathlib import Path).
+    """
+
+    def __missing__(self, key: str) -> Any:
+        if key in AUTO_IMPORT_NAMES:
+            module_name, attr_name = AUTO_IMPORT_NAMES[key]
+            module = importlib.import_module(module_name)
+            value = getattr(module, attr_name) if attr_name else module
+            self[key] = value
+            return value
+        raise KeyError(key)
 
 
 def __snail_partial(func, /, *args, **kwargs):

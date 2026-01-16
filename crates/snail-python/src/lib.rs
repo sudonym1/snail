@@ -39,8 +39,17 @@ fn prepare_globals<'py>(
     py: Python<'py>,
     filename: &str,
     argv: &[String],
-) -> PyResult<Bound<'py, PyDict>> {
-    let globals = PyDict::new_bound(py);
+    auto_import: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let runtime = py.import_bound("snail.runtime")?;
+
+    // Create either an AutoImportDict or a regular dict
+    let globals: Bound<'py, PyAny> = if auto_import {
+        runtime.getattr("AutoImportDict")?.call0()?
+    } else {
+        PyDict::new_bound(py).into_any()
+    };
+
     let builtins = py.import_bound("builtins")?;
     globals.set_item("__builtins__", &builtins)?;
     globals.set_item("__name__", "__main__")?;
@@ -49,8 +58,7 @@ fn prepare_globals<'py>(
     let sys = py.import_bound("sys")?;
     sys.setattr("argv", PyList::new_bound(py, argv))?;
 
-    let runtime = py.import_bound("snail.runtime")?;
-    runtime.call_method1("install_helpers", (globals.as_any(),))?;
+    runtime.call_method1("install_helpers", (&globals,))?;
 
     Ok(globals)
 }
@@ -74,13 +82,14 @@ fn compile_py(
 }
 
 #[pyfunction(name = "exec")]
-#[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, filename = "<snail>"))]
+#[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, auto_import = true, filename = "<snail>"))]
 fn exec_py(
     py: Python<'_>,
     source: &str,
     argv: Vec<String>,
     mode: &str,
     auto_print: bool,
+    auto_import: bool,
     filename: &str,
 ) -> PyResult<i32> {
     let mode = parse_mode(mode)?;
@@ -89,12 +98,9 @@ fn exec_py(
     let code = builtins
         .getattr("compile")?
         .call1((python_ast, filename, "exec"))?;
-    let globals = prepare_globals(py, filename, &argv)?;
+    let globals = prepare_globals(py, filename, &argv, auto_import)?;
 
-    match builtins
-        .getattr("exec")?
-        .call1((code.as_any(), globals.as_any()))
-    {
+    match builtins.getattr("exec")?.call1((code.as_any(), &globals)) {
         Ok(_) => Ok(0),
         Err(err) => {
             if err.is_instance_of::<PySystemExit>(py) {

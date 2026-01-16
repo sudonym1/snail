@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-f", dest="file", metavar="file")
     parser.add_argument("-a", "--awk", action="store_true")
     parser.add_argument("-P", "--no-print", action="store_true")
+    parser.add_argument("-I", "--no-auto-import", action="store_true")
     parser.add_argument("--parse-only", action="store_true")
     parser.add_argument("-v", "--version", action="store_true")
     parser.add_argument("args", nargs=argparse.REMAINDER)
@@ -59,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         argv=args,
         mode=mode,
         auto_print=not namespace.no_print,
+        auto_import=not namespace.no_auto_import,
         filename=filename,
     )
 
