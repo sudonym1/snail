@@ -45,17 +45,6 @@ pub fn parse_tuple_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, P
     Ok(Expr::Tuple { elements, span })
 }
 
-pub fn parse_set_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut elements = Vec::new();
-    for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::expr {
-            elements.push(crate::expr::parse_expr_pair(inner, source)?);
-        }
-    }
-    Ok(Expr::Set { elements, span })
-}
-
 pub fn parse_list_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut elements = Vec::new();

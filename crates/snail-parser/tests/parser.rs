@@ -632,3 +632,107 @@ fn parses_ternary_with_is_not_operator() {
         other => panic!("Expected assignment, got {:?}", other),
     }
 }
+
+// Tests for compound statement separator behavior (no semicolon needed after })
+
+#[test]
+fn parses_if_followed_by_stmt_without_separator() {
+    // if statement followed by expression without semicolon
+    let source = "if x { y = 1 } z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_while_followed_by_stmt_without_separator() {
+    let source = "while x { y = 1 } z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::While { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_for_followed_by_stmt_without_separator() {
+    let source = "for i in x { y = 1 } z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::For { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_def_followed_by_stmt_without_separator() {
+    let source = "def f() { pass } f()";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::Def { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_class_followed_by_stmt_without_separator() {
+    let source = "class C { pass } C()";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::Class { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_try_followed_by_stmt_without_separator() {
+    // Note: using explicit exception type since bare `except { }` is ambiguous with set literals
+    let source = "try { x } except Exception { y } z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::Try { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_with_followed_by_stmt_without_separator() {
+    let source = "with x { y } z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::With { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_nested_compound_stmts_without_separators() {
+    let source = "if a { if b { c } d } e";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_mixed_compound_and_simple_stmts() {
+    let source = "a = 1; if b { c = 2 } d = 3; e = 4";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 4);
+    assert!(matches!(&program.stmts[0], Stmt::Assign { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::If { .. }));
+    assert!(matches!(&program.stmts[2], Stmt::Assign { .. }));
+    assert!(matches!(&program.stmts[3], Stmt::Assign { .. }));
+}
+
+#[test]
+fn parses_consecutive_compound_stmts_without_separators() {
+    let source = "if a { b } if c { d } while e { f }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 3);
+    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::If { .. }));
+    assert!(matches!(&program.stmts[2], Stmt::While { .. }));
+}
+
+#[test]
+fn simple_stmt_still_requires_separator() {
+    // Two simple statements without separator should fail
+    let source = "a b";
+    parse_err(source);
+}

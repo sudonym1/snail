@@ -35,7 +35,6 @@ module.exports = grammar({
   conflicts: $ => [
     [$.primary],
     [$._atom, $.tuple_literal],
-    [$.set_literal, $.dict_literal],
     [$._stmt_sep],
     [$.assign_target, $._atom],
     [$.stmt_list],
@@ -49,7 +48,6 @@ module.exports = grammar({
     [$.awk_entry_list],
     [$.awk_program],
     [$.block],
-    [$.expr_stmt, $.set_literal],
   ],
 
   word: $ => $.identifier,
@@ -497,7 +495,6 @@ module.exports = grammar({
       $.list_literal,
       $.dict_comp,
       $.dict_literal,
-      $.set_literal,
       $.tuple_literal,
       $.compound_expr,
       $.parenthesized_expr,
@@ -603,14 +600,6 @@ module.exports = grammar({
         $.dict_entry,
         repeat(seq(',', $.dict_entry)),
       )),
-      '}',
-    ),
-
-    set_literal: $ => seq(
-      '{',
-      $._expr,
-      repeat(seq(',', $._expr)),
-      optional(','),
       '}',
     ),
 

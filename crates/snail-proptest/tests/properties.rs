@@ -227,25 +227,6 @@ proptest! {
     }
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(300))]
-
-    #[test]
-    fn set_literals_lower(stmt in set_literal_stmt(Size::new(2))) {
-        let program = snail_ast::Program {
-            stmts: vec![stmt],
-            span: dummy_span(),
-        };
-
-        Python::with_gil(|py| {
-            let module = snail_lower::lower_program(py, &program)
-                .expect("set literals should lower");
-
-            assert_python_compiles(py, &module);
-        });
-    }
-}
-
 // ========== Property 9: Subprocess Expressions Always Lower ==========
 
 proptest! {

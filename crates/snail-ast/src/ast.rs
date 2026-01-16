@@ -265,10 +265,6 @@ pub enum Expr {
         entries: Vec<(Expr, Expr)>,
         span: SourceSpan,
     },
-    Set {
-        elements: Vec<Expr>,
-        span: SourceSpan,
-    },
     Slice {
         start: Option<Box<Expr>>,
         end: Option<Box<Expr>>,
