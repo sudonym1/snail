@@ -11,7 +11,11 @@ awk_rule = { block | awk_pattern ~ block? }
 awk_pattern = { expr }
 
 // Statements: separated by semicolons or newlines
-stmt_list = { stmt ~ (stmt_sep ~ stmt)* ~ stmt_sep? }
+// Compound statements (ending with }) don't need trailing separators
+// Simple statements need separators unless they're the last statement
+stmt_list = { stmt_item* ~ final_stmt? }
+stmt_item = _{ compound_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ }
+final_stmt = _{ compound_stmt | simple_stmt }
 stmt_sep = _{ ";" ~ NEWLINE* | NEWLINE+ }
 
 stmt = _{ compound_stmt | simple_stmt }
