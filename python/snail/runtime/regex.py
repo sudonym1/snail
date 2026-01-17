@@ -4,7 +4,10 @@ import re
 
 
 def regex_search(value, pattern):
-    return re.search(pattern, value)
+    match = re.search(pattern, value)
+    if match is None:
+        return ()
+    return (match.group(0),) + match.groups()
 
 
 def regex_compile(pattern):

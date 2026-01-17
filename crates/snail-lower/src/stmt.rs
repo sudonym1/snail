@@ -465,37 +465,7 @@ fn lower_if_let(
     stmts.push(assign_name(builder, SNAIL_LET_VALUE, value_expr, span)?);
 
     let try_node = build_destructure_try(builder, target, span)?;
-    if is_regex_match_expr(value) {
-        let test = name_expr(
-            builder,
-            SNAIL_LET_VALUE,
-            span,
-            builder.load_ctx().map_err(py_err_to_lower)?,
-        )?;
-        let groups_assign = build_groups_assign(builder, span)?;
-        let ok_false = assign_name(
-            builder,
-            SNAIL_LET_OK,
-            bool_constant(builder, false, span)?,
-            span,
-        )?;
-        let body_nodes = vec![groups_assign, try_node];
-        let orelse_nodes = vec![ok_false];
-        let if_node = builder
-            .call_node(
-                "If",
-                vec![
-                    test,
-                    PyList::new_bound(builder.py(), body_nodes).into_py(builder.py()),
-                    PyList::new_bound(builder.py(), orelse_nodes).into_py(builder.py()),
-                ],
-                span,
-            )
-            .map_err(py_err_to_lower)?;
-        stmts.push(if_node);
-    } else {
-        stmts.push(try_node);
-    }
+    stmts.push(try_node);
 
     let test = build_let_guard_test(builder, guard, span)?;
     let body = lower_block(builder, body, span)?;
@@ -595,30 +565,7 @@ fn lower_while_let(
     )?);
 
     let try_node = build_destructure_try(builder, target, span)?;
-    if is_regex_match_expr(value) {
-        let test = name_expr(
-            builder,
-            SNAIL_LET_VALUE,
-            span,
-            builder.load_ctx().map_err(py_err_to_lower)?,
-        )?;
-        let groups_assign = build_groups_assign(builder, span)?;
-        let body_nodes = vec![groups_assign, try_node];
-        let if_node = builder
-            .call_node(
-                "If",
-                vec![
-                    test,
-                    PyList::new_bound(builder.py(), body_nodes).into_py(builder.py()),
-                    PyList::empty_bound(builder.py()).into_py(builder.py()),
-                ],
-                span,
-            )
-            .map_err(py_err_to_lower)?;
-        loop_body.push(if_node);
-    } else {
-        loop_body.push(try_node);
-    }
+    loop_body.push(try_node);
 
     let test = build_let_guard_test(builder, guard, span)?;
     let body = lower_block(builder, body, span)?;
@@ -786,41 +733,6 @@ fn build_destructure_exception_tuple(
         .map_err(py_err_to_lower)
 }
 
-fn build_groups_assign(
-    builder: &AstBuilder<'_>,
-    span: &SourceSpan,
-) -> Result<PyObject, LowerError> {
-    let value_expr = name_expr(
-        builder,
-        SNAIL_LET_VALUE,
-        span,
-        builder.load_ctx().map_err(py_err_to_lower)?,
-    )?;
-    let attr = builder
-        .call_node(
-            "Attribute",
-            vec![
-                value_expr,
-                "groups".into_py(builder.py()),
-                builder.load_ctx().map_err(py_err_to_lower)?,
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-    let call = builder
-        .call_node(
-            "Call",
-            vec![
-                attr,
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-    assign_name(builder, SNAIL_LET_VALUE, call, span)
-}
-
 fn bool_constant(
     builder: &AstBuilder<'_>,
     value: bool,
@@ -829,14 +741,6 @@ fn bool_constant(
     builder
         .call_node("Constant", vec![value.into_py(builder.py())], span)
         .map_err(py_err_to_lower)
-}
-
-fn is_regex_match_expr(expr: &Expr) -> bool {
-    match expr {
-        Expr::RegexMatch { .. } => true,
-        Expr::Paren { expr, .. } => is_regex_match_expr(expr),
-        _ => false,
-    }
 }
 
 fn lower_parameters(

@@ -129,12 +129,10 @@ while i < 4 {
 `if let` and `while let` bind destructured values in the condition, optionally
 followed by a guard after a semicolon:
 ```snail
-if let [user, domain] = "user@example.com" in /^([\w.]+)@([\w.]+)$/; domain {
+if let [user, domain] = pair; domain {
     print(domain)
 }
 ```
-For regex matches, the destructuring value is the capture groups tuple
-(`match.groups()`), so the bindings correspond to capture groups.
 
 ## Comprehensions
 List and dict comprehensions match Python's structure:
@@ -183,18 +181,19 @@ dunder_only = risky_fallback()?
 ## Regex expressions
 Use regex literals for concise searches:
 
-- `string in /<pattern>/` runs `re.search` and returns the match object (or
-  `None`), so truthiness checks work naturally.
+- `string in /<pattern>/` runs `re.search` and returns a tuple containing the
+  full match followed by capture groups (`()` when there is no match), so
+  truthiness checks work naturally.
 - `/pattern/` alone produces a compiled regex object you can reuse.
 - Regex literals are treated as raw strings and do not interpolate `{}`
   expressions, so backslashes stay intact.
 - Escape `/` inside the pattern as `\/`.
 
 In awk mode, regex patterns can stand alone. A bare `/pattern/` matches against
-`$0` implicitly and binds the match object to `$m` for use inside the action
+`$0` implicitly and binds the match tuple to `$m` for use inside the action
 block.
 Numeric group access is available via attribute shorthand: `$m.1` maps to
-`$m.group(1)`.
+`$m[1]`.
 
 ## Subprocess expressions
 Snail provides succinct subprocess helpers that work seamlessly with the pipeline
@@ -280,7 +279,7 @@ While processing, Snail populates awk-style variables:
 - `$n`: global line counter across all files.
 - `$fn`: per-file line counter.
 - `$p`: the active filename, with `"-"` representing stdin.
-- `$m`: the last regex match object (`$m.1` maps to `$m.group(1)`).
+- `$m`: the last regex match tuple (`$m.1` maps to `$m[1]`).
 
 These `$` variables are injected by the language; user-defined identifiers
 cannot start with `$`. They are only available in awk mode—using them in

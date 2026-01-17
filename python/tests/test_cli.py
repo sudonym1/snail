@@ -137,10 +137,12 @@ def test_placeholder_as_identifier(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "6\n"
 
 
-def test_if_let_regex_groups(capsys: pytest.CaptureFixture[str]) -> None:
-    script = (
-        'if let [user, domain] = "user@example.com" in /^([\\w.]+)@([\\w.]+)$/ '
-        '{ print(domain) } else { print("no") }'
+def test_if_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            'pair = ["user", "example.com"]',
+            "if let [user, domain] = pair { print(domain) } else { print(\"no\") }",
+        ]
     )
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
@@ -172,6 +174,21 @@ def test_while_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     assert captured.out == "a\nb\n"
+
+
+def test_regex_match_tuple(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            'm = "IJ" in /(I)(J)/',
+            "print(m[0])",
+            "print(m[1])",
+            "print(m[2])",
+            'print(len("xx" in /a/))',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "IJ\nI\nJ\n0\n"
 
 
 def test_awk_mode(

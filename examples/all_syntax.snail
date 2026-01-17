@@ -189,7 +189,7 @@ text = "abc123"
 regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
 compiled_match = compiled_regex.search(text)
-# Awk mode match groups: $m.1 maps to $m.group(1)
+# Awk mode match groups: $m.1 maps to $m[1]
 
 def fallback_handler() {
     return "dunder"
@@ -240,7 +240,7 @@ print("tail", tail)
 print("safe_value", safe_value)
 print("safe_fallback", safe_fallback)
 print("safe_details", safe_details)
-print("regex", regex_match.group(1), compiled_match.group(1))
+print("regex", regex_match[1], compiled_match[1])
 print("echoed", echoed)
 print("status_ok", status_ok)
 print("status_fail", status_fail)
