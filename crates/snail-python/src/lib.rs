@@ -132,6 +132,20 @@ fn compile_py(
     Ok(code.unbind())
 }
 
+#[pyfunction(name = "compile_ast")]
+#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>"))]
+fn compile_ast_py(
+    py: Python<'_>,
+    source: &str,
+    mode: &str,
+    auto_print: bool,
+    filename: &str,
+) -> PyResult<PyObject> {
+    let mode = parse_mode(mode)?;
+    let python_ast = compile_source(py, source, mode, auto_print, filename)?;
+    Ok(python_ast)
+}
+
 #[pyfunction(name = "exec")]
 #[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, auto_import = true, filename = "<snail>"))]
 fn exec_py(
@@ -188,8 +202,9 @@ fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
 #[pymodule]
 fn _native(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(compile_py, module)?)?;
+    module.add_function(wrap_pyfunction!(compile_ast_py, module)?)?;
     module.add_function(wrap_pyfunction!(exec_py, module)?)?;
     module.add_function(wrap_pyfunction!(parse_py, module)?)?;
-    module.add("__all__", vec!["compile", "exec", "parse"])?;
+    module.add("__all__", vec!["compile", "compile_ast", "exec", "parse"])?;
     Ok(())
 }

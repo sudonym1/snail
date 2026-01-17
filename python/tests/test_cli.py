@@ -30,8 +30,10 @@ bad_email = "bad@@email"
 phone = "867-5309"
 """
 
-def test_parse_only() -> None:
+def test_parse_only(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--parse-only", "x = 1"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "x = 1"
 
 
 def test_traceback_highlights_inline_snail() -> None:

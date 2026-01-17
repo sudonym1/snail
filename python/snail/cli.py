@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import ast
+import builtins
 import os
 import sys
 import traceback
 from pathlib import Path
 
-from . import __version__, exec, parse
+from . import __version__, compile_ast, exec
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -16,6 +18,13 @@ def _build_parser() -> argparse.ArgumentParser:
         usage="snail [options] -f <file> [args]...\n       snail [options] <code> [args]...",
         add_help=True,
     )
+
+
+def _display_filename(filename: str) -> str:
+    if filename.startswith("snail:"):
+        return filename
+    return f"snail:{filename}"
+
 
 def _trim_internal_prefix(
     stack: traceback.StackSummary,
@@ -125,7 +134,14 @@ def main(argv: list[str] | None = None) -> int:
         args = ["--", *namespace.args[1:]]
 
     if namespace.parse_only:
-        parse(source, mode=mode, filename=filename)
+        python_ast = compile_ast(
+            source,
+            mode=mode,
+            auto_print=not namespace.no_print,
+            filename=filename,
+        )
+        builtins.compile(python_ast, _display_filename(filename), "exec")
+        print(ast.unparse(python_ast))
         return 0
 
     return exec(
