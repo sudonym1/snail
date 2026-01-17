@@ -100,6 +100,10 @@ make test
 
 **If any check fails**: Fix the issues before proceeding. Do not create commits or PRs with failing CI checks.
 
+## Branching Policy
+
+Any new branch created by an agent must start with `fix/` or `feat/` to indicate fixes or features.
+
 ## Repository Structure
 
 The repository is organized as a Cargo workspace with the following crates:
