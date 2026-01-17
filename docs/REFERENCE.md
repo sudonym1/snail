@@ -41,6 +41,9 @@ expected without conflict.
 ## Statements and expressions
 - Assignments mirror Python (`value = 1`). Multiple statements can be separated
   with semicolons.
+- Destructuring assignment works for tuples and lists:
+  `x, y = pair`, `[a, b] = items`, and starred rest bindings such as
+  `x, *xs = values`.
 - Boolean operators, comparisons, membership checks, and arithmetic follow
   Python's precedence and short-circuiting rules.
 - Conditional expressions are supported: `fallback = "yes" if flag else "no"`.
@@ -124,6 +127,14 @@ while i < 4 {
 }
 ```
 
+`if let` and `while let` bind destructured values in the condition, optionally
+followed by a guard after a semicolon:
+```snail
+if let [user, domain] = pair; domain {
+    print(domain)
+}
+```
+
 ## Comprehensions
 List and dict comprehensions match Python's structure:
 ```snail
@@ -171,18 +182,31 @@ dunder_only = risky_fallback()?
 ## Regex expressions
 Use regex literals for concise searches:
 
-- `string in /<pattern>/` runs `re.search` and returns the match object (or
-  `None`), so truthiness checks work naturally.
-- `/pattern/` alone produces a compiled regex object you can reuse.
+- `string in /<pattern>/` runs `re.search` and returns a tuple containing the
+  full match followed by capture groups (`()` when there is no match), so
+  truthiness checks work naturally.
+- `/pattern/` alone produces a Snail regex object with a `search` method that
+  returns the same tuple. You can also use `"value" in pattern` to return the
+  same tuple (or `()` when there is no match).
 - Regex literals are treated as raw strings and do not interpolate `{}`
   expressions, so backslashes stay intact.
 - Escape `/` inside the pattern as `\/`.
 
 In awk mode, regex patterns can stand alone. A bare `/pattern/` matches against
-`$0` implicitly and binds the match object to `$m` for use inside the action
+`$0` implicitly and binds the match tuple to `$m` for use inside the action
 block.
 Numeric group access is available via attribute shorthand: `$m.1` maps to
-`$m.group(1)`.
+`$m[1]`.
+
+## Containment hooks
+Snail can delegate `in` checks to user-defined hooks:
+
+- `left in right` calls `right.__snail_contains__(left)` when present and
+  returns its value (truthiness is used for conditionals).
+- `left not in right` calls `right.__snail_contains__(left)` when present and
+  returns `not bool(result)` as a Python `bool`.
+- When `__snail_contains__` is absent, Snail falls back to Python `in` and
+  `not in` semantics.
 
 ## Subprocess expressions
 Snail provides succinct subprocess helpers that work seamlessly with the pipeline
@@ -268,7 +292,7 @@ While processing, Snail populates awk-style variables:
 - `$n`: global line counter across all files.
 - `$fn`: per-file line counter.
 - `$p`: the active filename, with `"-"` representing stdin.
-- `$m`: the last regex match object (`$m.1` maps to `$m.group(1)`).
+- `$m`: the last regex match tuple (`$m.1` maps to `$m[1]`).
 
 These `$` variables are injected by the language; user-defined identifiers
 cannot start with `$`. They are only available in awk mode—using them in

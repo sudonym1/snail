@@ -567,7 +567,7 @@ pub fn if_stmt(size: Size) -> impl Strategy<Value = Stmt> {
         prop::option::of(prop::collection::vec(stmt_with_size(size), 1..=3)),
     )
         .prop_map(|(cond, body, else_body)| Stmt::If {
-            cond,
+            cond: Condition::Expr(Box::new(cond)),
             body,
             elifs: vec![],
             else_body,
@@ -581,7 +581,7 @@ pub fn while_stmt(size: Size) -> impl Strategy<Value = Stmt> {
         prop::collection::vec(stmt_with_size(size), 1..=3),
     )
         .prop_map(|(cond, body)| Stmt::While {
-            cond,
+            cond: Condition::Expr(Box::new(cond)),
             body,
             else_body: None,
             span: dummy_span(),

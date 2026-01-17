@@ -137,6 +137,126 @@ def test_placeholder_as_identifier(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "6\n"
 
 
+def test_if_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            'pair = ["user", "example.com"]',
+            "if let [user, domain] = pair { print(domain) } else { print(\"no\") }",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "example.com"
+
+
+def test_if_let_guard(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'if let x = 1; x == 2 { print("yes") } else { print("no") }'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "no"
+
+
+def test_starred_destructuring(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "nums = [1, 2, 3]",
+            "x, *xs = nums",
+            "print(x)",
+            "print(xs)",
+            "if let [head, *tail] = nums { print(head); print(len(tail)) }",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "1\n[2, 3]\n1\n2\n"
+
+
+def test_while_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def next_item(items, idx) {",
+            "    if idx < len(items) { return items[idx] }",
+            "    return None",
+            "}",
+            'items = [[1, "a"], [2, "b"]]',
+            "i = 0",
+            "while let [n, s] = next_item(items, i) {",
+            "    print(s)",
+            "    i = i + 1",
+            "}",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "a\nb\n"
+
+
+def test_regex_match_tuple(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            'm = "IJ" in /(I)(J)/',
+            "print(m[0])",
+            "print(m[1])",
+            "print(m[2])",
+            'print(len("xx" in /a/))',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "IJ\nI\nJ\n0\n"
+
+
+def test_compiled_regex_object(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "pat = /ab(c)/",
+            "print(pat.search('zabc')[1])",
+            'm = "abc" in pat',
+            "print(m[0])",
+            "print(m[1])",
+            'print(len("zzz" in pat))',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "c\nabc\nc\n0\n"
+
+
+def test_contains_not_in(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "pat = /ab(c)/",
+            "print('abc' not in pat)",
+            "print('zzz' not in pat)",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "False\nTrue\n"
+
+
+def test_chained_in_short_circuit(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "hits = [0]",
+            "pat = /a/",
+            "def bump() {",
+            "    hits[0] = hits[0] + 1",
+            "    return [pat]",
+            "}",
+            'print("a" in pat in bump())',
+            "print(hits[0])",
+            "hits[0] = 0",
+            "pat = /z/",
+            'print("a" in pat in bump())',
+            "print(hits[0])",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "True\n1\n()\n0\n"
+
+
 def test_awk_mode(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

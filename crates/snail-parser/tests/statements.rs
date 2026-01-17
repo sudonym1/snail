@@ -360,7 +360,7 @@ fn parses_loop_else_with_try_break_continue() {
             else_body,
             ..
         } => {
-            expect_name(cond, "flag");
+            expect_condition_name(cond, "flag");
             match &body[0] {
                 Stmt::Try { finally_body, .. } => {
                     let finally_body = finally_body.as_ref().expect("expected finally body");

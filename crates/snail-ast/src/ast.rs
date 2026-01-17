@@ -20,14 +20,14 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     If {
-        cond: Expr,
+        cond: Condition,
         body: Vec<Stmt>,
-        elifs: Vec<(Expr, Vec<Stmt>)>,
+        elifs: Vec<(Condition, Vec<Stmt>)>,
         else_body: Option<Vec<Stmt>>,
         span: SourceSpan,
     },
     While {
-        cond: Expr,
+        cond: Condition,
         body: Vec<Stmt>,
         else_body: Option<Vec<Stmt>>,
         span: SourceSpan,
@@ -146,6 +146,29 @@ pub enum AssignTarget {
     Index {
         value: Box<Expr>,
         index: Box<Expr>,
+        span: SourceSpan,
+    },
+    Starred {
+        target: Box<AssignTarget>,
+        span: SourceSpan,
+    },
+    Tuple {
+        elements: Vec<AssignTarget>,
+        span: SourceSpan,
+    },
+    List {
+        elements: Vec<AssignTarget>,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Condition {
+    Expr(Box<Expr>),
+    Let {
+        target: Box<AssignTarget>,
+        value: Box<Expr>,
+        guard: Option<Box<Expr>>,
         span: SourceSpan,
     },
 }

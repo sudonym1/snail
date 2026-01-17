@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use snail_ast::{AssignTarget, Expr, Program, SourceSpan, Stmt, StringDelimiter};
+use snail_ast::{AssignTarget, Condition, Expr, Program, SourceSpan, Stmt, StringDelimiter};
 use snail_error::ParseError;
 use snail_parser::parse_program;
 
@@ -31,6 +31,18 @@ pub fn expect_name(expr: &Expr, expected: &str) {
         Expr::Name { name, .. } => assert_eq!(name, expected),
         other => panic!("Expected name {expected}, got {other:?}"),
     }
+}
+
+pub fn expect_condition_expr(cond: &Condition) -> &Expr {
+    match cond {
+        Condition::Expr(expr) => expr.as_ref(),
+        other => panic!("Expected expression condition, got {other:?}"),
+    }
+}
+
+pub fn expect_condition_name(cond: &Condition, expected: &str) {
+    let expr = expect_condition_expr(cond);
+    expect_name(expr, expected);
 }
 
 pub fn expect_number(expr: &Expr, expected: &str) {

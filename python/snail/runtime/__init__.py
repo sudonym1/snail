@@ -48,6 +48,20 @@ def __snail_partial(func, /, *args, **kwargs):
     return functools.partial(func, *args, **kwargs)
 
 
+def __snail_contains__(left, right):
+    method = getattr(right, "__snail_contains__", None)
+    if method is not None:
+        return method(left)
+    return left in right
+
+
+def __snail_contains_not__(left, right):
+    method = getattr(right, "__snail_contains__", None)
+    if method is not None:
+        return not bool(method(left))
+    return left not in right
+
+
 def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_compact_try"] = compact_try
     globals_dict["__snail_regex_search"] = regex_search
@@ -56,4 +70,6 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__SnailSubprocessStatus"] = SubprocessStatus
     globals_dict["__snail_jmespath_query"] = __snail_jmespath_query
     globals_dict["__snail_partial"] = __snail_partial
+    globals_dict["__snail_contains__"] = __snail_contains__
+    globals_dict["__snail_contains_not__"] = __snail_contains_not__
     globals_dict["js"] = js
