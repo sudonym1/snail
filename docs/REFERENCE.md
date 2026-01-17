@@ -148,20 +148,20 @@ with SimpleCtx() as message { ctx_msg = message }
 
 ## Exceptions and fallback expressions
 Snail mirrors Python's exception handling and adds compact fallbacks:
-- `<expr>?` swallows an exception and yields the exception object. If the
-  exception provides a `__fallback__` method, it will be called instead.
+- `<expr>?` swallows an exception and yields `None`. If the exception provides a
+  `__fallback__` method, it will be called instead.
 - `<expr>:<fallback>?` evaluates the fallback when `<expr>` raises, binding the
   exception object to `$e`.
 
 The postfix `?` binds tightly to the expression on its left, before attributes,
 calls, or other infix operators. For example, `a + risky():5?` evaluates as
-`a + (risky():5?)`, and `boom()? .args[0]` accesses the exception produced by
+`a + (risky():5?)`, and `boom():$e? .args[0]` accesses the exception produced by
 `boom()`. To include additional infix operators in the fallback, wrap them in
 parentheses; otherwise `a:0? + 1` parses as `(a:0?) + 1`.
 
 Examples:
 ```snail
-safe_value = risky()?                # returns exception object on failure
+safe_value = risky()?                # returns None on failure
 safe_fallback = risky():$e?          # returns exception object via $e
 safe_details = risky():$e.args[0]?   # pull data from the exception
 prefer_lambda = risky_fallback():"lambda"?

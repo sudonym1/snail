@@ -33,6 +33,19 @@ def test_inline_print(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "hi\n"
 
 
+def test_compact_try_default_none(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def boom() { raise ValueError('nope') }",
+            "value = boom()?",
+            "print(value is None)",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "True"
+
+
 def test_file_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     script = tmp_path / "script.snail"
     script.write_text("import sys\nprint(sys.argv[1])\n")

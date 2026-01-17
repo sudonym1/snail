@@ -9,5 +9,5 @@ def compact_try(expr_fn, fallback_fn=None):
             fallback_member = getattr(exc, "__fallback__", None)
             if callable(fallback_member):
                 return fallback_member()
-            return exc
+            return None
         return fallback_fn(exc)
