@@ -1,6 +1,6 @@
 [package]
 name = "snail-core"
-version = "0.3.7"
+version = "0.3.8"
 edition.workspace = true
 
 [dependencies]
