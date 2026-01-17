@@ -365,7 +365,12 @@ pub(crate) fn lower_awk_rules_with_auto_print(
     let mut stmts = Vec::new();
     for rule in rules {
         let mut action = if rule.has_explicit_action() {
-            lower_block_with_auto_print(builder, rule.action.as_ref().unwrap(), auto_print)?
+            lower_block_with_auto_print(
+                builder,
+                rule.action.as_ref().unwrap(),
+                auto_print,
+                &rule.span,
+            )?
         } else {
             vec![awk_default_print(builder, &rule.span)?]
         };

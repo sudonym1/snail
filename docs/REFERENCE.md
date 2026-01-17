@@ -49,7 +49,7 @@ expected without conflict.
   between expressions are allowed, making them convenient for bundling setup
   work and a risky call into a single expression alongside Snail's `?`
   fallback operator.
-- Tuple and set literals plus slicing use Python syntax: `(1, 2)`, `{True, False}`,
+- Tuple literals plus slicing use Python syntax: `(1, 2)`,
   `data[1:3]`, `data[:2]`, and `data[2:]`.
 
 ## Pipeline operator

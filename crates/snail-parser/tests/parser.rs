@@ -683,7 +683,7 @@ fn parses_class_followed_by_stmt_without_separator() {
 
 #[test]
 fn parses_try_followed_by_stmt_without_separator() {
-    // Note: using explicit exception type since bare `except { }` is ambiguous with set literals
+    // Note: using explicit exception type since bare `except { }` is ambiguous
     let source = "try { x } except Exception { y } z";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);

@@ -24,10 +24,10 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
             span,
         } => {
             let test = lower_expr(builder, cond)?;
-            let body = lower_block(builder, body)?;
+            let body = lower_block(builder, body, span)?;
             let orelse = else_body
                 .as_ref()
-                .map(|items| lower_block(builder, items))
+                .map(|items| lower_block(builder, items, span))
                 .transpose()?
                 .unwrap_or_default();
             builder
@@ -51,10 +51,10 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
         } => {
             let target = lower_assign_target(builder, target)?;
             let iter = lower_expr(builder, iter)?;
-            let body = lower_block(builder, body)?;
+            let body = lower_block(builder, body, span)?;
             let orelse = else_body
                 .as_ref()
-                .map(|items| lower_block(builder, items))
+                .map(|items| lower_block(builder, items, span))
                 .transpose()?
                 .unwrap_or_default();
             builder
@@ -77,7 +77,7 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
             span,
         } => {
             let args = lower_parameters(builder, params)?;
-            let body = lower_block(builder, body)?;
+            let body = lower_block(builder, body, span)?;
             builder
                 .call_node(
                     "FunctionDef",
@@ -94,7 +94,7 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                 .map_err(py_err_to_lower)
         }
         Stmt::Class { name, body, span } => {
-            let body = lower_block(builder, body)?;
+            let body = lower_block(builder, body, span)?;
             builder
                 .call_node(
                     "ClassDef",
@@ -116,19 +116,19 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
             finally_body,
             span,
         } => {
-            let body = lower_block(builder, body)?;
+            let body = lower_block(builder, body, span)?;
             let handlers = handlers
                 .iter()
                 .map(|handler| lower_except_handler(builder, handler))
                 .collect::<Result<Vec<_>, _>>()?;
             let orelse = else_body
                 .as_ref()
-                .map(|items| lower_block(builder, items))
+                .map(|items| lower_block(builder, items, span))
                 .transpose()?
                 .unwrap_or_default();
             let finalbody = finally_body
                 .as_ref()
-                .map(|items| lower_block(builder, items))
+                .map(|items| lower_block(builder, items, span))
                 .transpose()?
                 .unwrap_or_default();
             builder
@@ -149,7 +149,7 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                 .iter()
                 .map(|item| lower_with_item(builder, item))
                 .collect::<Result<Vec<_>, _>>()?;
-            let body = lower_block(builder, body)?;
+            let body = lower_block(builder, body, span)?;
             builder
                 .call_node(
                     "With",
@@ -313,14 +313,16 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
 pub(crate) fn lower_block(
     builder: &AstBuilder<'_>,
     block: &[Stmt],
+    span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    lower_block_with_auto_print(builder, block, false)
+    lower_block_with_auto_print(builder, block, false, span)
 }
 
 pub(crate) fn lower_block_with_auto_print(
     builder: &AstBuilder<'_>,
     block: &[Stmt],
     auto_print: bool,
+    span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
     for (idx, stmt) in block.iter().enumerate() {
@@ -340,6 +342,13 @@ pub(crate) fn lower_block_with_auto_print(
         }
         stmts.push(lower_stmt(builder, stmt)?);
     }
+    if stmts.is_empty() {
+        stmts.push(
+            builder
+                .call_node("Pass", Vec::new(), span)
+                .map_err(py_err_to_lower)?,
+        );
+    }
     Ok(stmts)
 }
 
@@ -352,7 +361,7 @@ fn lower_if(
     span: &SourceSpan,
 ) -> Result<PyObject, LowerError> {
     let test = lower_expr(builder, cond)?;
-    let body = lower_block(builder, body)?;
+    let body = lower_block(builder, body, span)?;
     let orelse = if let Some((elif_cond, elif_body)) = elifs.first() {
         vec![lower_if(
             builder,
@@ -363,7 +372,7 @@ fn lower_if(
             span,
         )?]
     } else if let Some(else_body) = else_body {
-        lower_block(builder, else_body)?
+        lower_block(builder, else_body, span)?
     } else {
         Vec::new()
     };
@@ -468,7 +477,7 @@ fn lower_except_handler(
         .as_ref()
         .map(|name| name.to_string().into_py(builder.py()))
         .unwrap_or_else(|| builder.py().None().into_py(builder.py()));
-    let body = lower_block(builder, &handler.body)?;
+    let body = lower_block(builder, &handler.body, &handler.span)?;
     builder
         .call_node(
             "ExceptHandler",
