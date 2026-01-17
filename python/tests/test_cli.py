@@ -156,6 +156,21 @@ def test_if_let_guard(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "no"
 
 
+def test_starred_destructuring(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "nums = [1, 2, 3]",
+            "x, *xs = nums",
+            "print(x)",
+            "print(xs)",
+            "if let [head, *tail] = nums { print(head); print(len(tail)) }",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "1\n[2, 3]\n1\n2\n"
+
+
 def test_while_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [

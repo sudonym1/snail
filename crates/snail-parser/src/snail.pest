@@ -91,12 +91,14 @@ dotted_name = { identifier ~ ("." ~ identifier)* }
 // Assignment and expression statements
 assign_stmt = { assign_target_list ~ "=" ~ expr }
 assign_target_list = { assign_target_tuple | assign_target }
-assign_target_tuple = { assign_target ~ "," ~ (assign_target ~ ("," ~ assign_target)* ~ ","?)? }
+assign_target_tuple = { assign_target_item ~ "," ~ (assign_target_item ~ ("," ~ assign_target_item)* ~ ","?)? }
+assign_target_item = _{ assign_target_star | assign_target }
+assign_target_star = { "*" ~ assign_target }
 assign_target = _{ assign_target_ref | assign_list | assign_tuple }
 assign_target_ref = { assign_target_atom ~ (attribute | index)* }
 assign_target_atom = { identifier | "(" ~ assign_target_ref ~ ")" }
 assign_list = { "[" ~ assign_target_items? ~ "]" }
-assign_target_items = { assign_target ~ ("," ~ assign_target)* ~ ","? }
+assign_target_items = { assign_target_item ~ ("," ~ assign_target_item)* ~ ","? }
 assign_tuple = { "(" ~ assign_target_tuple ~ ")" }
 expr_stmt = { expr }
 

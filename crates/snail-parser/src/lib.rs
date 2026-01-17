@@ -268,6 +268,7 @@ fn validate_assign_target(target: &AssignTarget, source: &str) -> Result<(), Par
             validate_expr(value, source)?;
             validate_expr(index, source)
         }
+        AssignTarget::Starred { target, .. } => validate_assign_target(target, source),
         AssignTarget::Tuple { elements, .. } | AssignTarget::List { elements, .. } => {
             for element in elements {
                 validate_assign_target(element, source)?;

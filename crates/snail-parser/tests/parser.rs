@@ -146,6 +146,38 @@ fn parses_if_let_with_guard() {
 }
 
 #[test]
+fn parses_if_let_with_starred_target() {
+    let source = "if let [user, *rest] = pair { print(user) }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::If { cond, .. } => match cond {
+            Condition::Let { target, value, .. } => {
+                match target.as_ref() {
+                    AssignTarget::List { elements, .. } => {
+                        assert_eq!(elements.len(), 2);
+                        assert!(
+                            matches!(&elements[0], AssignTarget::Name { name, .. } if name == "user")
+                        );
+                        match &elements[1] {
+                            AssignTarget::Starred { target, .. } => assert!(
+                                matches!(target.as_ref(), AssignTarget::Name { name, .. } if name == "rest")
+                            ),
+                            other => panic!("Expected starred target, got {other:?}"),
+                        }
+                    }
+                    other => panic!("Expected list target, got {other:?}"),
+                }
+                expect_name(value.as_ref(), "pair");
+            }
+            other => panic!("Expected let condition, got {other:?}"),
+        },
+        other => panic!("Expected if statement, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_while_let() {
     let source = "while let x = next(); x { print(x) }\n";
     let program = parse_ok(source);
@@ -195,6 +227,43 @@ fn parses_destructuring_assignment() {
             assert_eq!(elements.len(), 2);
             assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "a"));
             assert!(matches!(&elements[1], AssignTarget::Name { name, .. } if name == "b"));
+        }
+        other => panic!("Expected list target, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_starred_destructuring_assignment() {
+    let source = "x, *xs = [1, 2, 3]\n[a, *rest] = pair\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+
+    let (targets, _) = expect_assign(&program.stmts[0]);
+    match &targets[0] {
+        AssignTarget::Tuple { elements, .. } => {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "x"));
+            match &elements[1] {
+                AssignTarget::Starred { target, .. } => assert!(
+                    matches!(target.as_ref(), AssignTarget::Name { name, .. } if name == "xs")
+                ),
+                other => panic!("Expected starred target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected tuple target, got {other:?}"),
+    }
+
+    let (targets, _) = expect_assign(&program.stmts[1]);
+    match &targets[0] {
+        AssignTarget::List { elements, .. } => {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "a"));
+            match &elements[1] {
+                AssignTarget::Starred { target, .. } => assert!(
+                    matches!(target.as_ref(), AssignTarget::Name { name, .. } if name == "rest")
+                ),
+                other => panic!("Expected starred target, got {other:?}"),
+            }
         }
         other => panic!("Expected list target, got {other:?}"),
     }

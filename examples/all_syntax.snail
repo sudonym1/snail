@@ -72,6 +72,7 @@ single = (1,)
 empty = ()
 coords = (3, 4)
 x, y = coords
+first_val, *rest_vals = [1, 2, 3]
 evens = [n for n in nums if n % 2 == 0]
 lookup = {n: n * 2 for n in nums if n > 1}
 raw_text = r"raw\\ntext"
@@ -232,6 +233,8 @@ print("joined", joined)
 print("loop_done", loop_done)
 print("for_done", for_done)
 print("pair", pair)
+print("first_val", first_val)
+print("rest_vals", rest_vals)
 print("single", single)
 print("empty", empty)
 print("mid", mid)

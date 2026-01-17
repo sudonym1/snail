@@ -36,6 +36,12 @@ pub(crate) fn lower_assign_target(
                 .call_node("Subscript", vec![value_expr, index_expr, store_ctx], span)
                 .map_err(py_err_to_lower)
         }
+        AssignTarget::Starred { target, span } => {
+            let value = lower_assign_target(builder, target)?;
+            builder
+                .call_node("Starred", vec![value, store_ctx.clone()], span)
+                .map_err(py_err_to_lower)
+        }
         AssignTarget::Tuple { elements, span } => {
             let mut lowered = Vec::with_capacity(elements.len());
             for element in elements {
@@ -95,6 +101,9 @@ pub(crate) fn lower_delete_target(
                 .call_node("Subscript", vec![value_expr, index_expr, del_ctx], span)
                 .map_err(py_err_to_lower)
         }
+        AssignTarget::Starred { .. } => Err(LowerError::new(
+            "starred targets are not valid in del statements",
+        )),
         AssignTarget::Tuple { elements, span } => {
             let mut lowered = Vec::with_capacity(elements.len());
             for element in elements {

@@ -563,7 +563,7 @@ fn parse_assign_target_tuple(
     let span = span_from_pair(&pair, source);
     let mut elements = Vec::new();
     for inner in pair.into_inner() {
-        elements.push(parse_assign_target(inner, source)?);
+        elements.push(parse_assign_target_item(inner, source)?);
     }
     Ok(AssignTarget::Tuple { elements, span })
 }
@@ -648,7 +648,7 @@ fn parse_assign_list(pair: Pair<'_, Rule>, source: &str) -> Result<AssignTarget,
     for inner in pair.into_inner() {
         if inner.as_rule() == Rule::assign_target_items {
             for item in inner.into_inner() {
-                elements.push(parse_assign_target(item, source)?);
+                elements.push(parse_assign_target_item(item, source)?);
             }
         }
     }
@@ -682,6 +682,7 @@ pub fn parse_assign_target(pair: Pair<'_, Rule>, source: &str) -> Result<AssignT
             })?;
             parse_assign_target(inner, source)
         }
+        Rule::assign_target_star => parse_assign_target_star(pair, source),
         Rule::assign_target_ref => parse_assign_target_ref(pair, source),
         Rule::assign_list => parse_assign_list(pair, source),
         Rule::assign_tuple => parse_assign_tuple(pair, source),
@@ -701,6 +702,38 @@ pub fn parse_assign_target(pair: Pair<'_, Rule>, source: &str) -> Result<AssignT
             source,
         )),
     }
+}
+
+fn parse_assign_target_item(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<AssignTarget, ParseError> {
+    let span = span_from_pair(&pair, source);
+    match pair.as_rule() {
+        Rule::assign_target_item => {
+            let inner = pair.into_inner().next().ok_or_else(|| {
+                error_with_span("missing assignment target", span.clone(), source)
+            })?;
+            parse_assign_target_item(inner, source)
+        }
+        Rule::assign_target_star => parse_assign_target_star(pair, source),
+        _ => parse_assign_target(pair, source),
+    }
+}
+
+fn parse_assign_target_star(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<AssignTarget, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let inner = pair.into_inner().next().ok_or_else(|| {
+        error_with_span("missing starred assignment target", span.clone(), source)
+    })?;
+    let target = parse_assign_target(inner, source)?;
+    Ok(AssignTarget::Starred {
+        target: Box::new(target),
+        span,
+    })
 }
 
 fn parse_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {

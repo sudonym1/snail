@@ -42,7 +42,8 @@ expected without conflict.
 - Assignments mirror Python (`value = 1`). Multiple statements can be separated
   with semicolons.
 - Destructuring assignment works for tuples and lists:
-  `x, y = pair` and `[a, b] = items`.
+  `x, y = pair`, `[a, b] = items`, and starred rest bindings such as
+  `x, *xs = values`.
 - Boolean operators, comparisons, membership checks, and arithmetic follow
   Python's precedence and short-circuiting rules.
 - Conditional expressions are supported: `fallback = "yes" if flag else "no"`.

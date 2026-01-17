@@ -148,6 +148,10 @@ pub enum AssignTarget {
         index: Box<Expr>,
         span: SourceSpan,
     },
+    Starred {
+        target: Box<AssignTarget>,
+        span: SourceSpan,
+    },
     Tuple {
         elements: Vec<AssignTarget>,
         span: SourceSpan,
