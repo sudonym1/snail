@@ -18,7 +18,8 @@ pub fn lower_program_with_auto_print(
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
-    let body = lower_block_with_auto_print(&builder, &program.stmts, auto_print_last)?;
+    let body =
+        lower_block_with_auto_print(&builder, &program.stmts, auto_print_last, &program.span)?;
     builder.module(body, &program.span).map_err(py_err_to_lower)
 }
 
@@ -62,7 +63,7 @@ pub fn lower_awk_program_with_auto_print(
 
     let mut main_body = Vec::new();
     for block in &program.begin_blocks {
-        let lowered = lower_block_with_auto_print(&builder, block, auto_print)?;
+        let lowered = lower_block_with_auto_print(&builder, block, auto_print, &span)?;
         main_body.extend(lowered);
     }
 
@@ -166,7 +167,7 @@ pub fn lower_awk_program_with_auto_print(
     main_body.push(for_loop);
 
     for block in &program.end_blocks {
-        let lowered = lower_block_with_auto_print(&builder, block, auto_print)?;
+        let lowered = lower_block_with_auto_print(&builder, block, auto_print, &span)?;
         main_body.extend(lowered);
     }
 

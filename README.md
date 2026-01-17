@@ -60,7 +60,7 @@ err = risky()?
 err = risky():$e?
 
 # Provide a fallback value (exception available as $e)
-value = js("malformed json"):{}?
+value = js("malformed json"):{"error": "invalid json"}?
 details = fetch_url("foo.com"):"default html"?
 exception_info = fetch_url("example.com"):$e.http_response_code?
 

@@ -42,3 +42,4 @@ python/snail/_native*.so
 
 # uv
 uv.lock
+.uv-cache/

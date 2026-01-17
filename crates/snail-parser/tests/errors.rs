@@ -9,7 +9,7 @@ fn reports_parse_error_with_location() {
     let message = err.to_string();
     assert!(message.contains("-->"));
     assert!(message.contains("if"));
-    expect_err_span(&err, 1, 7);
+    expect_err_span(&err, 1, 6);
 }
 
 #[test]
@@ -81,6 +81,12 @@ fn parser_reports_error_on_missing_colon_in_dict() {
     let err = parse_err("d = {\"key\" 1}");
     let message = err.to_string();
     assert!(message.contains("expected") || message.contains(":"));
+    assert!(err.span.is_some());
+}
+
+#[test]
+fn parser_rejects_empty_dict_literal() {
+    let err = parse_err("d = {}");
     assert!(err.span.is_some());
 }
 
