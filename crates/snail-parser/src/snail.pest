@@ -140,7 +140,8 @@ star_arg = { "*" ~ expr }
 kw_star_arg = { "**" ~ expr }
 
 // Attribute access and indexing/slicing
-attribute = { "." ~ identifier }
+attribute = { "." ~ (identifier | attribute_index) }
+attribute_index = @{ ASCII_DIGIT+ }
 index = { "[" ~ slice ~ "]" }
 slice = { slice_expr | expr }
 slice_expr = { slice_start? ~ ":" ~ slice_end? }

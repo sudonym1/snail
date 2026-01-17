@@ -172,6 +172,7 @@ text = "abc123"
 regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
 compiled_match = compiled_regex.search(text)
+# Awk mode match groups: $m.1 maps to $m.group(1)
 
 def fallback_handler() {
     return "dunder"

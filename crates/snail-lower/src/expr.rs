@@ -612,6 +612,34 @@ pub(crate) fn lower_expr_with_exception(
         }
         Expr::Attribute { value, attr, span } => {
             let value = lower_expr_with_exception(builder, value, exception_name)?;
+            if attr.chars().all(|ch| ch.is_ascii_digit()) {
+                let group_index = attr
+                    .parse::<i32>()
+                    .map_err(|_| LowerError::new(format!("Invalid match group index: .{attr}")))?;
+                let group_attr = builder
+                    .call_node(
+                        "Attribute",
+                        vec![
+                            value,
+                            "group".into_py(builder.py()),
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?;
+                let index_expr = number_expr(builder, &group_index.to_string(), span)?;
+                return builder
+                    .call_node(
+                        "Call",
+                        vec![
+                            group_attr,
+                            PyList::new_bound(builder.py(), vec![index_expr]).into_py(builder.py()),
+                            PyList::empty_bound(builder.py()).into_py(builder.py()),
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower);
+            }
             builder
                 .call_node(
                     "Attribute",
