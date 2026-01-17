@@ -9,6 +9,9 @@ description = "Snail programming language interpreter"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
+dependencies = [
+    "jmespath>=1.0.1",
+]
 
 [project.optional-dependencies]
 dev = [

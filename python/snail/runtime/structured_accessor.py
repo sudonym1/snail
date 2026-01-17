@@ -4,7 +4,7 @@ import json as _json
 import os as _os
 import sys as _sys
 
-from ..vendor import jmespath
+import jmespath
 
 
 def __snail_jmespath_query(query: str):

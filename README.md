@@ -228,8 +228,6 @@ Installation per platform:
 - **macOS**: `brew install python@3.12` (or use the system Python 3)
 - **Windows**: Download from [python.org](https://www.python.org/downloads/)
 
-**No Python packages required**: Snail vendors jmespath under `snail.vendor`.
-
 ### Build, Test, and Install
 
 ```bash
