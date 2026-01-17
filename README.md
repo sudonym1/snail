@@ -217,6 +217,13 @@ Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }
 
 See [extras/vim/README.md](extras/vim/README.md) for details. Tree-sitter grammar available in `extras/tree-sitter-snail/`.
 
+## Performance
+
+Section is WIP
+
+Startup performance is benchmarked with `./benchmarks/startup.py`. On my
+machine snail adds 5 ms of overhead above the regular python3 interpreter.
+
 ## 🛠️ Building from Source
 
 ### Prerequisites
