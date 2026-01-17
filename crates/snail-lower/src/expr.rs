@@ -36,6 +36,38 @@ pub(crate) fn lower_assign_target(
                 .call_node("Subscript", vec![value_expr, index_expr, store_ctx], span)
                 .map_err(py_err_to_lower)
         }
+        AssignTarget::Tuple { elements, span } => {
+            let mut lowered = Vec::with_capacity(elements.len());
+            for element in elements {
+                lowered.push(lower_assign_target(builder, element)?);
+            }
+            builder
+                .call_node(
+                    "Tuple",
+                    vec![
+                        PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
+                        store_ctx,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        AssignTarget::List { elements, span } => {
+            let mut lowered = Vec::with_capacity(elements.len());
+            for element in elements {
+                lowered.push(lower_assign_target(builder, element)?);
+            }
+            builder
+                .call_node(
+                    "List",
+                    vec![
+                        PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
+                        store_ctx,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
     }
 }
 
@@ -61,6 +93,38 @@ pub(crate) fn lower_delete_target(
             let index_expr = lower_expr_with_exception(builder, index, None)?;
             builder
                 .call_node("Subscript", vec![value_expr, index_expr, del_ctx], span)
+                .map_err(py_err_to_lower)
+        }
+        AssignTarget::Tuple { elements, span } => {
+            let mut lowered = Vec::with_capacity(elements.len());
+            for element in elements {
+                lowered.push(lower_delete_target(builder, element)?);
+            }
+            builder
+                .call_node(
+                    "Tuple",
+                    vec![
+                        PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
+                        del_ctx,
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        AssignTarget::List { elements, span } => {
+            let mut lowered = Vec::with_capacity(elements.len());
+            for element in elements {
+                lowered.push(lower_delete_target(builder, element)?);
+            }
+            builder
+                .call_node(
+                    "List",
+                    vec![
+                        PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
+                        del_ctx,
+                    ],
+                    span,
+                )
                 .map_err(py_err_to_lower)
         }
     }

@@ -3,6 +3,7 @@ use pyo3::types::PyList;
 use snail_ast::*;
 use snail_error::LowerError;
 
+use crate::constants::{SNAIL_LET_KEEP, SNAIL_LET_OK, SNAIL_LET_VALUE};
 use crate::expr::{lower_assign_target, lower_delete_target, lower_expr};
 use crate::helpers::{assign_name, name_expr};
 use crate::operators::lower_compare_op;
@@ -16,14 +17,26 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
             elifs,
             else_body,
             span,
-        } => lower_if(builder, cond, body, elifs, else_body, span),
+        } => match cond {
+            Condition::Expr(cond) => {
+                lower_if_expr(builder, cond.as_ref(), body, elifs, else_body, span)
+            }
+            Condition::Let { .. } => {
+                Err(LowerError::new("if let should be lowered via lower_block"))
+            }
+        },
         Stmt::While {
             cond,
             body,
             else_body,
             span,
         } => {
-            let test = lower_expr(builder, cond)?;
+            let Condition::Expr(cond) = cond else {
+                return Err(LowerError::new(
+                    "while let should be lowered via lower_block",
+                ));
+            };
+            let test = lower_expr(builder, cond.as_ref())?;
             let body = lower_block(builder, body, span)?;
             let orelse = else_body
                 .as_ref()
@@ -340,7 +353,26 @@ pub(crate) fn lower_block_with_auto_print(
             stmts.extend(build_auto_print_block(builder, expr, span)?);
             continue;
         }
-        stmts.push(lower_stmt(builder, stmt)?);
+        match stmt {
+            Stmt::If {
+                cond,
+                body,
+                elifs,
+                else_body,
+                span,
+            } => {
+                stmts.extend(lower_if_chain(builder, cond, body, elifs, else_body, span)?);
+            }
+            Stmt::While {
+                cond,
+                body,
+                else_body,
+                span,
+            } => {
+                stmts.extend(lower_while_stmt(builder, cond, body, else_body, span)?);
+            }
+            _ => stmts.push(lower_stmt(builder, stmt)?),
+        }
     }
     if stmts.is_empty() {
         stmts.push(
@@ -352,25 +384,18 @@ pub(crate) fn lower_block_with_auto_print(
     Ok(stmts)
 }
 
-fn lower_if(
+fn lower_if_expr(
     builder: &AstBuilder<'_>,
     cond: &Expr,
     body: &[Stmt],
-    elifs: &[(Expr, Vec<Stmt>)],
+    elifs: &[(Condition, Vec<Stmt>)],
     else_body: &Option<Vec<Stmt>>,
     span: &SourceSpan,
 ) -> Result<PyObject, LowerError> {
     let test = lower_expr(builder, cond)?;
     let body = lower_block(builder, body, span)?;
     let orelse = if let Some((elif_cond, elif_body)) = elifs.first() {
-        vec![lower_if(
-            builder,
-            elif_cond,
-            elif_body,
-            &elifs[1..],
-            else_body,
-            span,
-        )?]
+        lower_if_chain(builder, elif_cond, elif_body, &elifs[1..], else_body, span)?
     } else if let Some(else_body) = else_body {
         lower_block(builder, else_body, span)?
     } else {
@@ -387,6 +412,431 @@ fn lower_if(
             span,
         )
         .map_err(py_err_to_lower)
+}
+
+fn lower_if_chain(
+    builder: &AstBuilder<'_>,
+    cond: &Condition,
+    body: &[Stmt],
+    elifs: &[(Condition, Vec<Stmt>)],
+    else_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    match cond {
+        Condition::Expr(cond) => Ok(vec![lower_if_expr(
+            builder,
+            cond.as_ref(),
+            body,
+            elifs,
+            else_body,
+            span,
+        )?]),
+        Condition::Let {
+            target,
+            value,
+            guard,
+            span: cond_span,
+        } => lower_if_let(
+            builder,
+            target.as_ref(),
+            value.as_ref(),
+            guard.as_ref().map(|expr| expr.as_ref()),
+            body,
+            elifs,
+            else_body,
+            cond_span,
+        ),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn lower_if_let(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+    value: &Expr,
+    guard: Option<&Expr>,
+    body: &[Stmt],
+    elifs: &[(Condition, Vec<Stmt>)],
+    else_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let mut stmts = Vec::new();
+    let value_expr = lower_expr(builder, value)?;
+    stmts.push(assign_name(builder, SNAIL_LET_VALUE, value_expr, span)?);
+
+    let try_node = build_destructure_try(builder, target, span)?;
+    if is_regex_match_expr(value) {
+        let test = name_expr(
+            builder,
+            SNAIL_LET_VALUE,
+            span,
+            builder.load_ctx().map_err(py_err_to_lower)?,
+        )?;
+        let groups_assign = build_groups_assign(builder, span)?;
+        let ok_false = assign_name(
+            builder,
+            SNAIL_LET_OK,
+            bool_constant(builder, false, span)?,
+            span,
+        )?;
+        let body_nodes = vec![groups_assign, try_node];
+        let orelse_nodes = vec![ok_false];
+        let if_node = builder
+            .call_node(
+                "If",
+                vec![
+                    test,
+                    PyList::new_bound(builder.py(), body_nodes).into_py(builder.py()),
+                    PyList::new_bound(builder.py(), orelse_nodes).into_py(builder.py()),
+                ],
+                span,
+            )
+            .map_err(py_err_to_lower)?;
+        stmts.push(if_node);
+    } else {
+        stmts.push(try_node);
+    }
+
+    let test = build_let_guard_test(builder, guard, span)?;
+    let body = lower_block(builder, body, span)?;
+    let orelse = if let Some((elif_cond, elif_body)) = elifs.first() {
+        lower_if_chain(builder, elif_cond, elif_body, &elifs[1..], else_body, span)?
+    } else if let Some(else_body) = else_body {
+        lower_block(builder, else_body, span)?
+    } else {
+        Vec::new()
+    };
+    let if_node = builder
+        .call_node(
+            "If",
+            vec![
+                test,
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    stmts.push(if_node);
+    Ok(stmts)
+}
+
+fn lower_while_stmt(
+    builder: &AstBuilder<'_>,
+    cond: &Condition,
+    body: &[Stmt],
+    else_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    match cond {
+        Condition::Expr(cond) => {
+            let test = lower_expr(builder, cond.as_ref())?;
+            let body = lower_block(builder, body, span)?;
+            let orelse = else_body
+                .as_ref()
+                .map(|items| lower_block(builder, items, span))
+                .transpose()?
+                .unwrap_or_default();
+            let while_node = builder
+                .call_node(
+                    "While",
+                    vec![
+                        test,
+                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                        PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            Ok(vec![while_node])
+        }
+        Condition::Let {
+            target,
+            value,
+            guard,
+            span: cond_span,
+        } => lower_while_let(
+            builder,
+            target.as_ref(),
+            value.as_ref(),
+            guard.as_ref().map(|expr| expr.as_ref()),
+            body,
+            else_body,
+            cond_span,
+        ),
+    }
+}
+
+fn lower_while_let(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+    value: &Expr,
+    guard: Option<&Expr>,
+    body: &[Stmt],
+    else_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let mut stmts = Vec::new();
+    stmts.push(assign_name(
+        builder,
+        SNAIL_LET_KEEP,
+        bool_constant(builder, true, span)?,
+        span,
+    )?);
+
+    let mut loop_body = Vec::new();
+    let value_expr = lower_expr(builder, value)?;
+    loop_body.push(assign_name(builder, SNAIL_LET_VALUE, value_expr, span)?);
+    loop_body.push(assign_name(
+        builder,
+        SNAIL_LET_OK,
+        bool_constant(builder, false, span)?,
+        span,
+    )?);
+
+    let try_node = build_destructure_try(builder, target, span)?;
+    if is_regex_match_expr(value) {
+        let test = name_expr(
+            builder,
+            SNAIL_LET_VALUE,
+            span,
+            builder.load_ctx().map_err(py_err_to_lower)?,
+        )?;
+        let groups_assign = build_groups_assign(builder, span)?;
+        let body_nodes = vec![groups_assign, try_node];
+        let if_node = builder
+            .call_node(
+                "If",
+                vec![
+                    test,
+                    PyList::new_bound(builder.py(), body_nodes).into_py(builder.py()),
+                    PyList::empty_bound(builder.py()).into_py(builder.py()),
+                ],
+                span,
+            )
+            .map_err(py_err_to_lower)?;
+        loop_body.push(if_node);
+    } else {
+        loop_body.push(try_node);
+    }
+
+    let test = build_let_guard_test(builder, guard, span)?;
+    let body = lower_block(builder, body, span)?;
+    let keep_false = assign_name(
+        builder,
+        SNAIL_LET_KEEP,
+        bool_constant(builder, false, span)?,
+        span,
+    )?;
+    let if_node = builder
+        .call_node(
+            "If",
+            vec![
+                test,
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![keep_false]).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    loop_body.push(if_node);
+
+    let test_expr = name_expr(
+        builder,
+        SNAIL_LET_KEEP,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let orelse = else_body
+        .as_ref()
+        .map(|items| lower_block(builder, items, span))
+        .transpose()?
+        .unwrap_or_default();
+    let while_node = builder
+        .call_node(
+            "While",
+            vec![
+                test_expr,
+                PyList::new_bound(builder.py(), loop_body).into_py(builder.py()),
+                PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    stmts.push(while_node);
+    Ok(stmts)
+}
+
+fn build_let_guard_test(
+    builder: &AstBuilder<'_>,
+    guard: Option<&Expr>,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let ok_expr = Expr::Name {
+        name: SNAIL_LET_OK.to_string(),
+        span: span.clone(),
+    };
+    let test_expr = if let Some(guard) = guard {
+        Expr::Binary {
+            left: Box::new(ok_expr),
+            op: BinaryOp::And,
+            right: Box::new(guard.clone()),
+            span: span.clone(),
+        }
+    } else {
+        ok_expr
+    };
+    lower_expr(builder, &test_expr)
+}
+
+fn build_destructure_try(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let target = lower_assign_target(builder, target)?;
+    let value_expr = name_expr(
+        builder,
+        SNAIL_LET_VALUE,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let assign = builder
+        .call_node(
+            "Assign",
+            vec![
+                PyList::new_bound(builder.py(), vec![target]).into_py(builder.py()),
+                value_expr,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    let ok_true = assign_name(
+        builder,
+        SNAIL_LET_OK,
+        bool_constant(builder, true, span)?,
+        span,
+    )?;
+    let ok_false = assign_name(
+        builder,
+        SNAIL_LET_OK,
+        bool_constant(builder, false, span)?,
+        span,
+    )?;
+    let handler = build_destructure_handler(builder, ok_false, span)?;
+    builder
+        .call_node(
+            "Try",
+            vec![
+                PyList::new_bound(builder.py(), vec![assign]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![handler]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![ok_true]).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn build_destructure_handler(
+    builder: &AstBuilder<'_>,
+    ok_false: PyObject,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let exc_type = build_destructure_exception_tuple(builder, span)?;
+    builder
+        .call_node(
+            "ExceptHandler",
+            vec![
+                exc_type,
+                builder.py().None().into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![ok_false]).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn build_destructure_exception_tuple(
+    builder: &AstBuilder<'_>,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let type_error = name_expr(
+        builder,
+        "TypeError",
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let value_error = name_expr(
+        builder,
+        "ValueError",
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    builder
+        .call_node(
+            "Tuple",
+            vec![
+                PyList::new_bound(builder.py(), vec![type_error, value_error])
+                    .into_py(builder.py()),
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn build_groups_assign(
+    builder: &AstBuilder<'_>,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let value_expr = name_expr(
+        builder,
+        SNAIL_LET_VALUE,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let attr = builder
+        .call_node(
+            "Attribute",
+            vec![
+                value_expr,
+                "groups".into_py(builder.py()),
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    let call = builder
+        .call_node(
+            "Call",
+            vec![
+                attr,
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    assign_name(builder, SNAIL_LET_VALUE, call, span)
+}
+
+fn bool_constant(
+    builder: &AstBuilder<'_>,
+    value: bool,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    builder
+        .call_node("Constant", vec![value.into_py(builder.py())], span)
+        .map_err(py_err_to_lower)
+}
+
+fn is_regex_match_expr(expr: &Expr) -> bool {
+    match expr {
+        Expr::RegexMatch { .. } => true,
+        Expr::Paren { expr, .. } => is_regex_match_expr(expr),
+        _ => false,
+    }
 }
 
 fn lower_parameters(

@@ -70,6 +70,8 @@ pairs = {"a": 1, "b": 2}
 pair = (1, 2)
 single = (1,)
 empty = ()
+coords = (3, 4)
+x, y = coords
 evens = [n for n in nums if n % 2 == 0]
 lookup = {n: n * 2 for n in nums if n > 1}
 raw_text = r"raw\\ntext"
@@ -133,6 +135,21 @@ while i < 4 {
     i = i + 1
 } else {
     loop_done = True
+}
+
+if let [user, domain] = "user@example.com" in /^([\w.]+)@([\w.]+)$/; user {
+    print(domain)
+}
+
+def next_pair(items, idx) {
+    if idx < len(items) { return items[idx] }
+    return None
+}
+
+pair_items = [[1, 2], [3, 4]]
+pair_idx = 0
+while let [left, right] = next_pair(pair_items, pair_idx) {
+    pair_idx = pair_idx + 1
 }
 
 for_done = False

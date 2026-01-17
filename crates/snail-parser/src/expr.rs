@@ -609,6 +609,21 @@ pub fn assign_target_from_expr(expr: Expr, source: &str) -> Result<AssignTarget,
         Expr::Name { name, span } => Ok(AssignTarget::Name { name, span }),
         Expr::Attribute { value, attr, span } => Ok(AssignTarget::Attribute { value, attr, span }),
         Expr::Index { value, index, span } => Ok(AssignTarget::Index { value, index, span }),
+        Expr::List { elements, span } => {
+            let elements = elements
+                .into_iter()
+                .map(|element| assign_target_from_expr(element, source))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(AssignTarget::List { elements, span })
+        }
+        Expr::Tuple { elements, span } => {
+            let elements = elements
+                .into_iter()
+                .map(|element| assign_target_from_expr(element, source))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(AssignTarget::Tuple { elements, span })
+        }
+        Expr::Paren { expr, .. } => assign_target_from_expr(*expr, source),
         other => {
             let span = expr_span(&other).clone();
             Err(error_with_span(

@@ -41,6 +41,8 @@ expected without conflict.
 ## Statements and expressions
 - Assignments mirror Python (`value = 1`). Multiple statements can be separated
   with semicolons.
+- Destructuring assignment works for tuples and lists:
+  `x, y = pair` and `[a, b] = items`.
 - Boolean operators, comparisons, membership checks, and arithmetic follow
   Python's precedence and short-circuiting rules.
 - Conditional expressions are supported: `fallback = "yes" if flag else "no"`.
@@ -123,6 +125,16 @@ while i < 4 {
     loop_done = True
 }
 ```
+
+`if let` and `while let` bind destructured values in the condition, optionally
+followed by a guard after a semicolon:
+```snail
+if let [user, domain] = "user@example.com" in /^([\w.]+)@([\w.]+)$/; domain {
+    print(domain)
+}
+```
+For regex matches, the destructuring value is the capture groups tuple
+(`match.groups()`), so the bindings correspond to capture groups.
 
 ## Comprehensions
 List and dict comprehensions match Python's structure:

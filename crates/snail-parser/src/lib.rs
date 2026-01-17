@@ -105,10 +105,10 @@ fn validate_stmt(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
             else_body,
             ..
         } => {
-            validate_expr(cond, source)?;
+            validate_condition(cond, source)?;
             validate_block(body, source)?;
             for (elif_cond, elif_body) in elifs {
-                validate_expr(elif_cond, source)?;
+                validate_condition(elif_cond, source)?;
                 validate_block(elif_body, source)?;
             }
             if let Some(body) = else_body {
@@ -121,7 +121,7 @@ fn validate_stmt(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
             else_body,
             ..
         } => {
-            validate_expr(cond, source)?;
+            validate_condition(cond, source)?;
             validate_block(body, source)?;
             if let Some(body) = else_body {
                 validate_block(body, source)?;
@@ -267,6 +267,31 @@ fn validate_assign_target(target: &AssignTarget, source: &str) -> Result<(), Par
         AssignTarget::Index { value, index, .. } => {
             validate_expr(value, source)?;
             validate_expr(index, source)
+        }
+        AssignTarget::Tuple { elements, .. } | AssignTarget::List { elements, .. } => {
+            for element in elements {
+                validate_assign_target(element, source)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_condition(cond: &Condition, source: &str) -> Result<(), ParseError> {
+    match cond {
+        Condition::Expr(expr) => validate_expr(expr, source),
+        Condition::Let {
+            target,
+            value,
+            guard,
+            ..
+        } => {
+            validate_assign_target(target, source)?;
+            validate_expr(value, source)?;
+            if let Some(guard) = guard {
+                validate_expr(guard, source)?;
+            }
+            Ok(())
         }
     }
 }

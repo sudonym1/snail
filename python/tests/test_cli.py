@@ -137,6 +137,43 @@ def test_placeholder_as_identifier(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "6\n"
 
 
+def test_if_let_regex_groups(capsys: pytest.CaptureFixture[str]) -> None:
+    script = (
+        'if let [user, domain] = "user@example.com" in /^([\\w.]+)@([\\w.]+)$/ '
+        '{ print(domain) } else { print("no") }'
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "example.com"
+
+
+def test_if_let_guard(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'if let x = 1; x == 2 { print("yes") } else { print("no") }'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "no"
+
+
+def test_while_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def next_item(items, idx) {",
+            "    if idx < len(items) { return items[idx] }",
+            "    return None",
+            "}",
+            'items = [[1, "a"], [2, "b"]]',
+            "i = 0",
+            "while let [n, s] = next_item(items, i) {",
+            "    print(s)",
+            "    i = i + 1",
+            "}",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "a\nb\n"
+
+
 def test_awk_mode(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

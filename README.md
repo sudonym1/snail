@@ -172,7 +172,7 @@ snail 'js($(curl -s https://api.github.com/repos/sudonym1/snail)) | $[stargazers
 snail 'result = int("oops"):"bad int {$e}"?; print(result)'
 
 # Regex match and capture
-snail 'm = "user@example.com" in /^[\\w.]+@([\\w.]+)$/; if m { print(m[1]) }'
+snail 'm = "user@example.com" in /^[\w.]+@([\w.]+)$/; if m { print(m[1]) }'
 
 # Awk mode: print line numbers for matches
 rg -n "TODO" README.md | snail --awk '/TODO/ { print("{$n}: {$0}") }'
