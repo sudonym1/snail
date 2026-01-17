@@ -1,4 +1,4 @@
-use crate::utils::{dummy_span, Size};
+use crate::utils::{Size, dummy_span};
 use proptest::prelude::*;
 use snail_ast::*;
 
