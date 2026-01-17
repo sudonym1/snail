@@ -199,21 +199,9 @@ snail 'if let [_, user, domain] = "user@example.com" in /^[\w.]+@([\w.]+)$/ { pr
 rg -n "TODO" README.md | snail --awk '/TODO/ { print("{$n}: {$0}") }'
 ```
 
-## 🏗️ Architecture
-
-**Key Components:**
-
-- **Parser**: Uses [Pest](https://pest.rs/) parser generator with PEG grammar defined in `src/snail.pest`
-- **AST**: Separate representations for regular Snail (`Program`) and awk mode (`AwkProgram`) with source spans for error reporting
-- **Lowering**: Transforms Snail AST into Python AST, emitting helper calls backed by `snail.runtime`
-  - `?` operator → `__snail_compact_try`
-  - `$(cmd)` subprocess capture → `__SnailSubprocessCapture`
-  - `@(cmd)` subprocess status → `__SnailSubprocessStatus`
-  - Regex literals → `__snail_regex_search` and `__snail_regex_compile`
-- **Execution**: Compiles Python AST directly for in-process execution
-- **CLI**: Python wrapper (`python/snail/cli.py`) that executes via the extension module
-
 ## 📚 Documentation
+
+Documentation is WIP
 
 - **[Language Reference](docs/REFERENCE.md)** — Complete syntax and semantics
 - **[examples/all_syntax.snail](examples/all_syntax.snail)** — Every feature in one file
