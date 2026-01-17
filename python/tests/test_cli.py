@@ -206,6 +206,57 @@ def test_regex_match_tuple(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "IJ\nI\nJ\n0\n"
 
 
+def test_compiled_regex_object(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "pat = /ab(c)/",
+            "print(pat.search('zabc')[1])",
+            'm = "abc" in pat',
+            "print(m[0])",
+            "print(m[1])",
+            'print(len("zzz" in pat))',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "c\nabc\nc\n0\n"
+
+
+def test_contains_not_in(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "pat = /ab(c)/",
+            "print('abc' not in pat)",
+            "print('zzz' not in pat)",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "False\nTrue\n"
+
+
+def test_chained_in_short_circuit(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "hits = [0]",
+            "pat = /a/",
+            "def bump() {",
+            "    hits[0] = hits[0] + 1",
+            "    return [pat]",
+            "}",
+            'print("a" in pat in bump())',
+            "print(hits[0])",
+            "hits[0] = 0",
+            "pat = /z/",
+            'print("a" in pat in bump())',
+            "print(hits[0])",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "True\n1\n()\n0\n"
+
+
 def test_awk_mode(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -189,6 +189,145 @@ fn lower_regex_pattern_expr(
     }
 }
 
+fn lower_contains_call(
+    builder: &AstBuilder<'_>,
+    helper_name: &str,
+    left: PyObject,
+    right: PyObject,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let func = name_expr(
+        builder,
+        helper_name,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let args = vec![left, right];
+    builder
+        .call_node(
+            "Call",
+            vec![
+                func,
+                PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn lower_compare_pair(
+    builder: &AstBuilder<'_>,
+    left: PyObject,
+    op: CompareOp,
+    right: PyObject,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    match op {
+        CompareOp::In => lower_contains_call(builder, SNAIL_CONTAINS_HELPER, left, right, span),
+        CompareOp::NotIn => {
+            lower_contains_call(builder, SNAIL_CONTAINS_NOT_HELPER, left, right, span)
+        }
+        _ => {
+            let op = lower_compare_op(builder, op)?;
+            builder
+                .call_node(
+                    "Compare",
+                    vec![
+                        left,
+                        PyList::new_bound(builder.py(), vec![op]).into_py(builder.py()),
+                        PyList::new_bound(builder.py(), vec![right]).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+    }
+}
+
+fn named_expr(
+    builder: &AstBuilder<'_>,
+    name: &str,
+    value: PyObject,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let target = name_expr(
+        builder,
+        name,
+        span,
+        builder.store_ctx().map_err(py_err_to_lower)?,
+    )?;
+    builder
+        .call_node("NamedExpr", vec![target, value], span)
+        .map_err(py_err_to_lower)
+}
+
+fn lower_compare_chain(
+    builder: &AstBuilder<'_>,
+    left: &Expr,
+    ops: &[CompareOp],
+    comparators: &[Expr],
+    span: &SourceSpan,
+    exception_name: Option<&str>,
+) -> Result<PyObject, LowerError> {
+    if ops.len() != comparators.len() {
+        return Err(LowerError::new(
+            "comparison ops must match comparator count",
+        ));
+    }
+    if ops.is_empty() {
+        return Err(LowerError::new("comparison missing operator"));
+    }
+
+    let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
+    let right_expr = lower_expr_with_exception(builder, &comparators[0], exception_name)?;
+    let left_named = named_expr(builder, SNAIL_COMPARE_LEFT, left_expr, span)?;
+    let right_named = named_expr(builder, SNAIL_COMPARE_RIGHT, right_expr, span)?;
+    let mut comparisons = Vec::with_capacity(ops.len());
+    comparisons.push(lower_compare_pair(
+        builder,
+        left_named,
+        ops[0],
+        right_named,
+        span,
+    )?);
+
+    for (index, op) in ops.iter().enumerate().skip(1) {
+        let prev_right = name_expr(
+            builder,
+            SNAIL_COMPARE_RIGHT,
+            span,
+            builder.load_ctx().map_err(py_err_to_lower)?,
+        )?;
+        let left_named = named_expr(builder, SNAIL_COMPARE_LEFT, prev_right, span)?;
+        let right_expr = lower_expr_with_exception(builder, &comparators[index], exception_name)?;
+        let right_named = named_expr(builder, SNAIL_COMPARE_RIGHT, right_expr, span)?;
+        comparisons.push(lower_compare_pair(
+            builder,
+            left_named,
+            *op,
+            right_named,
+            span,
+        )?);
+    }
+
+    if comparisons.len() == 1 {
+        return Ok(comparisons.remove(0));
+    }
+
+    let op = lower_bool_op(builder, BinaryOp::And)?;
+    builder
+        .call_node(
+            "BoolOp",
+            vec![
+                op,
+                PyList::new_bound(builder.py(), comparisons).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
 fn lower_fstring_parts(
     builder: &AstBuilder<'_>,
     parts: &[FStringPart],
@@ -477,26 +616,14 @@ pub(crate) fn lower_expr_with_exception(
             comparators,
             span,
         } => {
-            let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
-            let ops = ops
-                .iter()
-                .map(|op| lower_compare_op(builder, *op))
-                .collect::<Result<Vec<_>, _>>()?;
-            let comparators = comparators
-                .iter()
-                .map(|expr| lower_expr_with_exception(builder, expr, exception_name))
-                .collect::<Result<Vec<_>, _>>()?;
-            builder
-                .call_node(
-                    "Compare",
-                    vec![
-                        left_expr,
-                        PyList::new_bound(builder.py(), ops).into_py(builder.py()),
-                        PyList::new_bound(builder.py(), comparators).into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
+            if ops.len() == 1 {
+                let left_expr = lower_expr_with_exception(builder, left, exception_name)?;
+                let right_expr =
+                    lower_expr_with_exception(builder, &comparators[0], exception_name)?;
+                lower_compare_pair(builder, left_expr, ops[0], right_expr, span)
+            } else {
+                lower_compare_chain(builder, left, ops, comparators, span, exception_name)
+            }
         }
         Expr::IfExpr {
             test,

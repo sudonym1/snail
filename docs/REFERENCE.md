@@ -185,7 +185,9 @@ Use regex literals for concise searches:
 - `string in /<pattern>/` runs `re.search` and returns a tuple containing the
   full match followed by capture groups (`()` when there is no match), so
   truthiness checks work naturally.
-- `/pattern/` alone produces a compiled regex object you can reuse.
+- `/pattern/` alone produces a Snail regex object with a `search` method that
+  returns the same tuple. You can also use `"value" in pattern` to return the
+  same tuple (or `()` when there is no match).
 - Regex literals are treated as raw strings and do not interpolate `{}`
   expressions, so backslashes stay intact.
 - Escape `/` inside the pattern as `\/`.
@@ -195,6 +197,16 @@ In awk mode, regex patterns can stand alone. A bare `/pattern/` matches against
 block.
 Numeric group access is available via attribute shorthand: `$m.1` maps to
 `$m[1]`.
+
+## Containment hooks
+Snail can delegate `in` checks to user-defined hooks:
+
+- `left in right` calls `right.__snail_contains__(left)` when present and
+  returns its value (truthiness is used for conditionals).
+- `left not in right` calls `right.__snail_contains__(left)` when present and
+  returns `not bool(result)` as a Python `bool`.
+- When `__snail_contains__` is absent, Snail falls back to Python `in` and
+  `not in` semantics.
 
 ## Subprocess expressions
 Snail provides succinct subprocess helpers that work seamlessly with the pipeline

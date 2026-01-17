@@ -47,7 +47,6 @@ END { print("Sum:", total); assert total == 15}
 
 Built-in variables: `$0` (line), `$1`, `$2` etc (access fields), `$n` (line number), `$fn` (per-file line number), `$p` (file path), `$m` (last match).
 
-
 ### Compact Error Handling
 
 The `?` operator makes error handling terse yet expressive:
@@ -68,6 +67,25 @@ exception_info = fetch_url("example.com"):$e.http_response_code?
 name = risky("")?.__class__.__name__
 args = risky("becomes a list"):[1,2,3]?[0]
 ```
+
+### Destructuring + `if let` / `while let`
+
+Unpack tuples and lists directly, including Python-style rest bindings:
+
+```snail
+x, *xs = [1, 2, 3]
+
+if let [head, *tail] = [1, 2, 3]; head > 0 {
+    print(head, tail)
+}
+```
+
+`if let`/`while let` only enter the block when the destructuring succeeds. A guard
+after `;` lets you add a boolean check that runs after the bindings are created.
+
+Note that this syntax is more powerful than the walrus operator as that does
+not allow for destructuring.
+
 
 ### Pipeline Operator
 
@@ -132,9 +150,12 @@ if bad_email in /^[\w.]+@[\w.]+$/ {
 # Compiled regex for reuse
 pattern = /\d{3}-\d{4}/
 match = pattern.search(phone)
+match2 = "555-1212" in pattern
 ```
 
-NOTE: this feature is WIP.
+Snail regexes don't return a match object, rather they return a tuple
+containing all of the match groups, including group 0. Both `search` and `in`
+return the same tuple (or `()` when there is no match).
 
 ### JSON Queries with JMESPath
 
@@ -172,7 +193,7 @@ snail 'js($(curl -s https://api.github.com/repos/sudonym1/snail)) | $[stargazers
 snail 'result = int("oops"):"bad int {$e}"?; print(result)'
 
 # Regex match and capture
-snail 'm = "user@example.com" in /^[\w.]+@([\w.]+)$/; if m { print(m[1]) }'
+snail 'if let [_, user, domain] = "user@example.com" in /^[\w.]+@([\w.]+)$/ { print(domain) }'
 
 # Awk mode: print line numbers for matches
 rg -n "TODO" README.md | snail --awk '/TODO/ { print("{$n}: {$0}") }'
