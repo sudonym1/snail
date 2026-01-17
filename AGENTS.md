@@ -55,6 +55,10 @@ cargo clippy -- -D warnings
 cargo build --features run-proptests
 ```
 
+## Planning Requirements
+
+**CRITICAL**: When creating a medium or large plan, you must save it to `plans/` as a Markdown file. This is required. The plan must include enough detail to execute later with no additional context (assumptions, steps, commands, and verification).
+
 ## Property-Based Testing (Proptests)
 
 The `snail-proptest` crate contains property-based tests using the proptest framework. These tests are **skipped by default** during `cargo test` to keep development iteration fast.
