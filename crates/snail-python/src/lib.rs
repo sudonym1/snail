@@ -3,11 +3,13 @@
 use pyo3::Bound;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule};
+use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
 use snail_core::{
     CompileMode, compile_snail_source_with_auto_print, format_snail_error, parse_awk_program,
     parse_program,
 };
+
+const SNAIL_TRACE_PREFIX: &str = "snail:";
 
 fn parse_mode(mode: &str) -> PyResult<CompileMode> {
     match mode {
@@ -17,6 +19,53 @@ fn parse_mode(mode: &str) -> PyResult<CompileMode> {
             "unknown mode: {mode} (expected 'snail' or 'awk')"
         ))),
     }
+}
+
+fn display_filename(filename: &str) -> String {
+    if filename.starts_with(SNAIL_TRACE_PREFIX) {
+        filename.to_string()
+    } else {
+        format!("{SNAIL_TRACE_PREFIX}{filename}")
+    }
+}
+
+fn strip_display_prefix(filename: &str) -> &str {
+    filename
+        .strip_prefix(SNAIL_TRACE_PREFIX)
+        .unwrap_or(filename)
+}
+
+fn split_source_lines(source: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    for (idx, ch) in source.char_indices() {
+        if ch == '\n' {
+            let end = idx + 1;
+            lines.push(source[start..end].to_string());
+            start = end;
+        }
+    }
+    if start < source.len() {
+        lines.push(source[start..].to_string());
+    }
+    lines
+}
+
+fn register_linecache(py: Python<'_>, filename: &str, source: &str) -> PyResult<()> {
+    let linecache = py.import_bound("linecache")?;
+    let cache = linecache.getattr("cache")?;
+    let lines = split_source_lines(source);
+    let entry = PyTuple::new_bound(
+        py,
+        vec![
+            source.len().into_py(py),
+            py.None().into_py(py),
+            PyList::new_bound(py, lines).into_py(py),
+            filename.into_py(py),
+        ],
+    );
+    cache.set_item(filename, entry)?;
+    Ok(())
 }
 
 fn compile_source(
@@ -74,10 +123,12 @@ fn compile_py(
 ) -> PyResult<PyObject> {
     let mode = parse_mode(mode)?;
     let python_ast = compile_source(py, source, mode, auto_print, filename)?;
+    let display = display_filename(filename);
+    register_linecache(py, &display, source)?;
     let builtins = py.import_bound("builtins")?;
     let code = builtins
         .getattr("compile")?
-        .call1((python_ast, filename, "exec"))?;
+        .call1((python_ast, display, "exec"))?;
     Ok(code.unbind())
 }
 
@@ -94,11 +145,13 @@ fn exec_py(
 ) -> PyResult<i32> {
     let mode = parse_mode(mode)?;
     let python_ast = compile_source(py, source, mode, auto_print, filename)?;
+    let display = display_filename(filename);
+    register_linecache(py, &display, source)?;
     let builtins = py.import_bound("builtins")?;
     let code = builtins
         .getattr("compile")?
-        .call1((python_ast, filename, "exec"))?;
-    let globals = prepare_globals(py, filename, &argv, auto_import)?;
+        .call1((python_ast, display, "exec"))?;
+    let globals = prepare_globals(py, strip_display_prefix(filename), &argv, auto_import)?;
 
     match builtins.getattr("exec")?.call1((code.as_any(), &globals)) {
         Ok(_) => Ok(0),
