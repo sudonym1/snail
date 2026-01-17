@@ -122,9 +122,9 @@ syn match snailExceptionVar "\$e\>"
 " AWK field index variables: $0, $1, $2, etc.
 syn match snailFieldVar "\$\d\+"
 
-" Injected AWK variables: $l, $f, $n, $fn, $p, $m
+" Injected AWK variables: $n, $fn, $p, $m
 syn match snailInjectedVar "\$fn\>"
-syn match snailInjectedVar "\$[lfnpm]\>"
+syn match snailInjectedVar "\$[npm]\>"
 
 " =============================================================================
 " SNAIL-SPECIFIC: SUBPROCESS SYNTAX

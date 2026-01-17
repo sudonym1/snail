@@ -86,7 +86,7 @@ pub fn parse_awk_program(source: &str) -> Result<AwkProgram, ParseError> {
     })
 }
 
-const AWK_ONLY_NAMES: [&str; 6] = ["$l", "$f", "$n", "$fn", "$p", "$m"];
+const AWK_ONLY_NAMES: [&str; 4] = ["$n", "$fn", "$p", "$m"];
 const AWK_ONLY_MESSAGE: &str = "awk variables are only valid in awk mode; use --awk";
 
 fn validate_no_awk_syntax(program: &Program, source: &str) -> Result<(), ParseError> {

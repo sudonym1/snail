@@ -175,7 +175,7 @@ snail 'result = int("oops"):"bad int {$e}"?; print(result)'
 snail 'm = "user@example.com" in /^[\\w.]+@([\\w.]+)$/; if m { print(m[1]) }'
 
 # Awk mode: print line numbers for matches
-rg -n "TODO" README.md | snail --awk '/TODO/ { print("{$n}: {$l}") }'
+rg -n "TODO" README.md | snail --awk '/TODO/ { print("{$n}: {$0}") }'
 ```
 
 ## 🏗️ Architecture

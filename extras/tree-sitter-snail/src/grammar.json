@@ -1,4 +1,5 @@
 {
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
   "name": "snail",
   "word": "identifier",
   "rules": {
@@ -2173,10 +2174,6 @@
         },
         {
           "type": "SYMBOL",
-          "name": "set_literal"
-        },
-        {
-          "type": "SYMBOL",
           "name": "tuple_literal"
         },
         {
@@ -2652,51 +2649,6 @@
         }
       ]
     },
-    "set_literal": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "{"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_expr"
-        },
-        {
-          "type": "REPEAT",
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "STRING",
-                "value": ","
-              },
-              {
-                "type": "SYMBOL",
-                "name": "_expr"
-              }
-            ]
-          }
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "STRING",
-              "value": ","
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        },
-        {
-          "type": "STRING",
-          "value": "}"
-        }
-      ]
-    },
     "dict_entry": {
       "type": "SEQ",
       "members": [
@@ -2807,14 +2759,6 @@
         {
           "type": "STRING",
           "value": "$fn"
-        },
-        {
-          "type": "STRING",
-          "value": "$l"
-        },
-        {
-          "type": "STRING",
-          "value": "$f"
         },
         {
           "type": "STRING",
@@ -3172,10 +3116,6 @@
       "tuple_literal"
     ],
     [
-      "set_literal",
-      "dict_literal"
-    ],
-    [
       "_stmt_sep"
     ],
     [
@@ -3214,14 +3154,11 @@
     ],
     [
       "block"
-    ],
-    [
-      "expr_stmt",
-      "set_literal"
     ]
   ],
   "precedences": [],
   "externals": [],
   "inline": [],
-  "supertypes": []
+  "supertypes": [],
+  "reserved": {}
 }

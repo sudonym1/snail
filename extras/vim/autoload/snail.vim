@@ -159,7 +159,7 @@ function! snail#complete(findstart, base) abort
     " Find start of word
     let l:line = getline('.')
     let l:start = col('.') - 1
-    while l:start > 0 && l:line[l:start - 1] =~# '\w'
+    while l:start > 0 && l:line[l:start - 1] =~# '\w\|\$'
       let l:start -= 1
     endwhile
     return l:start
@@ -180,7 +180,7 @@ function! snail#complete(findstart, base) abort
           \ 'min', 'max', 'sum', 'sorted', 'reversed', 'enumerate',
           \ 'zip', 'map', 'filter', 'any', 'all', 'json',
           \ ]
-    let l:snail_vars = ['$e', '$l', '$f', '$n', '$fn', '$p', '$m']
+    let l:snail_vars = ['$e', '$0', '$1', '$n', '$fn', '$p', '$m']
     
     let l:matches = []
     for l:word in l:keywords + l:builtins + l:snail_vars
@@ -194,4 +194,3 @@ endfunction
 
 let &cpo = s:save_cpo
 unlet s:save_cpo
-

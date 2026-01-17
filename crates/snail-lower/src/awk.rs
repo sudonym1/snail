@@ -427,8 +427,8 @@ fn regex_pattern_components(pattern: &Expr) -> Option<(Expr, RegexPattern, Sourc
             span,
         } => Some((*value.clone(), pattern.clone(), span.clone())),
         Expr::Regex { pattern, span } => Some((
-            Expr::Name {
-                name: SNAIL_AWK_LINE.to_string(),
+            Expr::FieldIndex {
+                index: "0".to_string(),
                 span: span.clone(),
             },
             pattern.clone(),

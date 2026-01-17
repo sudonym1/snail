@@ -206,7 +206,7 @@ none = { "None" }
 // Special variables: exception, AWK fields, injected vars
 exception_var = { "$e" }
 field_index_var = @{ "$" ~ ASCII_DIGIT+ }
-injected_var = { "$fn" | "$l" | "$f" | "$n" | "$p" | "$m" }
+injected_var = { "$fn" | "$n" | "$p" | "$m" }
 
 // Number, string, and regex literals
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
