@@ -224,7 +224,7 @@ stdin.
 
 ## JSON queries
 Snail provides first-class JSON support through JMESPath queries using the
-`js()` function and `$[query]` structured pipeline accessor syntax:
+`js()` function and `$[query]` structured pipeline accessor syntax.
 
 ```snail
 # Parse JSON and query with $[jmespath]
