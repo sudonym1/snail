@@ -191,7 +191,7 @@ tuple_literal = { "(" ~ ")" | "(" ~ expr ~ "," ~ (expr ~ ("," ~ expr)* ~ ","?)? 
 list_comp = { "[" ~ expr ~ comp_for ~ "]" }
 list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
 dict_comp = { "{" ~ expr ~ ":" ~ expr ~ comp_for ~ "}" }
-dict_literal = { "{" ~ (dict_entry ~ ("," ~ dict_entry)*)? ~ "}" }
+dict_literal = { "{" ~ dict_entry ~ ("," ~ dict_entry)* ~ "}" }
 dict_entry = { expr ~ ":" ~ expr }
 
 // Comprehension clauses
