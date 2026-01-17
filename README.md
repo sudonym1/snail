@@ -27,7 +27,7 @@ That installs the `snail` CLI for your user; try it with `snail "print('hello')"
 
 ### Curly Braces, Not Indentation
 
-Write Python logic without worrying about tabs vs spaces:
+Write Python logic without worrying about whitespace:
 
 ```snail
 def process(items) {
@@ -38,69 +38,48 @@ def process(items) {
 }
 ```
 
-### Built-in Subprocess Pipelines
+Note, since it is jarring to write python with semicolons everywhere,
+semicolons are optional. You can separate statements with newlines.
 
-Shell commands are first-class citizens with `$()` capture and `|` piping:
+### Awk Mode
 
-```snail
-# Capture command output with interpolation
-name = "world"
-greeting = $(echo hello {name})
+Process files line-by-line with familiar awk semantics:
 
-# Pipe data through commands
-result = "foo\nbar\nbaz" | $(grep bar) | $(cat -n)
-
-# Check command status
-@(make build)?  # returns exit code on failure instead of raising
+```snail-awk("5\n4\n3\n2\n1\nbanana\n")
+BEGIN { total = 0 }
+/^[0-9]+/ { total = total + int($1) }
+END { print("Sum:", total); assert total == 15}
 ```
+
+Built-in variables: `$l` (line), `$f` (fields), `$n` (line number), `$fn` (per-file line number), `$p` (file path), `$m` (last match).
+
 
 ### Compact Error Handling
 
 The `?` operator makes error handling terse yet expressive:
 
 ```snail
-# Swallow exception, get the error object
-err = risky_operation()?
+# Swallow exception, return None
+err = risky()?
+
+# Swallow exception, return exception object
+err = risky():$e?
 
 # Provide a fallback value (exception available as $e)
-value = js(data):{}?
-details = fetch_url(url):"Error: {$e}"?
+value = js("malformed json"):{}?
+details = fetch_url("foo.com"):"default html"?
+exception_info = fetch_url("example.com"):$e.http_response_code?
 
 # Access attributes directly
-name = risky()?.__class__.__name__
-args = risky()?.args[0]
+name = risky("")?.__class__.__name__
+args = risky("becomes a list"):[1,2,3]?[0]
 ```
-
-### Regex Literals
-
-Pattern matching without `import re`:
-
-```snail
-if email in /^[\w.]+@[\w.]+$/ {
-    print("Valid email")
-}
-
-# Compiled regex for reuse
-pattern = /\d{3}-\d{4}/
-match = pattern.search(phone)
-```
-
-### Awk Mode
-
-Process files line-by-line with familiar awk semantics:
-
-```snail
-#!/usr/bin/env -S snail --awk -f
-BEGIN { total = 0 }
-/^[0-9]+/ { total = total + int($f[0]) }
-END { print("Sum:", total) }
-```
-
-Built-in variables: `$l` (line), `$f` (fields), `$n` (line number), `$fn` (per-file line number), `$p` (file path), `$m` (last match).
 
 ### Pipeline Operator
 
-The `|` operator enables data pipelining through pipeline-aware callables:
+The `|` operator enables data pipelining as syntactic sugar for nested
+function calls. `x | y | z` becomes `z(y(x))`. This lets you stay in a
+shell mindset.
 
 ```snail
 # Pipe data to subprocess stdin
@@ -114,8 +93,11 @@ class Doubler {
     def __call__(self, x) { return x * 2 }
 }
 doubled = 21 | Doubler()  # yields 42
+```
 
-# Use placeholders to control where piped values land in calls
+Arbitrary callables make up pipelines, even if they have multiple parameters.
+Snail supports this via placeholders.
+```snail
 greeting = "World" | greet("Hello ", _)  # greet("Hello ", "World")
 excited = "World" | greet(_, "!")        # greet("World", "!")
 formal = "World" | greet("Hello ", suffix=_)  # greet("Hello ", "World")
@@ -127,34 +109,61 @@ the piped value at that position (including keyword arguments). Only one
 placeholder is allowed in a piped call. Outside of pipeline calls, `_` remains a
 normal identifier.
 
+### Built-in Subprocess
+
+Shell commands are first-class citizens with capturing and non-capturing
+forms.
+
+```snail
+# Capture command output with interpolation
+greeting = $(echo hello {name})
+
+# Pipe data through commands
+result = "foo\nbar\nbaz" | $(grep bar) | $(cat -n)
+
+# Check command status
+@(make build)?  # returns exit code on failure instead of raising
+```
+
+
+### Regex Literals
+
+Snail supports first class patterns. Think of them as an infinte set.
+
+```snail
+if bad_email in /^[\w.]+@[\w.]+$/ {
+    print("Valid email")
+}
+
+# Compiled regex for reuse
+pattern = /\d{3}-\d{4}/
+match = pattern.search(phone)
+```
+
+NOTE: this feature is WIP.
+
 ### JSON Queries with JMESPath
 
 Parse and query JSON data with the `js()` function and structured pipeline accessor:
 
 ```snail
 # Parse JSON and query with $[jmespath]
-data = js($(curl -s api.example.com/users))
-names = data | $[users[*].name]
-first_email = data | $[users[0].email]
+
+# JSON query with JMESPath
+data = js($(curl -s https://api.github.com/repos/sudonym1/snail))
+counts = data | $[stargazers_count]
 
 # Inline parsing and querying
-result = js('{"foo": 12}') | $[foo]
+result = js('{{"foo": 12}}') | $[foo]
 
 # JSONL parsing returns a list
-names = js('{"name": "Ada"}\n{"name": "Lin"}') | $[[*].name]
+names = js('{{"name": "Ada"}}\n{{"name": "Lin"}}') | $[[*].name]
 ```
 
 ### Full Python Interoperability
 
-Snail compiles to Python AST—import any Python module, use any library:
-
-```snail
-import pandas as pd
-from pathlib import Path
-
-df = pd.read_csv(Path("data.csv"))
-filtered = df[df["value"] > 100]
-```
+Snail compiles to Python AST—import any Python module, use any library, in any
+environment. Assuming that you are using Python 3.10 or later.
 
 ## 🚀 Quick Start
 
@@ -176,52 +185,6 @@ rg -n "TODO" README.md | snail --awk '/TODO/ { print("{$n}: {$l}") }'
 ```
 
 ## 🏗️ Architecture
-
-Snail compiles to Python through a multi-stage pipeline:
-
-```mermaid
-flowchart TB
-    subgraph Input
-        A[Snail Source Code]
-    end
-
-    subgraph Parsing["Parsing (Pest PEG Parser)"]
-        B1[crates/snail-parser/src/snail.pest<br/>Grammar Definition]
-        B2[crates/snail-parser/<br/>Parser Implementation]
-    end
-
-    subgraph AST["Abstract Syntax Tree"]
-        C1[crates/snail-ast/src/ast.rs<br/>Program AST]
-        C2[crates/snail-ast/src/awk.rs<br/>AwkProgram AST]
-    end
-
-    subgraph Lowering["Lowering"]
-        D1[crates/snail-lower/<br/>AST → Python AST Transform]
-        D2[python/snail/runtime/<br/>Runtime Helpers]
-    end
-
-    subgraph Execution
-        E1[python/snail/cli.py<br/>CLI Interface]
-        E2[pyo3 extension<br/>in-process exec]
-    end
-
-    A -->|Regular Mode| B1
-    A -->|Awk Mode| B1
-    B1 --> B2
-    B2 -->|Regular| C1
-    B2 -->|Awk| C2
-    C1 --> D1
-    C2 --> D1
-    D1 --> D2
-    D1 --> E1
-    D2 --> E1
-    E1 --> E2
-    E2 --> F[Python Execution]
-
-    style A fill:#e1f5ff
-    style F fill:#e1ffe1
-    style D2 fill:#fff4e1
-```
 
 **Key Components:**
 
@@ -267,90 +230,16 @@ Installation per platform:
 
 **No Python packages required**: Snail vendors jmespath under `snail.vendor`.
 
-**Rust toolchain** (cargo and rustc)
-
-Install Rust using [rustup](https://rustup.rs):
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-This installs `cargo` (Rust's package manager) and `rustc` (the Rust compiler). After installation, restart your shell or run:
-
-```bash
-source $HOME/.cargo/env
-```
-
-Verify installation:
-
-```bash
-cargo --version  # Should show cargo 1.70+
-rustc --version  # Should show rustc 1.70+
-python3 --version  # Should show Python 3.10+
-```
-
-**maturin** (build tool)
-
-```bash
-pip install maturin
-```
-
-### Build and Install
+### Build, Test, and Install
 
 ```bash
 # Clone the repository
 git clone https://github.com/sudonym1/snail.git
 cd snail
 
-# Create and activate a venv (recommended)
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Build and install into the venv
-maturin develop
-
-# Or build wheels for distribution
-maturin build --release
+make test
+make install
 ```
 
-### Running Tests
 
-```bash
-# Run all Rust tests (parser, lowering, awk mode; excludes proptests by default)
-cargo test
-
-# Run tests including property-based tests (proptests)
-cargo test --features run-proptests
-
-# Check code formatting and linting
-cargo fmt --check
-cargo clippy -- -D warnings
-
-# Build with all features enabled (required before committing)
-cargo build --features run-proptests
-
-# Run Python CLI tests
-python -m pytest python/tests
-```
-
-**Note on Proptests**: The `snail-proptest` crate contains property-based tests that are skipped by default to keep development iteration fast. Use `--features run-proptests` to run them. Before committing, verify that `cargo build --features run-proptests` compiles successfully.
-
-### Troubleshooting
-
-**Using with virtual environments:**
-
-Activate the environment before running snail so it uses the same interpreter:
-
-```bash
-# Create and activate a venv
-python3 -m venv myenv
-source myenv/bin/activate  # On Windows: myenv\Scripts\activate
-
-# Install and run
-pip install snail-lang
-snail "import sys; print(sys.prefix)"
-```
-
-## 📋 Project Status
-
-See [docs/PLANNING.md](docs/PLANNING.md) for the development roadmap.
+**Note on Proptests**: The `snail-proptest` crate contains property-based tests that are skipped by default to keep development iteration fast.

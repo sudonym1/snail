@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import ast
 import re
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,9 +20,24 @@ if importlib.util.find_spec("snail._native") is None:
 
 from snail.cli import main
 
+README_SNIPPET_PREAMBLE = """
+def risky(*args, fail=False) { if fail { raise Exception(fail) } else { return args } }
+def fetch_url(x) { return None }
+def greet(*args, **kwargs) { print(*args) }
+name = "world"
+bad_email = "bad@@email"
+phone = "867-5309"
+"""
 
 def test_parse_only() -> None:
     assert main(["--parse-only", "x = 1"]) == 0
+
+
+@pytest.fixture(autouse=True)
+def _stdin_devnull(monkeypatch: pytest.MonkeyPatch) -> None:
+    with open("/dev/null", "r") as handle:
+        monkeypatch.setattr(sys, "stdin", handle)
+        yield
 
 
 def test_no_print(capsys: pytest.CaptureFixture[str]) -> None:
@@ -195,31 +212,86 @@ def test_example_awk(
     assert "demo end" in captured.out
 
 
-def _extract_snail_commands(line: str) -> str | None:
-    line = line.strip()
-    if not line or line.startswith("#"):
+def _snail_block_to_source(block: str) -> str | None:
+    lines = block.splitlines()
+    if lines and lines[0].startswith("#!"):
+        lines = lines[1:]
+    source = "\n".join(lines).strip()
+    if not source:
         return None
-    if "| snail" in line:
-        line = line.split("| snail", 1)[1].strip()
-        if not line.startswith("snail"):
-            line = f"snail {line}"
-    if line.startswith("uv run -- snail "):
-        line = line[len("uv run -- ") :]
-    if not line.startswith("snail "):
-        return None
-    return line
+    return source
 
 
-def _argv_from_snail_command(command: str) -> list[str] | None:
+def _parse_snail_header(header: str) -> tuple[str, str | None]:
+    if header == "snail":
+        return ("snail", None)
+    if header.startswith("snail-awk"):
+        if header == "snail-awk":
+            return ("snail-awk", None)
+        if header.startswith("snail-awk(") and header.endswith(")"):
+            raw = header[len("snail-awk(") : -1].strip()
+            if not raw:
+                return ("snail-awk", "")
+            try:
+                value = ast.literal_eval(raw)
+            except (SyntaxError, ValueError) as exc:
+                raise ValueError(f"invalid snail-awk stdin header: {header}") from exc
+            if not isinstance(value, str):
+                raise ValueError(f"snail-awk stdin must be a string: {header}")
+            return ("snail-awk", value)
+    raise ValueError(f"unsupported README fence: {header}")
+
+
+def _collect_readme_snail_sources(path: Path) -> list[tuple[str, int, str, str | None]]:
+    content = path.read_text()
+    sources: list[tuple[str, int, str, str | None]] = []
+
+    fence_re = re.compile(
+        r"```(?P<header>snail(?:-awk(?:\([^)]*\))?)?)\n(?P<body>.*?)\n```",
+        re.S,
+    )
+    for match in fence_re.finditer(content):
+        header = match.group("header")
+        lang, stdin_input = _parse_snail_header(header)
+        body = match.group("body")
+        line_no = content.count("\n", 0, match.start()) + 1
+        source = _snail_block_to_source(body)
+        if source:
+            sources.append((lang, line_no, source, stdin_input))
+    return sources
+
+
+_README_SNIPPETS = _collect_readme_snail_sources(ROOT / "README.md")
+_README_SNIPPET_IDS = [
+    f"{lang}@README.md:{line_no}" for lang, line_no, _, _ in _README_SNIPPETS
+]
+
+
+def _collect_readme_oneliners(path: Path) -> list[tuple[int, bool, list[str]]]:
+    content = path.read_text()
+    oneliners: list[tuple[int, bool, list[str]]] = []
+    fence_re = re.compile(r"```bash\n(?P<body>.*?)\n```", re.S)
+    for match in fence_re.finditer(content):
+        body = match.group("body")
+        start_line = content.count("\n", 0, match.start()) + 1
+        for index, line in enumerate(body.splitlines()):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            line_no = start_line + 1 + index
+            try:
+                awk, argv = _parse_oneliner_command(stripped)
+                oneliners.append((line_no, awk, argv))
+            except Exception:
+                pass
+    return oneliners
+
+
+def _parse_oneliner_command(command: str) -> tuple[bool, list[str]]:
     tokens = shlex.split(command)
-    if not tokens or tokens[0] != "snail":
-        return None
-    tokens = tokens[1:]
-    argv: list[str] = ["--parse-only"]
+    idx = tokens.index("snail")
+    tokens = tokens[idx+1:]
     awk = False
-    file_path: str | None = None
-    code: str | None = None
-
     i = 0
     while i < len(tokens):
         tok = tokens[i]
@@ -227,83 +299,72 @@ def _argv_from_snail_command(command: str) -> list[str] | None:
             awk = True
             i += 1
             continue
-        if tok == "-f" and i + 1 < len(tokens):
-            file_path = tokens[i + 1]
-            i += 2
-            continue
-        if tok.startswith("-"):
-            i += 1
-            continue
-        code = tok
         break
+    argv = tokens[i:]
+    if not argv:
+        raise ValueError(f"oneliner missing code: {command}")
+    return awk, argv
 
+
+_README_ONELINERS = _collect_readme_oneliners(ROOT / "README.md")
+if _README_ONELINERS:
+    _README_ONELINER_PARAMS = [
+        pytest.param(line_no, awk, argv, id=f"oneliner@README.md:{line_no}")
+        for line_no, awk, argv in _README_ONELINERS
+    ]
+else:
+    _README_ONELINER_PARAMS = [
+        pytest.param(
+            0,
+            False,
+            [],
+            marks=pytest.mark.skip(
+                reason="no ```snail-oneliner blocks found in README.md"
+            ),
+            id="no-oneliners",
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "lang,line_no,source,stdin_input",
+    _README_SNIPPETS,
+    ids=_README_SNIPPET_IDS,
+)
+def test_readme_snail_blocks_parse(
+    lang: str, line_no: int, source: str, stdin_input: str | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = ROOT / "README.md"
+    def _fake_run(cmd, shell=False, check=False, text=False, input=None, stdout=None):
+        out = "" if text else b""
+        return subprocess.CompletedProcess(cmd, 0, stdout=out)
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    if lang == "snail-awk":
+        if stdin_input is not None:
+            sys.stdin = io.StringIO(stdin_input)
+        assert main(["--awk", source]) == 0, f"failed at {path}:{line_no}"
+    else:
+        combined = f"{README_SNIPPET_PREAMBLE}\n{source}"
+        assert main([combined]) == 0, f"failed at {path}:{line_no}"
+
+
+@pytest.mark.parametrize(
+    "line_no,awk,argv",
+    _README_ONELINER_PARAMS,
+)
+def test_readme_snail_oneliners(
+    line_no: int, awk: bool, argv: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = ROOT / "README.md"
+
+    def _fake_run(cmd, shell=False, check=False, text=False, input=None, stdout=None):
+        out = "" if text else b""
+        return subprocess.CompletedProcess(cmd, 0, stdout=out)
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
     if awk:
-        argv.append("--awk")
-    if file_path:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = ROOT / path
-        argv.extend(["-f", str(path)])
-        return argv
-    if code is None:
-        return None
-    argv.append(code)
-    return argv
-
-
-def _snail_block_to_argv(block: str) -> list[str] | None:
-    lines = block.splitlines()
-    mode = "snail"
-    if lines and lines[0].startswith("#!"):
-        if "--awk" in lines[0]:
-            mode = "awk"
-        lines = lines[1:]
-    source = "\n".join(lines).strip()
-    if not source:
-        return None
-    argv = ["--parse-only"]
-    if mode == "awk":
-        argv.append("--awk")
-    argv.append(source)
-    return argv
-
-
-def _collect_doc_snail_argvs(path: Path) -> list[list[str]]:
-    content = path.read_text()
-    argvs: list[list[str]] = []
-
-    fence_re = re.compile(r"```(?P<lang>[A-Za-z0-9_-]*)\n(?P<body>.*?)\n```", re.S)
-    for match in fence_re.finditer(content):
-        lang = match.group("lang").lower()
-        body = match.group("body")
-        if lang == "snail":
-            argv = _snail_block_to_argv(body)
-            if argv:
-                argvs.append(argv)
-        elif lang in ("bash", "sh", "shell"):
-            for line in body.splitlines():
-                command = _extract_snail_commands(line)
-                if not command:
-                    continue
-                argv = _argv_from_snail_command(command)
-                if argv:
-                    argvs.append(argv)
-
-    inline_re = re.compile(r"`([^`]+)`")
-    for snippet in inline_re.findall(content):
-        command = _extract_snail_commands(snippet)
-        if not command:
-            continue
-        argv = _argv_from_snail_command(command)
-        if argv:
-            argvs.append(argv)
-
-    return argvs
-
-
-@pytest.mark.parametrize("path", [ROOT / "README.md", ROOT / "AGENTS.md"])
-def test_doc_snail_snippets_parse(path: Path) -> None:
-    argvs = _collect_doc_snail_argvs(path)
-    assert argvs, f"no snail snippets found in {path}"
-    for argv in argvs:
-        assert main(argv) == 0
+        assert main(["--awk", *argv]) == 0, f"failed at {path}:{line_no}"
+    else:
+        combined = f"{README_SNIPPET_PREAMBLE}\n{argv[0]}"
+        assert main([combined, *argv[1:]]) == 0, f"failed at {path}:{line_no}"
