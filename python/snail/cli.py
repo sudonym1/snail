@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-a", "--awk", action="store_true")
     parser.add_argument("-P", "--no-print", action="store_true")
     parser.add_argument("-I", "--no-auto-import", action="store_true")
-    parser.add_argument("--parse-only", action="store_true")
+    parser.add_argument("--debug", action="store_true", help="Parse and compile, then print, do not run")
     parser.add_argument("-v", "--version", action="store_true")
     parser.add_argument("args", nargs=argparse.REMAINDER)
 
@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
         filename = "<cmd>"
         args = ["--", *namespace.args[1:]]
 
-    if namespace.parse_only:
+    if namespace.debug:
         python_ast = compile_ast(
             source,
             mode=mode,

@@ -31,7 +31,7 @@ phone = "867-5309"
 """
 
 def test_parse_only(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["--parse-only", "x = 1"]) == 0
+    assert main(["--debug", "x = 1"]) == 0
     captured = capsys.readouterr()
     assert captured.out.strip() == "x = 1"
 
