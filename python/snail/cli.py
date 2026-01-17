@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+import traceback
 from pathlib import Path
 
 from . import __version__, exec, parse
@@ -15,8 +17,79 @@ def _build_parser() -> argparse.ArgumentParser:
         add_help=True,
     )
 
+def _trim_internal_prefix(
+    stack: traceback.StackSummary,
+    internal_files: set[str],
+) -> None:
+    if not stack:
+        return
+    trim_count = 0
+    for frame in stack:
+        filename = frame.filename
+        if filename.startswith("snail:"):
+            break
+        if filename in internal_files:
+            trim_count += 1
+            continue
+        if os.path.isabs(filename) and os.path.abspath(filename) in internal_files:
+            trim_count += 1
+            continue
+        break
+    if 0 < trim_count < len(stack):
+        del stack[:trim_count]
+
+
+def _trim_traceback_exception(
+    tb_exc: traceback.TracebackException,
+    internal_files: set[str],
+) -> None:
+    _trim_internal_prefix(tb_exc.stack, internal_files)
+    cause = getattr(tb_exc, "__cause__", None)
+    if cause is not None:
+        _trim_traceback_exception(cause, internal_files)
+    context = getattr(tb_exc, "__context__", None)
+    if context is not None:
+        _trim_traceback_exception(context, internal_files)
+    for group_exc in getattr(tb_exc, "exceptions", ()) or ():
+        _trim_traceback_exception(group_exc, internal_files)
+
+
+def _install_trimmed_excepthook() -> None:
+    entrypoint = os.path.abspath(sys.argv[0])
+    cli_path = os.path.abspath(__file__)
+    internal_files = {entrypoint, cli_path}
+    original_excepthook = sys.excepthook
+
+    def _snail_excepthook(
+        exc_type: type[BaseException],
+        exc: BaseException,
+        tb: object,
+    ) -> None:
+        if exc_type is KeyboardInterrupt:
+            return original_excepthook(exc_type, exc, tb)
+        tb_exc = traceback.TracebackException(
+            exc_type,
+            exc,
+            tb,
+            capture_locals=False,
+        )
+        _trim_traceback_exception(tb_exc, internal_files)
+        try:
+            import _colorize
+
+            colorize = _colorize.can_colorize(file=sys.stderr)
+        except Exception:
+            colorize = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+        for line in tb_exc.format(colorize=colorize):
+            sys.stderr.write(line)
+
+    sys.excepthook = _snail_excepthook
+
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        _install_trimmed_excepthook()
+
     parser = _build_parser()
     parser.add_argument("-f", dest="file", metavar="file")
     parser.add_argument("-a", "--awk", action="store_true")

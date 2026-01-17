@@ -69,9 +69,9 @@ impl<'py> AstBuilder<'py> {
 
 pub fn set_location(node: &Bound<'_, PyAny>, span: &SourceSpan) -> PyResult<()> {
     node.setattr("lineno", span.start.line)?;
-    node.setattr("col_offset", span.start.column)?;
+    node.setattr("col_offset", span.start.column.saturating_sub(1))?;
     node.setattr("end_lineno", span.end.line)?;
-    node.setattr("end_col_offset", span.end.column)?;
+    node.setattr("end_col_offset", span.end.column.saturating_sub(1))?;
     Ok(())
 }
 
