@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -191,3 +193,117 @@ def test_example_awk(
     # Verify expected output from the awk script
     assert "demo begin" in captured.out
     assert "demo end" in captured.out
+
+
+def _extract_snail_commands(line: str) -> str | None:
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    if "| snail" in line:
+        line = line.split("| snail", 1)[1].strip()
+        if not line.startswith("snail"):
+            line = f"snail {line}"
+    if line.startswith("uv run -- snail "):
+        line = line[len("uv run -- ") :]
+    if not line.startswith("snail "):
+        return None
+    return line
+
+
+def _argv_from_snail_command(command: str) -> list[str] | None:
+    tokens = shlex.split(command)
+    if not tokens or tokens[0] != "snail":
+        return None
+    tokens = tokens[1:]
+    argv: list[str] = ["--parse-only"]
+    awk = False
+    file_path: str | None = None
+    code: str | None = None
+
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in ("-a", "--awk"):
+            awk = True
+            i += 1
+            continue
+        if tok == "-f" and i + 1 < len(tokens):
+            file_path = tokens[i + 1]
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        code = tok
+        break
+
+    if awk:
+        argv.append("--awk")
+    if file_path:
+        path = Path(file_path)
+        if not path.is_absolute():
+            path = ROOT / path
+        argv.extend(["-f", str(path)])
+        return argv
+    if code is None:
+        return None
+    argv.append(code)
+    return argv
+
+
+def _snail_block_to_argv(block: str) -> list[str] | None:
+    lines = block.splitlines()
+    mode = "snail"
+    if lines and lines[0].startswith("#!"):
+        if "--awk" in lines[0]:
+            mode = "awk"
+        lines = lines[1:]
+    source = "\n".join(lines).strip()
+    if not source:
+        return None
+    argv = ["--parse-only"]
+    if mode == "awk":
+        argv.append("--awk")
+    argv.append(source)
+    return argv
+
+
+def _collect_doc_snail_argvs(path: Path) -> list[list[str]]:
+    content = path.read_text()
+    argvs: list[list[str]] = []
+
+    fence_re = re.compile(r"```(?P<lang>[A-Za-z0-9_-]*)\n(?P<body>.*?)\n```", re.S)
+    for match in fence_re.finditer(content):
+        lang = match.group("lang").lower()
+        body = match.group("body")
+        if lang == "snail":
+            argv = _snail_block_to_argv(body)
+            if argv:
+                argvs.append(argv)
+        elif lang in ("bash", "sh", "shell"):
+            for line in body.splitlines():
+                command = _extract_snail_commands(line)
+                if not command:
+                    continue
+                argv = _argv_from_snail_command(command)
+                if argv:
+                    argvs.append(argv)
+
+    inline_re = re.compile(r"`([^`]+)`")
+    for snippet in inline_re.findall(content):
+        command = _extract_snail_commands(snippet)
+        if not command:
+            continue
+        argv = _argv_from_snail_command(command)
+        if argv:
+            argvs.append(argv)
+
+    return argvs
+
+
+@pytest.mark.parametrize("path", [ROOT / "README.md", ROOT / "AGENTS.md"])
+def test_doc_snail_snippets_parse(path: Path) -> None:
+    argvs = _collect_doc_snail_argvs(path)
+    assert argvs, f"no snail snippets found in {path}"
+    for argv in argvs:
+        assert main(argv) == 0

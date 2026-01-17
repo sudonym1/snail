@@ -13,6 +13,16 @@ in interesting and horrible ways.</h1>
 
 **Snail** is a programming language that compiles to Python, combining Python's power with Perl/awk-inspired syntax for quick scripts and one-liners. No more whitespace sensitivity—just curly braces and concise expressions.
 
+## Installing Snail
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and then run:
+
+```bash
+uv tool install -p 3.12 snail-lang
+```
+
+That installs the `snail` CLI for your user; try it with `snail "print('hello')"` once the install completes.
+
 ## ✨ What Makes Snail Unique
 
 ### Curly Braces, Not Indentation
@@ -149,17 +159,20 @@ filtered = df[df["value"] > 100]
 ## 🚀 Quick Start
 
 ```bash
-# Install from PyPI
-pip install snail-lang
+# One-liner: arithmetic + interpolation
+snail 'name="Snail"; print("{name} says: {6 * 7}")'
 
-# Run a one-liner
-snail "print('Hello, Snail!')"
+# JSON query with JMESPath
+snail 'js($(curl -s https://api.github.com/repos/sudonym1/snail)) | $[stargazers_count]'
 
-# Execute a script
-snail -f script.snail
+# Compact error handling with fallback
+snail 'result = int("oops"):"bad int {$e}"?; print(result)'
 
-# Awk mode for text processing
-cat data.txt | snail --awk '/error/ { print($l) }'
+# Regex match and capture
+snail 'm = "user@example.com" in /^[\\w.]+@([\\w.]+)$/; if m { print(m[1]) }'
+
+# Awk mode: print line numbers for matches
+rg -n "TODO" README.md | snail --awk '/TODO/ { print("{$n}: {$l}") }'
 ```
 
 ## 🏗️ Architecture
