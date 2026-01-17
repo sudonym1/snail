@@ -1,23 +1,15 @@
 from __future__ import annotations
 
-import argparse
-import ast
-import builtins
 import os
 import sys
-import traceback
-from pathlib import Path
 
 from . import __build_info__, compile_ast, exec
 
-
-def _build_parser() -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(
-        prog="snail",
-        description="Snail programming language interpreter",
-        usage="snail [options] -f <file> [args]...\n       snail [options] <code> [args]...",
-        add_help=True,
-    )
+_USAGE = (
+    "snail [options] -f <file> [args]...\n"
+    "       snail [options] <code> [args]..."
+)
+_DESCRIPTION = "Snail programming language interpreter"
 
 
 def _display_filename(filename: str) -> str:
@@ -26,10 +18,7 @@ def _display_filename(filename: str) -> str:
     return f"snail:{filename}"
 
 
-def _trim_internal_prefix(
-    stack: traceback.StackSummary,
-    internal_files: set[str],
-) -> None:
+def _trim_internal_prefix(stack, internal_files: set[str]) -> None:
     if not stack:
         return
     trim_count = 0
@@ -48,10 +37,7 @@ def _trim_internal_prefix(
         del stack[:trim_count]
 
 
-def _trim_traceback_exception(
-    tb_exc: traceback.TracebackException,
-    internal_files: set[str],
-) -> None:
+def _trim_traceback_exception(tb_exc, internal_files: set[str]) -> None:
     _trim_internal_prefix(tb_exc.stack, internal_files)
     cause = getattr(tb_exc, "__cause__", None)
     if cause is not None:
@@ -76,6 +62,8 @@ def _install_trimmed_excepthook() -> None:
     ) -> None:
         if exc_type is KeyboardInterrupt:
             return original_excepthook(exc_type, exc, tb)
+        import traceback
+
         tb_exc = traceback.TracebackException(
             exc_type,
             exc,
@@ -93,6 +81,77 @@ def _install_trimmed_excepthook() -> None:
             sys.stderr.write(line)
 
     sys.excepthook = _snail_excepthook
+
+
+class _Args:
+    def __init__(self) -> None:
+        self.file: str | None = None
+        self.awk = False
+        self.no_print = False
+        self.no_auto_import = False
+        self.debug = False
+        self.version = False
+        self.help = False
+        self.args: list[str] = []
+
+
+def _print_help(file=sys.stdout) -> None:
+    print(f"usage: {_USAGE}", file=file)
+    print("", file=file)
+    print(_DESCRIPTION, file=file)
+    print("", file=file)
+    print("options:", file=file)
+    print("  -f <file>               read Snail source from file", file=file)
+    print("  -a, --awk               awk mode", file=file)
+    print("  -P, --no-print          disable auto-print of last expression", file=file)
+    print("  -I, --no-auto-import    disable auto-imports", file=file)
+    print("  --debug                 parse and compile, then print, do not run", file=file)
+    print("  -v, --version           show version and exit", file=file)
+    print("  -h, --help              show this help message and exit", file=file)
+
+
+def _parse_args(argv: list[str]) -> _Args:
+    args = _Args()
+    idx = 0
+    while idx < len(argv):
+        token = argv[idx]
+        if token == "--":
+            args.args = argv[idx + 1 :]
+            return args
+        if token == "-" or not token.startswith("-"):
+            args.args = argv[idx:]
+            return args
+        if token in ("-h", "--help"):
+            args.help = True
+            return args
+        if token in ("-v", "--version"):
+            args.version = True
+            idx += 1
+            continue
+        if token in ("-a", "--awk"):
+            args.awk = True
+            idx += 1
+            continue
+        if token in ("-P", "--no-print"):
+            args.no_print = True
+            idx += 1
+            continue
+        if token in ("-I", "--no-auto-import"):
+            args.no_auto_import = True
+            idx += 1
+            continue
+        if token == "--debug":
+            args.debug = True
+            idx += 1
+            continue
+        if token == "-f":
+            if idx + 1 >= len(argv):
+                raise ValueError("option -f requires an argument")
+            args.file = argv[idx + 1]
+            idx += 2
+            continue
+        raise ValueError(f"unknown option: {token}")
+    return args
 
 
 def _format_version(version: str, build_info: dict[str, object] | None) -> str:
@@ -123,18 +182,18 @@ def _get_version() -> str:
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         _install_trimmed_excepthook()
+        argv = sys.argv[1:]
 
-    parser = _build_parser()
-    parser.add_argument("-f", dest="file", metavar="file")
-    parser.add_argument("-a", "--awk", action="store_true")
-    parser.add_argument("-P", "--no-print", action="store_true")
-    parser.add_argument("-I", "--no-auto-import", action="store_true")
-    parser.add_argument("--debug", action="store_true", help="Parse and compile, then print, do not run")
-    parser.add_argument("-v", "--version", action="store_true")
-    parser.add_argument("args", nargs=argparse.REMAINDER)
+    try:
+        namespace = _parse_args(argv)
+    except ValueError as exc:
+        _print_help(file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
-    namespace = parser.parse_args(argv)
-
+    if namespace.help:
+        _print_help()
+        return 0
     if namespace.version:
         print(_format_version(_get_version(), __build_info__))
         return 0
@@ -142,6 +201,8 @@ def main(argv: list[str] | None = None) -> int:
     mode = "awk" if namespace.awk else "snail"
 
     if namespace.file:
+        from pathlib import Path
+
         path = Path(namespace.file)
         try:
             source = path.read_text()
@@ -159,6 +220,9 @@ def main(argv: list[str] | None = None) -> int:
         args = ["--", *namespace.args[1:]]
 
     if namespace.debug:
+        import ast
+        import builtins
+
         python_ast = compile_ast(
             source,
             mode=mode,
