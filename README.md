@@ -1,15 +1,9 @@
 <p align="center">
   <img src="logo.png" alt="Snail logo" width="200">
 </p>
-
-<h1 align="center">Snail</h1>
 <p align="center"><em>What do you get when you shove a snake in a shell?</em></p>
 
-<h1>Snail, while I hope it is useful to myself and others, is my attempt at
-improving my knowledge of AI code developement. Things are probably broken
-in interesting and horrible ways.</h1>
-
----
+<h1 align="center">Snail</h1>
 
 **Snail** is a programming language that compiles to Python, combining Python's power with Perl/awk-inspired syntax for quick scripts and one-liners. No more whitespace sensitivity—just curly braces and concise expressions.
 
@@ -51,7 +45,7 @@ BEGIN { total = 0 }
 END { print("Sum:", total); assert total == 15}
 ```
 
-Built-in variables: `$l` (line), `$f` (fields), `$n` (line number), `$fn` (per-file line number), `$p` (file path), `$m` (last match).
+Built-in variables: `$0` (line), `$1`, `$2` etc (access fields), `$n` (line number), `$fn` (per-file line number), `$p` (file path), `$m` (last match).
 
 
 ### Compact Error Handling
