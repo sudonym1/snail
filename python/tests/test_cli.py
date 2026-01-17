@@ -7,6 +7,7 @@ import re
 import shlex
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,40 @@ phone = "867-5309"
 
 def test_parse_only() -> None:
     assert main(["--parse-only", "x = 1"]) == 0
+
+
+def test_traceback_highlights_inline_snail() -> None:
+    with pytest.raises(NameError) as excinfo:
+        main(["x"])
+    filenames = [
+        frame.filename
+        for frame in traceback.extract_tb(excinfo.value.__traceback__)
+    ]
+    assert "snail:<cmd>" in filenames
+
+
+def test_traceback_highlights_file_snail(tmp_path: Path) -> None:
+    script = tmp_path / "script.snail"
+    script.write_text("x\n")
+    with pytest.raises(NameError) as excinfo:
+        main(["-f", str(script)])
+    filenames = [
+        frame.filename
+        for frame in traceback.extract_tb(excinfo.value.__traceback__)
+    ]
+    assert f"snail:{script}" in filenames
+
+
+def test_traceback_highlights_library_snail() -> None:
+    import snail
+
+    with pytest.raises(NameError) as excinfo:
+        snail.exec("x", filename="lib.snail")
+    filenames = [
+        frame.filename
+        for frame in traceback.extract_tb(excinfo.value.__traceback__)
+    ]
+    assert "snail:lib.snail" in filenames
 
 
 @pytest.fixture(autouse=True)
