@@ -68,7 +68,7 @@ g:snail_format_on_save~
 <
                                                     *g:snail_highlight_awk_vars*
 g:snail_highlight_awk_vars~
-    Enable highlighting of AWK special variables ($l, $f, $n, etc.).
+    Enable highlighting of AWK special variables ($0, $1, $n, etc.).
     Default: 1 (enabled)
 >
     let g:snail_highlight_awk_vars = 1
@@ -98,7 +98,7 @@ Snail-specific Syntax~
     - Subprocess status: @(command)
     - Compact try operator: expr? or expr?fallback
     - Regex literals: /pattern/
-    - Special variables: $e, $l, $f, $n, $fn, $p, $m
+    - Special variables: $e, $n, $fn, $p, $m
     - Field variables: $0, $1, $2, ...
     - Structured accessor: $[query]
     - Pipeline operator: |
@@ -178,18 +178,17 @@ BEGIN/END blocks~
 <
 Pattern-action rules~
 >
-    /pattern/ { print($l) }
-    $l.startswith("x") { process() }
+    /pattern/ { print($0) }
+    $0.startswith("x") { process() }
 <
 Built-in Variables~
-    $l      Current line (trailing newline removed)
-    $f      Fields array ($l.split())
+    $0      Current line (trailing newline removed)
+    $0, $1, $2, ...   AWK-style field access (whitespace-split)
     $n      Global line number
     $fn     Per-file line number
     $p      Current file path
     $m      Last regex match object
     $e      Exception in fallback expressions (expr:fallback?)
-    $0-$9   AWK-style field access
 
 ==============================================================================
  vim:tw=78:ts=8:ft=help:norl:

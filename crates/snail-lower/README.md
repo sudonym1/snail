@@ -27,7 +27,7 @@ This crate is the semantic transformation core of the Snail compiler. It takes S
 - **Regex expressions** (`/pattern/`): Transformed into `__snail_regex_compile(pattern)` call
 - **Regex matching** (`string in /pattern/`): Transformed into `__snail_regex_search(string, pattern)` call
 - **Structured accessors** (`$[query]`): Transformed into `__SnailStructuredAccessor(query)` instance
-- **Awk variables**: `$l`, `$f`, `$n`, `$fn`, `$p`, `$m` mapped to Python variable names
+- **Awk variables**: `$0`, `$<num>`, `$n`, `$fn`, `$p`, `$m` mapped to Python variable names
 
 ## Awk Mode Lowering
 
@@ -35,7 +35,7 @@ When lowering awk programs, generates a complete Python AST that:
 1. Imports `sys` for accessing command-line arguments and stdin
 2. Executes BEGIN blocks before processing input
 3. Creates a main loop that reads lines from files or stdin
-4. Updates awk variables (`$l`, `$f`, `$n`, etc.) for each line
+4. Updates awk variables (`$0`, `$<num>`, `$n`, etc.) for each line
 5. Evaluates patterns and executes actions for matching lines
 6. Executes END blocks after all input is processed
 

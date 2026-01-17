@@ -179,7 +179,7 @@ Use regex literals for concise searches:
 - Escape `/` inside the pattern as `\/`.
 
 In awk mode, regex patterns can stand alone. A bare `/pattern/` matches against
-`$l` implicitly and binds the match object to `$m` for use inside the action
+`$0` implicitly and binds the match object to `$m` for use inside the action
 block.
 Numeric group access is available via attribute shorthand: `$m.1` maps to
 `$m.group(1)`.
@@ -263,8 +263,8 @@ lines by default, and a lone block runs for every line.
 See `examples/awk.snail` for a runnable sample program.
 
 While processing, Snail populates awk-style variables:
-- `$l`: the current line with the trailing newline removed.
-- `$f`: `$l.split()` on whitespace.
+- `$0`: the current line with the trailing newline removed.
+- `$1`, `$2`, ...: fields from `$0.split()` on whitespace.
 - `$n`: global line counter across all files.
 - `$fn`: per-file line counter.
 - `$p`: the active filename, with `"-"` representing stdin.

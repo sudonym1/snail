@@ -633,9 +633,7 @@ module.exports = grammar({
     field_index_var: $ => /\$[0-9]+/,
 
     injected_var: $ => choice(
-      '$fn',  // Must come before $f and $n
-      '$l',
-      '$f',
+      '$fn',  // Must come before $n
       '$n',
       '$p',
       '$m',

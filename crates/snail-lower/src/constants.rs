@@ -9,8 +9,6 @@ pub const SNAIL_JMESPATH_QUERY: &str = "__snail_jmespath_query";
 pub const SNAIL_PARTIAL_HELPER: &str = "__snail_partial";
 
 // Awk-related constants (public within crate)
-pub(crate) const SNAIL_AWK_LINE: &str = "$l";
-pub(crate) const SNAIL_AWK_FIELDS: &str = "$f";
 pub(crate) const SNAIL_AWK_NR: &str = "$n";
 pub(crate) const SNAIL_AWK_FNR: &str = "$fn";
 pub(crate) const SNAIL_AWK_PATH: &str = "$p";
@@ -24,8 +22,6 @@ pub(crate) const SNAIL_AWK_MATCH_PYVAR: &str = "__snail_match";
 
 pub(crate) fn injected_py_name(name: &str) -> Option<&'static str> {
     match name {
-        SNAIL_AWK_LINE => Some(SNAIL_AWK_LINE_PYVAR),
-        SNAIL_AWK_FIELDS => Some(SNAIL_AWK_FIELDS_PYVAR),
         SNAIL_AWK_NR => Some(SNAIL_AWK_NR_PYVAR),
         SNAIL_AWK_FNR => Some(SNAIL_AWK_FNR_PYVAR),
         SNAIL_AWK_PATH => Some(SNAIL_AWK_PATH_PYVAR),

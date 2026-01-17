@@ -22,9 +22,9 @@ fn rejects_user_defined_dollar_identifiers() {
 
 #[test]
 fn rejects_awk_only_variables_in_regular_mode() {
-    let err = parse_err("value = $l");
+    let err = parse_err("value = $n");
     let message = err.to_string();
-    assert!(message.contains("$l"));
+    assert!(message.contains("$n"));
     assert!(message.contains("--awk"));
     expect_err_span(&err, 1, 9);
 }
