@@ -26,7 +26,7 @@ build: sync
 
 # Install into the active Python environment
 install: sync
-	$(UV) tool install --force --reinstall .
+	$(UV) tool install --force --reinstall --python "$$(command -v python3)" .
 
 benchmark: develop
 	SNAIL_PROFILE_NATIVE=1 $(UV) run -- python benchmarks/startup.py --profile-imports -- snail 'print("hello")'
