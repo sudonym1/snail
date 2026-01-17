@@ -2,6 +2,7 @@
 name = "snail-python"
 version = "0.4.1"
 edition.workspace = true
+build = "build.rs"
 
 [lib]
 name = "snail_python"

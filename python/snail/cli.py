@@ -8,7 +8,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import __version__, compile_ast, exec
+from . import __build_info__, __version__, compile_ast, exec
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -95,6 +95,25 @@ def _install_trimmed_excepthook() -> None:
     sys.excepthook = _snail_excepthook
 
 
+def _format_version(version: str, build_info: dict[str, object] | None) -> str:
+    display_version = version if version.startswith("v") else f"v{version}"
+    if not build_info:
+        return display_version
+    git_rev = build_info.get("git_rev")
+    if not git_rev:
+        return display_version
+
+    suffixes: list[str] = []
+    if build_info.get("dirty"):
+        suffixes.append("!dirty")
+    if build_info.get("untagged"):
+        suffixes.append("!untagged")
+
+    if suffixes:
+        return f"{display_version} ({git_rev}) {' '.join(suffixes)}"
+    return f"{display_version} ({git_rev})"
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         _install_trimmed_excepthook()
@@ -111,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     namespace = parser.parse_args(argv)
 
     if namespace.version:
-        print(__version__)
+        print(_format_version(__version__, __build_info__))
         return 0
 
     mode = "awk" if namespace.awk else "snail"

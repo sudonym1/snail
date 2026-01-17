@@ -68,6 +68,20 @@ fn register_linecache(py: Python<'_>, filename: &str, source: &str) -> PyResult<
     Ok(())
 }
 
+fn build_info_dict(py: Python<'_>) -> PyResult<PyObject> {
+    let info = PyDict::new_bound(py);
+    if let Some(rev) = option_env!("SNAIL_GIT_SHA") {
+        info.set_item("git_rev", rev)?;
+    }
+    if let Some(dirty) = option_env!("SNAIL_GIT_DIRTY") {
+        info.set_item("dirty", dirty == "true")?;
+    }
+    if let Some(untagged) = option_env!("SNAIL_GIT_UNTAGGED") {
+        info.set_item("untagged", untagged == "true")?;
+    }
+    Ok(info.into_py(py))
+}
+
 fn compile_source(
     py: Python<'_>,
     source: &str,
@@ -205,6 +219,10 @@ fn _native(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(compile_ast_py, module)?)?;
     module.add_function(wrap_pyfunction!(exec_py, module)?)?;
     module.add_function(wrap_pyfunction!(parse_py, module)?)?;
-    module.add("__all__", vec!["compile", "compile_ast", "exec", "parse"])?;
+    module.add("__build_info__", build_info_dict(_py)?)?;
+    module.add(
+        "__all__",
+        vec!["compile", "compile_ast", "exec", "parse", "__build_info__"],
+    )?;
     Ok(())
 }
