@@ -9,7 +9,7 @@ Tree-sitter grammar for the Snail programming language.
   - Subprocess syntax: `$(cmd)` and `@(cmd)`
   - Regex literals: `/pattern/`
   - Compact try operator: `expr?` and `expr:fallback?`
-  - AWK mode with special variables (`$0`, `$1`, `$n`, etc.)
+  - AWK mode with special variables (`$0`, `$<num>`, `$n`, etc.)
   - Pipeline operator: `|`
   - Structured accessors: `$[query]`
 - Accurate syntax highlighting
