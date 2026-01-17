@@ -167,7 +167,7 @@ Snail → Parser → AST → Lowering → Python AST → in-process exec
 ## Key Snail Features
 
 ### Snail-Specific Syntax
-- **Compact try operator**: `expr?` returns exception on failure; `expr ? fallback` evaluates fallback with exception in `$e`
+- **Compact try operator**: `expr?` returns exception on failure; `expr:fallback?` evaluates fallback with exception in `$e`
 - **Subprocess syntax**: `$(cmd)` captures stdout, `@(cmd)` runs without capture (both raise on non-zero exit)
 - **Regex expressions**: `string in /pattern/` performs `re.search()` and returns match object
 - **Compound expressions**: `(stmt1; stmt2; expr)` evaluates to final expression

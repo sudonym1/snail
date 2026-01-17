@@ -21,7 +21,7 @@ This crate is the semantic transformation core of the Snail compiler. It takes S
 ## Snail Feature Transformations
 
 - **Compact try operator** (`expr?`): Transformed into `__snail_compact_try(lambda: expr)` call
-- **Compact try with fallback** (`expr ? fallback`): Transformed with fallback lambda
+- **Compact try with fallback** (`expr:fallback?`): Transformed with fallback lambda
 - **Subprocess capture** (`$(cmd)`): Transformed into `__SnailSubprocessCapture(cmd)` instance
 - **Subprocess status** (`@(cmd)`): Transformed into `__SnailSubprocessStatus(cmd)` instance
 - **Regex expressions** (`/pattern/`): Transformed into `__snail_regex_compile(pattern)` call

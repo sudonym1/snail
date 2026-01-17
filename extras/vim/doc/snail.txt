@@ -188,9 +188,8 @@ Built-in Variables~
     $fn     Per-file line number
     $p      Current file path
     $m      Last regex match object
-    $e      Exception in ? fallback expressions
+    $e      Exception in fallback expressions (expr:fallback?)
     $0-$9   AWK-style field access
 
 ==============================================================================
  vim:tw=78:ts=8:ft=help:norl:
-
