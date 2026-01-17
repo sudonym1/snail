@@ -5,7 +5,7 @@
 
 <h1 align="center">Snail</h1>
 
-**Snail** is a programming language that compiles to Python, combining Python's power with Perl/awk-inspired syntax for quick scripts and one-liners. No more whitespace sensitivity—just curly braces and concise expressions.
+**Snail** is a programming language that compiles to Python, combining Python's familiarity and extensive libraries with Perl/awk-inspired syntax for quick scripts and one-liners.
 
 ## Installing Snail
 
