@@ -4,17 +4,16 @@ import json as _json
 import os as _os
 import sys as _sys
 
-import jmespath
-
-
 def __snail_jmespath_query(query: str):
     """Create a callable that applies JMESPath query.
 
     Used by the $[query] syntax which lowers to __snail_jmespath_query(query).
     """
 
+    import jmespath as _jmespath
+
     def apply(data):
-        return jmespath.search(query, data)
+        return _jmespath.search(query, data)
 
     return apply
 

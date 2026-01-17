@@ -8,8 +8,24 @@ use snail_core::{
     CompileMode, compile_snail_source_with_auto_print, format_snail_error, parse_awk_program,
     parse_program,
 };
+use std::sync::OnceLock;
+use std::time::Instant;
 
 const SNAIL_TRACE_PREFIX: &str = "snail:";
+
+fn profile_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("SNAIL_PROFILE_NATIVE").is_some())
+}
+
+fn log_profile(label: &str, elapsed: std::time::Duration) {
+    if profile_enabled() {
+        eprintln!(
+            "[snail][native] {label}: {:.3} ms",
+            elapsed.as_secs_f64() * 1000.0
+        );
+    }
+}
 
 fn parse_mode(mode: &str) -> PyResult<CompileMode> {
     match mode {
@@ -89,12 +105,23 @@ fn compile_source(
     auto_print: bool,
     filename: &str,
 ) -> Result<PyObject, PyErr> {
+    let profile = profile_enabled();
+    let total_start = Instant::now();
+    let compile_start = Instant::now();
     let module = compile_snail_source_with_auto_print(py, source, mode, auto_print)
         .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+    if profile {
+        log_profile("compile_snail_source", compile_start.elapsed());
+    }
+    let ast_start = Instant::now();
     let ast = py.import_bound("ast")?;
     let fixed = ast
         .getattr("fix_missing_locations")?
         .call1((module.clone_ref(py),))?;
+    if profile {
+        log_profile("fix_missing_locations", ast_start.elapsed());
+        log_profile("compile_source_total", total_start.elapsed());
+    }
     Ok(fixed.into_py(py))
 }
 
@@ -135,14 +162,25 @@ fn compile_py(
     auto_print: bool,
     filename: &str,
 ) -> PyResult<PyObject> {
+    let profile = profile_enabled();
+    let total_start = Instant::now();
     let mode = parse_mode(mode)?;
     let python_ast = compile_source(py, source, mode, auto_print, filename)?;
     let display = display_filename(filename);
+    let linecache_start = Instant::now();
     register_linecache(py, &display, source)?;
+    if profile {
+        log_profile("register_linecache", linecache_start.elapsed());
+    }
+    let compile_start = Instant::now();
     let builtins = py.import_bound("builtins")?;
     let code = builtins
         .getattr("compile")?
         .call1((python_ast, display, "exec"))?;
+    if profile {
+        log_profile("py_compile", compile_start.elapsed());
+        log_profile("compile_py_total", total_start.elapsed());
+    }
     Ok(code.unbind())
 }
 
@@ -171,33 +209,56 @@ fn exec_py(
     auto_import: bool,
     filename: &str,
 ) -> PyResult<i32> {
+    let profile = profile_enabled();
+    let total_start = Instant::now();
     let mode = parse_mode(mode)?;
     let python_ast = compile_source(py, source, mode, auto_print, filename)?;
     let display = display_filename(filename);
+    let linecache_start = Instant::now();
     register_linecache(py, &display, source)?;
+    if profile {
+        log_profile("register_linecache", linecache_start.elapsed());
+    }
+    let compile_start = Instant::now();
     let builtins = py.import_bound("builtins")?;
     let code = builtins
         .getattr("compile")?
         .call1((python_ast, display, "exec"))?;
+    if profile {
+        log_profile("py_compile", compile_start.elapsed());
+    }
+    let globals_start = Instant::now();
     let globals = prepare_globals(py, strip_display_prefix(filename), &argv, auto_import)?;
+    if profile {
+        log_profile("prepare_globals", globals_start.elapsed());
+    }
 
-    match builtins.getattr("exec")?.call1((code.as_any(), &globals)) {
+    let exec_start = Instant::now();
+    let exec_result = builtins.getattr("exec")?.call1((code.as_any(), &globals));
+    if profile {
+        log_profile("py_exec", exec_start.elapsed());
+    }
+    let result = match exec_result {
         Ok(_) => Ok(0),
         Err(err) => {
             if err.is_instance_of::<PySystemExit>(py) {
                 let code = err.value_bound(py).getattr("code")?;
                 if code.is_none() {
-                    return Ok(0);
+                    Ok(0)
+                } else if let Ok(exit_code) = code.extract::<i32>() {
+                    Ok(exit_code)
+                } else {
+                    Ok(1)
                 }
-                if let Ok(exit_code) = code.extract::<i32>() {
-                    return Ok(exit_code);
-                }
-                Ok(1)
             } else {
                 Err(err)
             }
         }
+    };
+    if profile {
+        log_profile("exec_py_total", total_start.elapsed());
     }
+    result
 }
 
 #[pyfunction(name = "parse")]
@@ -214,15 +275,20 @@ fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
 }
 
 #[pymodule]
-fn _native(_py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
+    let profile = profile_enabled();
+    let total_start = Instant::now();
     module.add_function(wrap_pyfunction!(compile_py, module)?)?;
     module.add_function(wrap_pyfunction!(compile_ast_py, module)?)?;
     module.add_function(wrap_pyfunction!(exec_py, module)?)?;
     module.add_function(wrap_pyfunction!(parse_py, module)?)?;
-    module.add("__build_info__", build_info_dict(_py)?)?;
+    module.add("__build_info__", build_info_dict(py)?)?;
     module.add(
         "__all__",
         vec!["compile", "compile_ast", "exec", "parse", "__build_info__"],
     )?;
+    if profile {
+        log_profile("module_init", total_start.elapsed());
+    }
     Ok(())
 }

@@ -1,4 +1,4 @@
-.PHONY: all test build install clean sync
+.PHONY: all test build install clean sync benchmark develop
 
 UV ?= uv
 
@@ -8,14 +8,16 @@ all: test build install
 sync:
 	$(UV) sync --extra dev
 
+develop: sync
+	$(UV) run -- python -m maturin develop
+
 # Run all tests
-test: sync
+test: develop
 	cargo fmt --check
 	RUSTFLAGS="-D warnings" cargo build
 	RUSTFLAGS="-D warnings" cargo build --features run-proptests
 	cargo clippy -- -D warnings
 	RUSTFLAGS="-D warnings" cargo test
-	$(UV) run -- python -m maturin develop
 	$(UV) run -- python -m pytest python/tests
 
 # Build release wheels
@@ -25,6 +27,9 @@ build: sync
 # Install into the active Python environment
 install: sync
 	$(UV) tool install --force --reinstall .
+
+benchmark: develop
+	SNAIL_PROFILE_NATIVE=1 $(UV) run -- python benchmarks/startup.py --profile-imports -- snail 'print("hello")'
 
 # Clean build artifacts
 clean:
