@@ -181,6 +181,8 @@ Use regex literals for concise searches:
 In awk mode, regex patterns can stand alone. A bare `/pattern/` matches against
 `$l` implicitly and binds the match object to `$m` for use inside the action
 block.
+Numeric group access is available via attribute shorthand: `$m.1` maps to
+`$m.group(1)`.
 
 ## Subprocess expressions
 Snail provides succinct subprocess helpers that work seamlessly with the pipeline
@@ -266,7 +268,7 @@ While processing, Snail populates awk-style variables:
 - `$n`: global line counter across all files.
 - `$fn`: per-file line counter.
 - `$p`: the active filename, with `"-"` representing stdin.
-- `$m`: the last regex match object.
+- `$m`: the last regex match object (`$m.1` maps to `$m.group(1)`).
 
 These `$` variables are injected by the language; user-defined identifiers
 cannot start with `$`. They are only available in awk mode—using them in

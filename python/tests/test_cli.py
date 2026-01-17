@@ -79,6 +79,15 @@ def test_awk_mode(
     assert captured.out == "foo\n"
 
 
+def test_awk_match_group_access(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("foo1\nfoo2\n"))
+    assert main(["--awk", "/foo(\\d)/ { print($m.1) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "1\n2\n"
+
+
 def test_awk_identifiers_require_awk_mode() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(["print($l)"])

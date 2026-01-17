@@ -367,3 +367,17 @@ fn parses_call_attribute_index_chain() {
         other => panic!("Expected index access, got {other:?}"),
     }
 }
+
+#[test]
+fn parses_numeric_attribute_access() {
+    let program = parse_ok("value = match.1");
+    let (_, value) = expect_assign(&program.stmts[0]);
+
+    match value {
+        Expr::Attribute { value, attr, .. } => {
+            expect_name(value.as_ref(), "match");
+            assert_eq!(attr, "1");
+        }
+        other => panic!("Expected attribute access, got {other:?}"),
+    }
+}
