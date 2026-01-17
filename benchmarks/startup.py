@@ -70,12 +70,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.warmup < 0:
         parser.error("--warmup cannot be negative")
 
-    show_output = args.show_output or args.profile_imports
-    stdout = None if show_output else subprocess.DEVNULL
-    stderr = None if show_output else subprocess.DEVNULL
+    stdout = None if args.show_output else subprocess.DEVNULL
+    stderr = None if args.show_output else subprocess.DEVNULL
     env = os.environ.copy()
+    profile_env = None
     if args.profile_imports:
-        env["PYTHONPROFILEIMPORTTIME"] = "1"
+        profile_env = env.copy()
+        profile_env["PYTHONPROFILEIMPORTTIME"] = "1"
+
+    if profile_env is not None:
+        _run_once(cmd, stdout=None, stderr=None, env=profile_env)
 
     for _ in range(args.warmup):
         _run_once(cmd, stdout=stdout, stderr=stderr, env=env)
@@ -93,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"command: {shlex.join(cmd)}")
     print(f"warmup: {args.warmup} iterations: {args.iterations}")
     if args.profile_imports:
-        print("python_import_time: enabled")
+        print("python_import_time: single run")
     print(f"mean: {mean:.3f} ms")
     print(f"median: {median:.3f} ms")
     print(f"p95: {p95:.3f} ms")

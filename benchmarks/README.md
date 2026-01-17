@@ -32,6 +32,9 @@ By default, output from the command is discarded. Use `--show-output` to see it.
 python benchmarks/startup.py --profile-imports
 ```
 
+When enabled, the script runs one profiled invocation before warmups/iterations
+so import timing output is shown once.
+
 ## Rust profiling
 
 Set `SNAIL_PROFILE_NATIVE=1` to emit Rust-side timing data to stderr:

@@ -69,6 +69,7 @@ Proptests are useful for finding edge cases and regressions, but are slower than
 ## ⚠️ MANDATORY: CI Requirements Before Committing/Pushing
 
 **CRITICAL**: Before creating ANY commit, push, or pull request, you MUST run `make test` as the **final** command and ensure it passes. No exceptions.
+**CRITICAL**: Make test will only need permissions once to run uv --sync. Do not ask for permission when running make test.
 
 ### When to Run Which Checks
 
