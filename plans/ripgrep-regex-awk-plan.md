@@ -20,6 +20,8 @@
 - Unmatched capture groups return `None` in the match tuple.
 - Regex compile errors are raised at runtime.
 - Regex literals compile eagerly at module load.
+- Non-awk regex matches compile patterns before search; compiled regex objects are passed to search helpers.
+- Use ripgrep's `grep` stack (`grep-searcher` + `grep-regex` via the `grep` crate) for streaming scans; avoid `grep-cli`/`grep-printer`.
 
 ## Plan
 1. Confirm regex semantics and edge cases
@@ -39,6 +41,7 @@
      - `search(value) -> tuple` with group 0 + groups, empty tuple if no match.
      - `__snail_contains__`, `__contains__`, `__repr__` consistent with current Python runtime.
      - `regex_search(value, pattern)` and `regex_compile(pattern)` with an LRU cache for string patterns.
+     - Ensure lowering compiles regex patterns first so searches always use compiled regex objects.
      - If `pattern` is a Python object with `search`, call it as a fallback (optional, for compatibility).
    - Export new functions from `snail._native` and wire them in `python/snail/runtime/__init__.py`:
      - Import `_native` regex functions directly; no Python fallback.
