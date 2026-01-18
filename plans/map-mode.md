@@ -13,6 +13,9 @@ Add a new "map mode" to Snail that processes files one at a time, exposing speci
   - `$src` - source file path as string
   - `$fd` - open file handle (text mode, read)
   - `$text` - lazy file content (read on first access, then cached)
+- **Helpers should be map-mode aware**: for example, js() should consume $fd
+  by default in map-mode. ** CRITICAL TODO ** this feature should be split out
+  and also consider the plans in plans/remove-BEGIN-END.md
 
 ## Generated Python Structure
 
