@@ -23,6 +23,48 @@
 - Non-awk regex matches compile patterns before search; compiled regex objects are passed to search helpers.
 - Use ripgrep's `grep` stack (`grep-searcher` + `grep-regex` via the `grep` crate) for streaming scans; avoid `grep-cli`/`grep-printer`.
 
+## Open Questions
+
+### Breaking Changes & Migration
+- What happens when the inventory (step 1) finds patterns using Python-only features (lookahead, lookbehind, backreferences)? How should users migrate?
+- Should error messages include links to Rust regex flavor documentation to help users understand limitations?
+- Should there be a feature flag to revert the core regex replacement (not just the awk fast path) if issues surface after release?
+
+### UTF-8 Handling
+- Is a hard runtime error the right behavior for invalid UTF-8, or should there be a `--lossy` flag or automatic replacement with U+FFFD?
+- How will users processing log files with mixed encodings or stray bytes from legacy systems be affected?
+
+### Awk Fast Path Scope
+- Can the fast path be expanded beyond pure regex patterns to include field tests (`$1 == "foo"`, `$2 > 100`)?
+- Can boolean combinations of patterns (`/foo/ && /bar/`) use the fast path?
+- Can programs with BEGIN/END blocks still use the fast path for their main rules?
+- When are fields parsed—eagerly before calling Python, or lazily? What is the overhead tradeoff?
+
+### Caching & Memory
+- What should the LRU cache size be for string patterns? What is the memory ceiling?
+- Should there be a way to configure or monitor cache behavior?
+
+### Binary File Handling
+- What is the default behavior for binary files? Silent skip (like ripgrep), error, or process anyway?
+- Should this be configurable?
+
+### Performance
+- What is the concrete performance target? (e.g., "within 2x of ripgrep", "within 5x")
+- For high-match-rate files, will per-match Python callbacks dominate cost? Should callbacks be batched?
+- Should mmap be considered for large files instead of streaming?
+
+### Startup Cost
+- What is the impact of eager regex compilation at module load for programs with many conditionally-used patterns?
+- How should dynamically constructed patterns be handled?
+
+### Testing
+- Should the Rust regex bindings be fuzzed across the FFI boundary?
+- What edge cases need explicit tests? (empty files, very long lines >64KB, files without trailing newlines, LRU eviction behavior)
+
+### Dependencies
+- What is the acceptable compile-time and binary-size impact from adding `grep`, `regex`, `regex-syntax`, `once_cell`, `lru`?
+- Why exclude `grep-cli`/`grep-printer`? (Document rationale)
+
 ## Plan
 1. Confirm regex semantics and edge cases
    - Codify runtime error behavior for invalid UTF-8 input in native awk scan and in regex helpers.
