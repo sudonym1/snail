@@ -2,10 +2,15 @@
 
 UV ?= uv
 
+# Any use of snail will be automatically dropped in the case where snail isn't
+# on the path.
+SNAIL := $(if $(shell command -v snail 2>/dev/null),snail,bash -c 'cat > /dev/null' --)
+
 # Default target: test, build, and install
 all: test build install
 
 sync:
+	$(UV) run -- sha1sum CLAUDE.md AGENTS.md | $(SNAIL) -a '{assert $$1 == prev:$$1?, "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"; prev=$$1}'
 	$(UV) sync --extra dev
 
 develop: sync
