@@ -1,6 +1,4 @@
-#!/usr/bin/env -S snail --awk -f
-BEGIN { print("demo begin") }
+#!/usr/bin/env -S snail --awk -b 'print("demo begin")' -e 'print("demo end")' -f
 $0.startswith("d") { print("matched:", $0) }
 /de(mo)/ { print("regex:", $m.1) }
 { print($fn); print($0) }
-END { print("demo end") }

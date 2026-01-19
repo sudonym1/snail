@@ -34,3 +34,17 @@ pub fn compile_snail_source_with_auto_print(
         }
     }
 }
+
+/// Compile an awk program with separate begin and end code blocks.
+/// Each begin/end source is parsed as a regular Snail program.
+pub fn compile_awk_source_with_begin_end(
+    py: Python<'_>,
+    main_source: &str,
+    begin_sources: &[&str],
+    end_sources: &[&str],
+    auto_print_last: bool,
+) -> Result<PyObject, SnailError> {
+    let program = parse_awk_program_with_begin_end(main_source, begin_sources, end_sources)?;
+    let module = lower_awk_program_with_auto_print(py, &program, auto_print_last)?;
+    Ok(module)
+}

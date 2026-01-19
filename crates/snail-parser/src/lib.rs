@@ -12,7 +12,7 @@ mod string;
 mod util;
 
 use awk::parse_awk_rule;
-use stmt::{parse_block, parse_stmt_list};
+use stmt::parse_stmt_list;
 use util::{error_with_span, full_span, parse_error_from_pest};
 
 #[derive(Parser)]
@@ -45,45 +45,53 @@ pub fn parse_awk_program(source: &str) -> Result<AwkProgram, ParseError> {
         .ok_or_else(|| ParseError::new("missing awk program root"))?;
     let span = full_span(source);
 
-    let mut begin_blocks = Vec::new();
     let mut rules = Vec::new();
-    let mut end_blocks = Vec::new();
 
     for inner in pair.into_inner() {
         if inner.as_rule() == Rule::awk_entry_list {
             for entry in inner.into_inner() {
-                match entry.as_rule() {
-                    Rule::awk_begin => {
-                        let block = entry
-                            .into_inner()
-                            .find(|pair| pair.as_rule() == Rule::block)
-                            .ok_or_else(|| {
-                                util::error_with_span("missing BEGIN block", span.clone(), source)
-                            })?;
-                        begin_blocks.push(parse_block(block, source)?);
-                    }
-                    Rule::awk_end => {
-                        let block = entry
-                            .into_inner()
-                            .find(|pair| pair.as_rule() == Rule::block)
-                            .ok_or_else(|| {
-                                util::error_with_span("missing END block", span.clone(), source)
-                            })?;
-                        end_blocks.push(parse_block(block, source)?);
-                    }
-                    Rule::awk_rule => rules.push(parse_awk_rule(entry, source)?),
-                    _ => {}
+                if entry.as_rule() == Rule::awk_rule {
+                    rules.push(parse_awk_rule(entry, source)?);
                 }
             }
         }
     }
 
     Ok(AwkProgram {
-        begin_blocks,
+        begin_blocks: Vec::new(),
         rules,
-        end_blocks,
+        end_blocks: Vec::new(),
         span,
     })
+}
+
+/// Parses an awk program with separate begin and end code sources.
+/// Each begin/end source is parsed as a regular Snail program and its statements
+/// are injected into the resulting AwkProgram.
+pub fn parse_awk_program_with_begin_end(
+    main_source: &str,
+    begin_sources: &[&str],
+    end_sources: &[&str],
+) -> Result<AwkProgram, ParseError> {
+    let mut program = parse_awk_program(main_source)?;
+
+    // Parse each begin source as a regular program and extract statements
+    for source in begin_sources {
+        let begin_program = parse_program(source)?;
+        if !begin_program.stmts.is_empty() {
+            program.begin_blocks.push(begin_program.stmts);
+        }
+    }
+
+    // Parse each end source as a regular program and extract statements
+    for source in end_sources {
+        let end_program = parse_program(source)?;
+        if !end_program.stmts.is_empty() {
+            program.end_blocks.push(end_program.stmts);
+        }
+    }
+
+    Ok(program)
 }
 
 const AWK_ONLY_NAMES: [&str; 4] = ["$n", "$fn", "$p", "$m"];

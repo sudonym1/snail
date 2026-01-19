@@ -1,7 +1,7 @@
 mod common;
 
 use common::*;
-use snail_parser::parse_program;
+use snail_parser::{parse_awk_program, parse_awk_program_with_begin_end, parse_program};
 
 #[test]
 fn reports_parse_error_with_location() {
@@ -198,4 +198,50 @@ fn parser_rejects_invalid_parameter_syntax() {
             || message.contains("parameter")
     );
     assert!(err.span.is_some());
+}
+
+// ========== AWK Mode Parser Tests ==========
+
+#[test]
+fn awk_begin_end_parsed_as_patterns() {
+    // BEGIN and END are no longer special keywords; they parse as regular pattern names
+    // Use -b/-e CLI flags for begin/end blocks instead
+    let program = parse_awk_program("BEGIN { print(1) }").expect("should parse");
+    assert_eq!(program.rules.len(), 1);
+    assert!(program.begin_blocks.is_empty());
+    // BEGIN is parsed as pattern (identifier), not a special begin block
+    assert!(program.rules[0].pattern.is_some());
+
+    let program = parse_awk_program("END { print(1) }").expect("should parse");
+    assert_eq!(program.rules.len(), 1);
+    assert!(program.end_blocks.is_empty());
+    // END is parsed as pattern (identifier), not a special end block
+    assert!(program.rules[0].pattern.is_some());
+}
+
+#[test]
+fn awk_parses_simple_rules() {
+    let program = parse_awk_program("/foo/ { print($0) }").expect("should parse");
+    assert_eq!(program.rules.len(), 1);
+    assert!(program.begin_blocks.is_empty());
+    assert!(program.end_blocks.is_empty());
+}
+
+#[test]
+fn awk_with_begin_end_injects_blocks() {
+    let program =
+        parse_awk_program_with_begin_end("/foo/ { print($0) }", &["x = 1", "y = 2"], &["print(x)"])
+            .expect("should parse");
+
+    assert_eq!(program.rules.len(), 1);
+    assert_eq!(program.begin_blocks.len(), 2);
+    assert_eq!(program.end_blocks.len(), 1);
+}
+
+#[test]
+fn awk_with_empty_begin_end() {
+    let program = parse_awk_program_with_begin_end("/foo/", &[], &[]).expect("should parse");
+    assert_eq!(program.rules.len(), 1);
+    assert!(program.begin_blocks.is_empty());
+    assert!(program.end_blocks.is_empty());
 }
