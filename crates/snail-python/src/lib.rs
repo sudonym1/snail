@@ -5,8 +5,8 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
 use snail_core::{
-    CompileMode, compile_snail_source_with_auto_print, format_snail_error, parse_awk_program,
-    parse_program,
+    CompileMode, compile_awk_source_with_begin_end, compile_snail_source_with_auto_print,
+    format_snail_error, parse_awk_program, parse_program,
 };
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -104,12 +104,24 @@ fn compile_source(
     mode: CompileMode,
     auto_print: bool,
     filename: &str,
+    begin_code: &[String],
+    end_code: &[String],
 ) -> Result<PyObject, PyErr> {
     let profile = profile_enabled();
     let total_start = Instant::now();
     let compile_start = Instant::now();
-    let module = compile_snail_source_with_auto_print(py, source, mode, auto_print)
-        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+
+    // If mode is awk and we have begin/end code, use the specialized function
+    let module = if mode == CompileMode::Awk && (!begin_code.is_empty() || !end_code.is_empty()) {
+        let begin_refs: Vec<&str> = begin_code.iter().map(|s| s.as_str()).collect();
+        let end_refs: Vec<&str> = end_code.iter().map(|s| s.as_str()).collect();
+        compile_awk_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
+            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
+    } else {
+        compile_snail_source_with_auto_print(py, source, mode, auto_print)
+            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
+    };
+
     if profile {
         log_profile("compile_snail_source", compile_start.elapsed());
     }
@@ -154,18 +166,28 @@ fn prepare_globals<'py>(
 }
 
 #[pyfunction(name = "compile")]
-#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>"))]
+#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
 fn compile_py(
     py: Python<'_>,
     source: &str,
     mode: &str,
     auto_print: bool,
     filename: &str,
+    begin_code: Vec<String>,
+    end_code: Vec<String>,
 ) -> PyResult<PyObject> {
     let profile = profile_enabled();
     let total_start = Instant::now();
     let mode = parse_mode(mode)?;
-    let python_ast = compile_source(py, source, mode, auto_print, filename)?;
+    let python_ast = compile_source(
+        py,
+        source,
+        mode,
+        auto_print,
+        filename,
+        &begin_code,
+        &end_code,
+    )?;
     let display = display_filename(filename);
     let linecache_start = Instant::now();
     register_linecache(py, &display, source)?;
@@ -185,21 +207,32 @@ fn compile_py(
 }
 
 #[pyfunction(name = "compile_ast")]
-#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>"))]
+#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
 fn compile_ast_py(
     py: Python<'_>,
     source: &str,
     mode: &str,
     auto_print: bool,
     filename: &str,
+    begin_code: Vec<String>,
+    end_code: Vec<String>,
 ) -> PyResult<PyObject> {
     let mode = parse_mode(mode)?;
-    let python_ast = compile_source(py, source, mode, auto_print, filename)?;
+    let python_ast = compile_source(
+        py,
+        source,
+        mode,
+        auto_print,
+        filename,
+        &begin_code,
+        &end_code,
+    )?;
     Ok(python_ast)
 }
 
 #[pyfunction(name = "exec")]
-#[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, auto_import = true, filename = "<snail>"))]
+#[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, auto_import = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
+#[allow(clippy::too_many_arguments)]
 fn exec_py(
     py: Python<'_>,
     source: &str,
@@ -208,11 +241,21 @@ fn exec_py(
     auto_print: bool,
     auto_import: bool,
     filename: &str,
+    begin_code: Vec<String>,
+    end_code: Vec<String>,
 ) -> PyResult<i32> {
     let profile = profile_enabled();
     let total_start = Instant::now();
     let mode = parse_mode(mode)?;
-    let python_ast = compile_source(py, source, mode, auto_print, filename)?;
+    let python_ast = compile_source(
+        py,
+        source,
+        mode,
+        auto_print,
+        filename,
+        &begin_code,
+        &end_code,
+    )?;
     let display = display_filename(filename);
     let linecache_start = Instant::now();
     register_linecache(py, &display, source)?;

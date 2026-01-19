@@ -92,6 +92,8 @@ class _Args:
         self.debug = False
         self.version = False
         self.help = False
+        self.begin_code: list[str] = []
+        self.end_code: list[str] = []
         self.args: list[str] = []
 
 
@@ -103,6 +105,8 @@ def _print_help(file=sys.stdout) -> None:
     print("options:", file=file)
     print("  -f <file>               read Snail source from file", file=file)
     print("  -a, --awk               awk mode", file=file)
+    print("  -b <code>               begin block code (awk mode only, repeatable)", file=file)
+    print("  -e <code>               end block code (awk mode only, repeatable)", file=file)
     print("  -P, --no-print          disable auto-print of last expression", file=file)
     print("  -I, --no-auto-import    disable auto-imports", file=file)
     print("  --debug                 parse and compile, then print, do not run", file=file)
@@ -113,14 +117,22 @@ def _print_help(file=sys.stdout) -> None:
 def _parse_args(argv: list[str]) -> _Args:
     args = _Args()
     idx = 0
+    code_found = False
     while idx < len(argv):
         token = argv[idx]
         if token == "--":
             args.args = argv[idx + 1 :]
             return args
         if token == "-" or not token.startswith("-"):
-            args.args = argv[idx:]
-            return args
+            if code_found:
+                # Already found code, rest are args
+                args.args = argv[idx:]
+                return args
+            # This is the code, continue parsing for -b/-e after
+            args.args = [token]
+            code_found = True
+            idx += 1
+            continue
         if token in ("-h", "--help"):
             args.help = True
             return args
@@ -148,6 +160,18 @@ def _parse_args(argv: list[str]) -> _Args:
             if idx + 1 >= len(argv):
                 raise ValueError("option -f requires an argument")
             args.file = argv[idx + 1]
+            idx += 2
+            continue
+        if token == "-b":
+            if idx + 1 >= len(argv):
+                raise ValueError("option -b requires an argument")
+            args.begin_code.append(argv[idx + 1])
+            idx += 2
+            continue
+        if token == "-e":
+            if idx + 1 >= len(argv):
+                raise ValueError("option -e requires an argument")
+            args.end_code.append(argv[idx + 1])
             idx += 2
             continue
         raise ValueError(f"unknown option: {token}")
@@ -198,6 +222,11 @@ def main(argv: list[str] | None = None) -> int:
         print(_format_version(_get_version(), __build_info__))
         return 0
 
+    # Validate -b/-e only with --awk mode
+    if (namespace.begin_code or namespace.end_code) and not namespace.awk:
+        print("error: -b and -e options require --awk mode", file=sys.stderr)
+        return 2
+
     mode = "awk" if namespace.awk else "snail"
 
     if namespace.file:
@@ -228,6 +257,8 @@ def main(argv: list[str] | None = None) -> int:
             mode=mode,
             auto_print=not namespace.no_print,
             filename=filename,
+            begin_code=namespace.begin_code,
+            end_code=namespace.end_code,
         )
         builtins.compile(python_ast, _display_filename(filename), "exec")
         print(ast.unparse(python_ast))
@@ -240,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
         auto_print=not namespace.no_print,
         auto_import=not namespace.no_auto_import,
         filename=filename,
+        begin_code=namespace.begin_code,
+        end_code=namespace.end_code,
     )
 
 

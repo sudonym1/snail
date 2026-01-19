@@ -280,11 +280,21 @@ del temp_value
 
 ## Awk mode
 Invoke Snail's awk mode with `snail --awk`. Awk sources are composed of
-pattern/action pairs evaluated for each input line. `BEGIN` and `END` blocks
-run before and after the line loop, a rule with only a pattern prints matching
-lines by default, and a lone block runs for every line.
+pattern/action pairs evaluated for each input line. A rule with only a pattern
+prints matching lines by default, and a lone block runs for every line.
 
-See `examples/awk.snail` for a runnable sample program.
+Begin and end blocks are specified via CLI flags:
+- `-b <code>`: Code to run before processing lines (repeatable)
+- `-e <code>`: Code to run after processing lines (repeatable)
+
+Example:
+```bash
+echo "hello" | snail --awk -b 'print("start")' -e 'print("done")' '{ print($0) }'
+# Output: start\nhello\ndone
+```
+
+Multiple `-b` and `-e` flags are processed in order. See `examples/awk.snail`
+for a runnable sample program.
 
 While processing, Snail populates awk-style variables:
 - `$0`: the current line with the trailing newline removed.

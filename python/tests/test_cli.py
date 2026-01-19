@@ -283,6 +283,62 @@ def test_awk_identifiers_require_awk_mode() -> None:
     assert "--awk" in str(excinfo.value)
 
 
+def test_awk_begin_flag(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
+    assert main(["--awk", "-b", "print('start')", "{ print($0) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "start\nline\n"
+
+
+def test_awk_end_flag(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
+    assert main(["--awk", "-e", "print('done')", "{ print($0) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "line\ndone\n"
+
+
+def test_awk_multiple_begin_end_flags(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("x\n"))
+    assert main([
+        "--awk",
+        "-b", "print('b1')",
+        "-b", "print('b2')",
+        "-e", "print('e1')",
+        "-e", "print('e2')",
+        "{ print($0) }",
+    ]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "b1\nb2\nx\ne1\ne2\n"
+
+
+def test_awk_begin_end_interleaved_order(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("x\n"))
+    # -b before code, -e after code
+    assert main([
+        "--awk",
+        "-b", "print('start')",
+        "{ print($0) }",
+        "-e", "print('end')",
+    ]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "start\nx\nend\n"
+
+
+def test_begin_end_without_awk_mode_fails(capsys: pytest.CaptureFixture[str]) -> None:
+    result = main(["-b", "print('x')", "print('y')"])
+    assert result == 2
+    captured = capsys.readouterr()
+    assert "-b and -e options require --awk mode" in captured.err
+
+
 # --- Tests for auto-import ---
 
 
@@ -361,7 +417,13 @@ def test_example_awk(
 ) -> None:
     """Test that examples/awk.snail runs successfully."""
     monkeypatch.setattr(sys, "stdin", io.StringIO("demo line\nother line\n"))
-    result = main(["--awk", "-f", str(EXAMPLES_DIR / "awk.snail")])
+    # The example uses -b/-e flags for begin/end blocks; we pass them explicitly
+    result = main([
+        "--awk",
+        "-b", "print('demo begin')",
+        "-e", "print('demo end')",
+        "-f", str(EXAMPLES_DIR / "awk.snail"),
+    ])
     assert result == 0, f"awk.snail failed with exit code {result}"
     captured = capsys.readouterr()
     # Verify expected output from the awk script

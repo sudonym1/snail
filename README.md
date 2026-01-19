@@ -39,13 +39,17 @@ semicolons are optional. You can separate statements with newlines.
 
 Process files line-by-line with familiar awk semantics:
 
-```snail-awk("5\n4\n3\n2\n1\nbanana\n")
-BEGIN { total = 0 }
-/^[0-9]+/ { total = total + int($1) }
-END { print("Sum:", total); assert total == 15}
+```snail-awk("hello world\nfoo bar\n")
+/hello/ { print("matched:", $0) }
+{ print($1, "->", $2) }
 ```
 
 Built-in variables: `$0` (line), `$1`, `$2` etc (access fields), `$n` (line number), `$fn` (per-file line number), `$p` (file path), `$m` (last match).
+
+Begin/end blocks use CLI flags for setup and teardown:
+```bash
+echo -e "5\n4\n3\n2\n1" | snail --awk -b 'total = 0' -e 'print("Sum:", total)' '/^[0-9]+/ { total = total + int($1) }'
+```
 
 ### Compact Error Handling
 
