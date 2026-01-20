@@ -221,7 +221,11 @@ injected_var = { "$fn" | "$n" | "$p" | "$m" }
 
 // Number, string, and regex literals
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
-string = @{ raw_prefix? ~ (triple_double | triple_single | double_string | single_string) }
+string = @{ string_prefix? ~ (triple_double | triple_single | double_string | single_string) }
+string_prefix = { byte_raw_prefix | raw_byte_prefix | byte_prefix | raw_prefix }
+byte_raw_prefix = { "br" }
+raw_byte_prefix = { "rb" }
+byte_prefix = { "b" }
 raw_prefix = { "r" }
 triple_double = { "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" }
 triple_single = { "'''" ~ (!"'''" ~ ANY)* ~ "'''" }

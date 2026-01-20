@@ -75,6 +75,37 @@ pub(crate) fn string_expr(
     Ok(expr.into_py(builder.py()))
 }
 
+pub(crate) fn byte_string_expr(
+    builder: &AstBuilder<'_>,
+    value: &str,
+    raw: bool,
+    delimiter: StringDelimiter,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let rendered = match (raw, delimiter) {
+        (true, StringDelimiter::Single) => format!("rb'{}'", value),
+        (true, StringDelimiter::Double) => format!("rb\"{}\"", value),
+        (true, StringDelimiter::TripleSingle) => format!("rb'''{}'''", value),
+        (true, StringDelimiter::TripleDouble) => format!("rb\"\"\"{}\"\"\"", value),
+        (false, StringDelimiter::Single) => format!("b'{}'", value),
+        (false, StringDelimiter::Double) => format!("b\"{}\"", value),
+        (false, StringDelimiter::TripleSingle) => format!("b'''{}'''", value),
+        (false, StringDelimiter::TripleDouble) => format!("b\"\"\"{}\"\"\"", value),
+    };
+    let expr = builder
+        .py()
+        .import_bound("ast")
+        .and_then(|ast| ast.getattr("parse"))
+        .and_then(|parse| parse.call1((rendered,)))
+        .and_then(|module| module.getattr("body"))
+        .and_then(|body| body.get_item(0))
+        .and_then(|expr_stmt| expr_stmt.getattr("value"));
+
+    let expr = expr.map_err(py_err_to_lower)?;
+    set_location(&expr, span).map_err(py_err_to_lower)?;
+    Ok(expr.into_py(builder.py()))
+}
+
 pub(crate) fn number_expr(
     builder: &AstBuilder<'_>,
     value: &str,

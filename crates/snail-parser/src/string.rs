@@ -17,6 +17,7 @@ pub fn parse_string_or_fstring(pair: Pair<'_, Rule>, source: &str) -> Result<Exp
         return Ok(Expr::String {
             value: parsed.content,
             raw: true,
+            bytes: parsed.bytes,
             delimiter: parsed.delimiter,
             span,
         });
@@ -28,12 +29,17 @@ pub fn parse_string_or_fstring(pair: Pair<'_, Rule>, source: &str) -> Result<Exp
         .any(|part| matches!(part, FStringPart::Expr(_)));
     if has_expr {
         let parts = normalize_string_parts(parts, parsed.raw)?;
-        Ok(Expr::FString { parts, span })
+        Ok(Expr::FString {
+            parts,
+            bytes: parsed.bytes,
+            span,
+        })
     } else {
         let value = join_fstring_text(parts);
         Ok(Expr::String {
             value,
             raw: parsed.raw,
+            bytes: parsed.bytes,
             delimiter: parsed.delimiter,
             span,
         })
@@ -43,6 +49,7 @@ pub fn parse_string_or_fstring(pair: Pair<'_, Rule>, source: &str) -> Result<Exp
 pub struct ParsedStringLiteral {
     pub content: String,
     pub raw: bool,
+    pub bytes: bool,
     pub delimiter: StringDelimiter,
     pub content_offset: usize,
 }
@@ -50,10 +57,17 @@ pub struct ParsedStringLiteral {
 pub fn parse_string_literal(pair: Pair<'_, Rule>) -> Result<ParsedStringLiteral, ParseError> {
     let value = pair.as_str();
     let span = pair.as_span();
-    let (raw, rest, prefix_len) = if let Some(stripped) = value.strip_prefix('r') {
-        (true, stripped, 1usize)
+    // Parse prefix - check longer prefixes first
+    let (raw, bytes, rest, prefix_len) = if let Some(stripped) = value.strip_prefix("br") {
+        (true, true, stripped, 2usize)
+    } else if let Some(stripped) = value.strip_prefix("rb") {
+        (true, true, stripped, 2usize)
+    } else if let Some(stripped) = value.strip_prefix('b') {
+        (false, true, stripped, 1usize)
+    } else if let Some(stripped) = value.strip_prefix('r') {
+        (true, false, stripped, 1usize)
     } else {
-        (false, value, 0usize)
+        (false, false, value, 0usize)
     };
     let (delimiter, open, close) = if rest.starts_with("\"\"\"") {
         (StringDelimiter::TripleDouble, "\"\"\"", "\"\"\"")
@@ -73,6 +87,7 @@ pub fn parse_string_literal(pair: Pair<'_, Rule>) -> Result<ParsedStringLiteral,
     Ok(ParsedStringLiteral {
         content: content.to_string(),
         raw,
+        bytes,
         delimiter,
         content_offset,
     })
@@ -166,15 +181,29 @@ pub fn find_fstring_expr_end(content: &str, start: usize) -> Option<usize> {
     let mut brace = 0usize;
     while i < bytes.len() {
         match bytes[i] {
-            b'r' => {
-                if let Some(next) = bytes.get(i + 1)
-                    && (*next == b'\'' || *next == b'"')
-                {
-                    if let Some(end) = skip_string_literal(bytes, i) {
-                        i = end;
-                        continue;
-                    } else {
-                        return None;
+            b'r' | b'b' => {
+                // Check for string prefix combinations: r, b, rb, br
+                if let Some(next) = bytes.get(i + 1) {
+                    if *next == b'\'' || *next == b'"' {
+                        // r"..." or b"..."
+                        if let Some(end) = skip_string_literal(bytes, i) {
+                            i = end;
+                            continue;
+                        } else {
+                            return None;
+                        }
+                    } else if (*next == b'r' || *next == b'b') && bytes[i] != *next {
+                        // Could be rb"..." or br"..."
+                        if let Some(third) = bytes.get(i + 2)
+                            && (*third == b'\'' || *third == b'"')
+                        {
+                            if let Some(end) = skip_string_literal(bytes, i) {
+                                i = end;
+                                continue;
+                            } else {
+                                return None;
+                            }
+                        }
                     }
                 }
                 i += 1;
@@ -221,7 +250,14 @@ pub fn find_fstring_expr_end(content: &str, start: usize) -> Option<usize> {
 
 pub fn skip_string_literal(bytes: &[u8], start: usize) -> Option<usize> {
     let mut i = start;
-    let raw = if bytes.get(i) == Some(&b'r') {
+    // Handle prefixes: br, rb, b, r (check longer prefixes first)
+    let raw = if bytes.get(i..i + 2) == Some(b"br") || bytes.get(i..i + 2) == Some(b"rb") {
+        i += 2;
+        true
+    } else if bytes.get(i) == Some(&b'b') {
+        i += 1;
+        false
+    } else if bytes.get(i) == Some(&b'r') {
         i += 1;
         true
     } else {
@@ -327,7 +363,7 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
         | Expr::Slice { span, .. } => {
             *span = shift_span(span, offset, source);
         }
-        Expr::FString { parts, span } => {
+        Expr::FString { parts, span, .. } => {
             for part in parts {
                 if let FStringPart::Expr(expr) = part {
                     shift_expr_spans(expr, offset, source);

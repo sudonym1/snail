@@ -4,7 +4,7 @@ use snail_ast::*;
 use snail_error::LowerError;
 
 use crate::constants::*;
-use crate::helpers::{name_expr, number_expr, regex_pattern_expr, string_expr};
+use crate::helpers::{byte_string_expr, name_expr, number_expr, regex_pattern_expr, string_expr};
 use crate::operators::{lower_binary_op, lower_bool_op, lower_compare_op, lower_unary_op};
 use crate::py_ast::{AstBuilder, py_err_to_lower};
 
@@ -441,18 +441,53 @@ pub(crate) fn lower_expr_with_exception(
         Expr::String {
             value,
             raw,
+            bytes,
             delimiter,
             span,
-        } => string_expr(builder, value, *raw, *delimiter, span),
-        Expr::FString { parts, span } => {
+        } => {
+            if *bytes {
+                byte_string_expr(builder, value, *raw, *delimiter, span)
+            } else {
+                string_expr(builder, value, *raw, *delimiter, span)
+            }
+        }
+        Expr::FString { parts, bytes, span } => {
             let values = lower_fstring_parts(builder, parts, exception_name)?;
-            builder
+            let joined = builder
                 .call_node(
                     "JoinedStr",
                     vec![PyList::new_bound(builder.py(), values).into_py(builder.py())],
                     span,
                 )
-                .map_err(py_err_to_lower)
+                .map_err(py_err_to_lower)?;
+
+            if *bytes {
+                // Wrap in .encode() call: f"...".encode()
+                let encode_attr = builder
+                    .call_node(
+                        "Attribute",
+                        vec![
+                            joined,
+                            "encode".to_string().into_py(builder.py()),
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?;
+                builder
+                    .call_node(
+                        "Call",
+                        vec![
+                            encode_attr,
+                            PyList::empty_bound(builder.py()).into_py(builder.py()),
+                            PyList::empty_bound(builder.py()).into_py(builder.py()),
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)
+            } else {
+                Ok(joined)
+            }
         }
         Expr::Bool { value, span } => builder
             .call_node("Constant", vec![value.into_py(builder.py())], span)
@@ -1324,7 +1359,7 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
         | Expr::None { .. }
         | Expr::StructuredAccessor { .. }
         | Expr::FieldIndex { .. } => expr.clone(),
-        Expr::FString { parts, span } => Expr::FString {
+        Expr::FString { parts, bytes, span } => Expr::FString {
             parts: parts
                 .iter()
                 .map(|part| match part {
@@ -1334,6 +1369,7 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                     }
                 })
                 .collect(),
+            bytes: *bytes,
             span: span.clone(),
         },
         Expr::Unary { op, expr, span } => Expr::Unary {

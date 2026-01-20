@@ -144,7 +144,10 @@ lookup = {n: n * 2 for n in nums if n > 1}
 
 ## Strings
 Single-line, raw, and triple-quoted strings are available. Raw strings keep
-backslashes intact, and triple-quoted strings preserve newlines.
+backslashes intact, and triple-quoted strings preserve newlines. Byte strings
+use a `b` prefix (`b"..."`, `rb"..."`, `br"..."`) and produce Python `bytes`.
+Byte strings interpolate `{}` like regular strings; interpolated byte strings
+are UTF-8 encoded.
 
 ## Context managers
 `with` uses the same protocol as Python and supports aliasing:

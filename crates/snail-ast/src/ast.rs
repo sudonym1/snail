@@ -189,11 +189,13 @@ pub enum Expr {
     String {
         value: String,
         raw: bool,
+        bytes: bool,
         delimiter: StringDelimiter,
         span: SourceSpan,
     },
     FString {
         parts: Vec<FStringPart>,
+        bytes: bool,
         span: SourceSpan,
     },
     Bool {

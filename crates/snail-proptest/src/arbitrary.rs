@@ -79,6 +79,7 @@ pub fn string_expr() -> impl Strategy<Value = Expr> {
     (
         prop::string::string_regex("[a-zA-Z0-9 _,.-]{0,20}").unwrap(),
         prop::bool::ANY,
+        prop::bool::ANY,
         prop_oneof![
             Just(StringDelimiter::Single),
             Just(StringDelimiter::Double),
@@ -86,9 +87,10 @@ pub fn string_expr() -> impl Strategy<Value = Expr> {
             Just(StringDelimiter::TripleDouble),
         ],
     )
-        .prop_map(|(value, raw, delimiter)| Expr::String {
+        .prop_map(|(value, raw, bytes, delimiter)| Expr::String {
             value,
             raw,
+            bytes,
             delimiter,
             span: dummy_span(),
         })
@@ -413,10 +415,15 @@ pub fn dict_comp_expr(size: Size) -> impl Strategy<Value = Expr> {
 }
 
 pub fn fstring_expr(size: Size) -> impl Strategy<Value = Expr> {
-    prop::collection::vec(fstring_part(size), 1..=5).prop_map(|parts| Expr::FString {
-        parts,
-        span: dummy_span(),
-    })
+    (
+        prop::collection::vec(fstring_part(size), 1..=5),
+        prop::bool::ANY,
+    )
+        .prop_map(|(parts, bytes)| Expr::FString {
+            parts,
+            bytes,
+            span: dummy_span(),
+        })
 }
 
 pub fn fstring_part(size: Size) -> impl Strategy<Value = FStringPart> {

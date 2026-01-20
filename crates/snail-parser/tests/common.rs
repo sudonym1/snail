@@ -84,6 +84,33 @@ pub fn expect_string_contains(expr: &Expr, snippet: &str, raw: bool, delimiter: 
     }
 }
 
+pub fn expect_byte_string(expr: &Expr, expected: &str, raw: bool, delimiter: StringDelimiter) {
+    match expr {
+        Expr::String {
+            value,
+            raw: is_raw,
+            bytes,
+            delimiter: actual_delimiter,
+            ..
+        } => {
+            assert_eq!(value, expected);
+            assert_eq!(*is_raw, raw);
+            assert!(*bytes, "Expected byte string (bytes=true)");
+            assert_eq!(*actual_delimiter, delimiter);
+        }
+        other => panic!("Expected byte string, got {other:?}"),
+    }
+}
+
+pub fn expect_byte_fstring(expr: &Expr) {
+    match expr {
+        Expr::FString { bytes, .. } => {
+            assert!(*bytes, "Expected byte f-string (bytes=true)");
+        }
+        other => panic!("Expected byte f-string, got {other:?}"),
+    }
+}
+
 pub fn expect_span_start(span: &SourceSpan, line: usize, column: usize) {
     assert_eq!(span.start.line, line);
     assert_eq!(span.start.column, column);

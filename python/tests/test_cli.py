@@ -392,6 +392,52 @@ def test_no_auto_import_path(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Path" in str(excinfo.value)
 
 
+# --- Tests for byte strings ---
+
+
+def test_byte_string_basic(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that byte strings are parsed and executed correctly."""
+    script = 'x = b"hello"\nprint(x)'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "b'hello'"
+
+
+def test_byte_string_interpolation(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that byte strings support interpolation (unlike Python)."""
+    script = 'y = "world"\nx = b"hello {y}"\nprint(x)'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    # Should interpolate and encode
+    assert captured.out.strip() == "b'hello world'"
+
+
+def test_raw_byte_string(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test raw byte strings."""
+    script = r'x = rb"\n"' + '\nprint(len(x))'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    # rb"\n" should be 2 bytes: backslash and n
+    assert captured.out.strip() == "2"
+
+
+def test_byte_string_operations(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test byte string operations work correctly."""
+    script = 'x = b"hello" + b" world"\nprint(x)'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "b'hello world'"
+
+
+def test_byte_string_br_prefix(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test br prefix for raw byte strings."""
+    script = r'x = br"\t"' + '\nprint(len(x))'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    # br"\t" should be 2 bytes: backslash and t
+    assert captured.out.strip() == "2"
+
+
 # --- Tests for example files ---
 
 EXAMPLES_DIR = ROOT / "examples"

@@ -80,6 +80,16 @@ multi_text = """line one
 line two"""
 raw_multi = r"""raw\\nline
 raw line two"""
+# Byte strings
+byte_text = b"hello bytes"
+byte_single = b'single quoted bytes'
+raw_byte = rb"\n is literal"
+raw_byte_alt = br"\t is also literal"
+byte_multi = b"""multi
+line bytes"""
+# Byte strings WITH interpolation (unlike Python!)
+byte_name = "world"
+byte_interp = b"hello {byte_name}"
 user_name = "snail"
 greeting = "hello {user_name}"
 brace_text = "brace {{ok}}"
@@ -290,6 +300,11 @@ print("auto-import Path", auto_path_cwd)
 
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
+print("byte strings", byte_text, byte_single, raw_byte, raw_byte_alt)
+print("byte interp", byte_interp)
+assert byte_text == b"hello bytes"
+assert byte_interp == b"hello world"
+assert len(raw_byte) == 13  # rb"\n is literal" = 13 chars as bytes
 print(sysmod.version)
 
 # The last expression is always pretty printed to stdout, unless -P is specified
