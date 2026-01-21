@@ -7,6 +7,12 @@
 
 **Snail** is a programming language that compiles to Python, combining Python's familiarity and extensive libraries with Perl/awk-inspired syntax for quick scripts and one-liners.
 
+## AI Slop!
+
+Snail is me learning how to devlop code using LLMs. I think its neat, and
+maybe useful. I don't think this is high quality. I am going to try and LLM my
+way into something good, but its certainly not there yet.
+
 ## Installing Snail
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and then run:
