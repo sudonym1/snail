@@ -4,6 +4,7 @@ use crate::ast::{Expr, SourceSpan, Stmt};
 pub enum CompileMode {
     Snail,
     Awk,
+    Map,
 }
 
 #[derive(Debug, Clone, PartialEq)]

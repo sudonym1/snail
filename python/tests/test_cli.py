@@ -633,3 +633,86 @@ def test_readme_snail_oneliners(
     else:
         combined = f"{README_SNIPPET_PREAMBLE}\n{argv[0]}"
         assert main([combined, *argv[1:]]) == 0, f"failed at {path}:{line_no}"
+
+
+# Map mode tests
+
+
+def test_map_mode_from_args(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test map mode with files passed as CLI arguments."""
+    file_a = tmp_path / "a.txt"
+    file_b = tmp_path / "b.txt"
+    file_a.write_text("hello")
+    file_b.write_text("world")
+    result = main(["--map", "print($src)", str(file_a), str(file_b)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert str(file_a) in captured.out
+    assert str(file_b) in captured.out
+
+
+def test_map_mode_text_content(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that $text contains file content."""
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("hello world")
+    result = main(["--map", "print(len($text))", str(file_a)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "11" in captured.out
+
+
+def test_map_mode_fd_access(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that $fd is a readable file handle."""
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("first line\nsecond line\n")
+    result = main(["--map", "print($fd.readline().strip())", str(file_a)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "first line" in captured.out
+
+
+def test_map_mode_lazy_text(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that $text is lazy (can use $fd first, then $text is empty)."""
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("content")
+    # Reading $fd first consumes the file, so $text will be empty
+    result = main(["--map", "_ = $fd.read(); print(repr(str($text)))", str(file_a)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "''" in captured.out
+
+
+def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that $src is rejected in snail mode."""
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["print($src)"])
+    assert "map variables are only valid in map mode" in str(excinfo.value)
+
+
+def test_awk_and_map_mutually_exclusive(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that --awk and --map cannot be used together."""
+    result = main(["--awk", "--map", "print('test')"])
+    assert result == 2
+    captured = capsys.readouterr()
+    assert "--awk and --map cannot be used together" in captured.err
+
+
+def test_example_map(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that examples/map.snail runs successfully."""
+    file_a = tmp_path / "test.txt"
+    file_a.write_text("test content here\n")
+    result = main(["--map", "-f", str(EXAMPLES_DIR / "map.snail"), str(file_a)])
+    assert result == 0, f"map.snail failed with exit code {result}"
+    captured = capsys.readouterr()
+    assert str(file_a) in captured.out
+    assert "bytes" in captured.out

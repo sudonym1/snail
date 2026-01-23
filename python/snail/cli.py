@@ -87,6 +87,7 @@ class _Args:
     def __init__(self) -> None:
         self.file: str | None = None
         self.awk = False
+        self.map = False
         self.no_print = False
         self.no_auto_import = False
         self.debug = False
@@ -105,6 +106,7 @@ def _print_help(file=sys.stdout) -> None:
     print("options:", file=file)
     print("  -f <file>               read Snail source from file", file=file)
     print("  -a, --awk               awk mode", file=file)
+    print("  -m, --map               map mode (process files one at a time)", file=file)
     print("  -b <code>               begin block code (awk mode only, repeatable)", file=file)
     print("  -e <code>               end block code (awk mode only, repeatable)", file=file)
     print("  -P, --no-print          disable auto-print of last expression", file=file)
@@ -126,7 +128,7 @@ def _parse_args(argv: list[str]) -> _Args:
         if token == "-" or not token.startswith("-"):
             if code_found:
                 # Already found code, rest are args
-                args.args = argv[idx:]
+                args.args.extend(argv[idx:])
                 return args
             # This is the code, continue parsing for -b/-e after
             args.args = [token]
@@ -142,6 +144,10 @@ def _parse_args(argv: list[str]) -> _Args:
             continue
         if token in ("-a", "--awk"):
             args.awk = True
+            idx += 1
+            continue
+        if token in ("-m", "--map"):
+            args.map = True
             idx += 1
             continue
         if token in ("-P", "--no-print"):
@@ -222,12 +228,17 @@ def main(argv: list[str] | None = None) -> int:
         print(_format_version(_get_version(), __build_info__))
         return 0
 
+    # Validate --awk and --map are mutually exclusive
+    if namespace.awk and namespace.map:
+        print("error: --awk and --map cannot be used together", file=sys.stderr)
+        return 2
+
     # Validate -b/-e only with --awk mode
     if (namespace.begin_code or namespace.end_code) and not namespace.awk:
         print("error: -b and -e options require --awk mode", file=sys.stderr)
         return 2
 
-    mode = "awk" if namespace.awk else "snail"
+    mode = "map" if namespace.map else ("awk" if namespace.awk else "snail")
 
     if namespace.file:
         from pathlib import Path

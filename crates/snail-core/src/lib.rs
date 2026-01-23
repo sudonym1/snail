@@ -32,6 +32,11 @@ pub fn compile_snail_source_with_auto_print(
             let module = lower_awk_program_with_auto_print(py, &program, auto_print_last)?;
             Ok(module)
         }
+        CompileMode::Map => {
+            let program = parse_map_program(source)?;
+            let module = lower_map_program_with_auto_print(py, &program, auto_print_last)?;
+            Ok(module)
+        }
     }
 }
 
