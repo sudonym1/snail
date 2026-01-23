@@ -28,13 +28,27 @@ pub(crate) const SNAIL_AWK_FNR_PYVAR: &str = "__snail_fnr_user";
 pub(crate) const SNAIL_AWK_PATH_PYVAR: &str = "__snail_path_user";
 pub(crate) const SNAIL_AWK_MATCH_PYVAR: &str = "__snail_match";
 
+// Map-related constants (public within crate)
+pub(crate) const SNAIL_MAP_SRC: &str = "$src";
+pub(crate) const SNAIL_MAP_FD: &str = "$fd";
+pub(crate) const SNAIL_MAP_TEXT: &str = "$text";
+pub(crate) const SNAIL_MAP_SRC_PYVAR: &str = "__snail_src";
+pub(crate) const SNAIL_MAP_FD_PYVAR: &str = "__snail_fd";
+pub(crate) const SNAIL_MAP_TEXT_PYVAR: &str = "__snail_text";
+pub const SNAIL_LAZY_TEXT_CLASS: &str = "__SnailLazyText";
+
 pub(crate) fn injected_py_name(name: &str) -> Option<&'static str> {
     match name {
+        // Awk variables
         SNAIL_AWK_NR => Some(SNAIL_AWK_NR_PYVAR),
         SNAIL_AWK_FNR => Some(SNAIL_AWK_FNR_PYVAR),
         SNAIL_AWK_PATH => Some(SNAIL_AWK_PATH_PYVAR),
         SNAIL_AWK_MATCH => Some(SNAIL_AWK_MATCH_PYVAR),
         SNAIL_AWK_FIELDS => Some(SNAIL_AWK_FIELDS_PYVAR),
+        // Map variables
+        SNAIL_MAP_SRC => Some(SNAIL_MAP_SRC_PYVAR),
+        SNAIL_MAP_FD => Some(SNAIL_MAP_FD_PYVAR),
+        SNAIL_MAP_TEXT => Some(SNAIL_MAP_TEXT_PYVAR),
         _ => None,
     }
 }

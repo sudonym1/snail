@@ -97,6 +97,388 @@ pub fn parse_awk_program_with_begin_end(
 const AWK_ONLY_NAMES: [&str; 5] = ["$n", "$fn", "$p", "$m", "$f"];
 const AWK_ONLY_MESSAGE: &str = "awk variables are only valid in awk mode; use --awk";
 
+const MAP_ONLY_NAMES: [&str; 3] = ["$src", "$fd", "$text"];
+const MAP_ONLY_MESSAGE: &str = "map variables are only valid in map mode; use --map";
+
+/// Parses a map program that processes files one at a time.
+/// Allows map variables ($src, $fd, $text) but rejects awk variables.
+pub fn parse_map_program(source: &str) -> Result<Program, ParseError> {
+    let mut pairs = SnailParser::parse(Rule::program, source)
+        .map_err(|err| parse_error_from_pest(err, source))?;
+    let pair = pairs
+        .next()
+        .ok_or_else(|| ParseError::new("missing program root"))?;
+    let span = full_span(source);
+    let mut stmts = Vec::new();
+    for inner in pair.into_inner() {
+        if inner.as_rule() == Rule::stmt_list {
+            stmts = parse_stmt_list(inner, source)?;
+        }
+    }
+    let program = Program { stmts, span };
+    validate_no_awk_syntax_for_map(&program, source)?;
+    Ok(program)
+}
+
+fn validate_no_awk_syntax_for_map(program: &Program, source: &str) -> Result<(), ParseError> {
+    for stmt in &program.stmts {
+        validate_stmt_for_map(stmt, source)?;
+    }
+    Ok(())
+}
+
+fn validate_stmt_for_map(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
+    match stmt {
+        Stmt::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
+        } => {
+            validate_condition_for_map(cond, source)?;
+            validate_block_for_map(body, source)?;
+            for (elif_cond, elif_body) in elifs {
+                validate_condition_for_map(elif_cond, source)?;
+                validate_block_for_map(elif_body, source)?;
+            }
+            if let Some(body) = else_body {
+                validate_block_for_map(body, source)?;
+            }
+        }
+        Stmt::While {
+            cond,
+            body,
+            else_body,
+            ..
+        } => {
+            validate_condition_for_map(cond, source)?;
+            validate_block_for_map(body, source)?;
+            if let Some(body) = else_body {
+                validate_block_for_map(body, source)?;
+            }
+        }
+        Stmt::For {
+            target,
+            iter,
+            body,
+            else_body,
+            ..
+        } => {
+            validate_assign_target_for_map(target, source)?;
+            validate_expr_for_map(iter, source)?;
+            validate_block_for_map(body, source)?;
+            if let Some(body) = else_body {
+                validate_block_for_map(body, source)?;
+            }
+        }
+        Stmt::Def { params, body, .. } => {
+            for param in params {
+                validate_param_for_map(param, source)?;
+            }
+            validate_block_for_map(body, source)?;
+        }
+        Stmt::Class { body, .. } => {
+            validate_block_for_map(body, source)?;
+        }
+        Stmt::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            ..
+        } => {
+            validate_block_for_map(body, source)?;
+            for handler in handlers {
+                validate_except_handler_for_map(handler, source)?;
+            }
+            if let Some(body) = else_body {
+                validate_block_for_map(body, source)?;
+            }
+            if let Some(body) = finally_body {
+                validate_block_for_map(body, source)?;
+            }
+        }
+        Stmt::With { items, body, .. } => {
+            for item in items {
+                validate_with_item_for_map(item, source)?;
+            }
+            validate_block_for_map(body, source)?;
+        }
+        Stmt::Return { value, .. } => {
+            if let Some(value) = value {
+                validate_expr_for_map(value, source)?;
+            }
+        }
+        Stmt::Raise { value, from, .. } => {
+            if let Some(value) = value {
+                validate_expr_for_map(value, source)?;
+            }
+            if let Some(from) = from {
+                validate_expr_for_map(from, source)?;
+            }
+        }
+        Stmt::Assert { test, message, .. } => {
+            validate_expr_for_map(test, source)?;
+            if let Some(message) = message {
+                validate_expr_for_map(message, source)?;
+            }
+        }
+        Stmt::Delete { targets, .. } => {
+            for target in targets {
+                validate_assign_target_for_map(target, source)?;
+            }
+        }
+        Stmt::Import { .. }
+        | Stmt::ImportFrom { .. }
+        | Stmt::Break { .. }
+        | Stmt::Continue { .. }
+        | Stmt::Pass { .. } => {}
+        Stmt::Assign { targets, value, .. } => {
+            for target in targets {
+                validate_assign_target_for_map(target, source)?;
+            }
+            validate_expr_for_map(value, source)?;
+        }
+        Stmt::Expr { value, .. } => {
+            validate_expr_for_map(value, source)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_block_for_map(block: &[Stmt], source: &str) -> Result<(), ParseError> {
+    for stmt in block {
+        validate_stmt_for_map(stmt, source)?;
+    }
+    Ok(())
+}
+
+fn validate_with_item_for_map(item: &WithItem, source: &str) -> Result<(), ParseError> {
+    validate_expr_for_map(&item.context, source)?;
+    if let Some(target) = &item.target {
+        validate_assign_target_for_map(target, source)?;
+    }
+    Ok(())
+}
+
+fn validate_except_handler_for_map(
+    handler: &ExceptHandler,
+    source: &str,
+) -> Result<(), ParseError> {
+    if let Some(expr) = &handler.type_name {
+        validate_expr_for_map(expr, source)?;
+    }
+    validate_block_for_map(&handler.body, source)?;
+    Ok(())
+}
+
+fn validate_param_for_map(param: &Parameter, source: &str) -> Result<(), ParseError> {
+    match param {
+        Parameter::Regular { default, .. } => {
+            if let Some(default) = default {
+                validate_expr_for_map(default, source)?;
+            }
+        }
+        Parameter::VarArgs { .. } | Parameter::KwArgs { .. } => {}
+    }
+    Ok(())
+}
+
+fn validate_argument_for_map(arg: &Argument, source: &str) -> Result<(), ParseError> {
+    match arg {
+        Argument::Positional { value, .. }
+        | Argument::Keyword { value, .. }
+        | Argument::Star { value, .. }
+        | Argument::KwStar { value, .. } => validate_expr_for_map(value, source),
+    }
+}
+
+fn validate_assign_target_for_map(target: &AssignTarget, source: &str) -> Result<(), ParseError> {
+    match target {
+        AssignTarget::Name { .. } => Ok(()),
+        AssignTarget::Attribute { value, .. } => validate_expr_for_map(value, source),
+        AssignTarget::Index { value, index, .. } => {
+            validate_expr_for_map(value, source)?;
+            validate_expr_for_map(index, source)
+        }
+        AssignTarget::Starred { target, .. } => validate_assign_target_for_map(target, source),
+        AssignTarget::Tuple { elements, .. } | AssignTarget::List { elements, .. } => {
+            for element in elements {
+                validate_assign_target_for_map(element, source)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_condition_for_map(cond: &Condition, source: &str) -> Result<(), ParseError> {
+    match cond {
+        Condition::Expr(expr) => validate_expr_for_map(expr, source),
+        Condition::Let {
+            target,
+            value,
+            guard,
+            ..
+        } => {
+            validate_assign_target_for_map(target, source)?;
+            validate_expr_for_map(value, source)?;
+            if let Some(guard) = guard {
+                validate_expr_for_map(guard, source)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_expr_for_map(expr: &Expr, source: &str) -> Result<(), ParseError> {
+    match expr {
+        Expr::Name { name, span } => {
+            // Reject awk-only names but allow map names
+            if AWK_ONLY_NAMES.contains(&name.as_str()) {
+                return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
+            }
+            // Map variables are allowed in map mode
+        }
+        Expr::Placeholder { .. } => {}
+        Expr::FieldIndex { span, .. } => {
+            return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
+        }
+        Expr::FString { parts, .. } => {
+            for part in parts {
+                validate_fstring_part_for_map(part, source)?;
+            }
+        }
+        Expr::Unary { expr, .. } => {
+            validate_expr_for_map(expr, source)?;
+        }
+        Expr::Binary { left, right, .. } => {
+            validate_expr_for_map(left, source)?;
+            validate_expr_for_map(right, source)?;
+        }
+        Expr::Compare {
+            left, comparators, ..
+        } => {
+            validate_expr_for_map(left, source)?;
+            for expr in comparators {
+                validate_expr_for_map(expr, source)?;
+            }
+        }
+        Expr::IfExpr {
+            test, body, orelse, ..
+        } => {
+            validate_expr_for_map(test, source)?;
+            validate_expr_for_map(body, source)?;
+            validate_expr_for_map(orelse, source)?;
+        }
+        Expr::TryExpr { expr, fallback, .. } => {
+            validate_expr_for_map(expr, source)?;
+            if let Some(fallback) = fallback {
+                validate_expr_for_map(fallback, source)?;
+            }
+        }
+        Expr::Compound { expressions, .. } => {
+            for expr in expressions {
+                validate_expr_for_map(expr, source)?;
+            }
+        }
+        Expr::Regex { pattern, .. } => {
+            validate_regex_pattern_for_map(pattern, source)?;
+        }
+        Expr::RegexMatch { value, pattern, .. } => {
+            validate_expr_for_map(value, source)?;
+            validate_regex_pattern_for_map(pattern, source)?;
+        }
+        Expr::Subprocess { parts, .. } => {
+            for part in parts {
+                if let SubprocessPart::Expr(expr) = part {
+                    validate_expr_for_map(expr, source)?;
+                }
+            }
+        }
+        Expr::StructuredAccessor { .. }
+        | Expr::Number { .. }
+        | Expr::String { .. }
+        | Expr::Bool { .. }
+        | Expr::None { .. } => {}
+        Expr::Call { func, args, .. } => {
+            validate_expr_for_map(func, source)?;
+            for arg in args {
+                validate_argument_for_map(arg, source)?;
+            }
+        }
+        Expr::Attribute { value, .. } => {
+            validate_expr_for_map(value, source)?;
+        }
+        Expr::Index { value, index, .. } => {
+            validate_expr_for_map(value, source)?;
+            validate_expr_for_map(index, source)?;
+        }
+        Expr::Paren { expr, .. } => {
+            validate_expr_for_map(expr, source)?;
+        }
+        Expr::List { elements, .. } | Expr::Tuple { elements, .. } => {
+            for expr in elements {
+                validate_expr_for_map(expr, source)?;
+            }
+        }
+        Expr::Dict { entries, .. } => {
+            for (key, value) in entries {
+                validate_expr_for_map(key, source)?;
+                validate_expr_for_map(value, source)?;
+            }
+        }
+        Expr::Slice { start, end, .. } => {
+            if let Some(start) = start {
+                validate_expr_for_map(start, source)?;
+            }
+            if let Some(end) = end {
+                validate_expr_for_map(end, source)?;
+            }
+        }
+        Expr::ListComp {
+            element, iter, ifs, ..
+        } => {
+            validate_expr_for_map(element, source)?;
+            validate_expr_for_map(iter, source)?;
+            for expr in ifs {
+                validate_expr_for_map(expr, source)?;
+            }
+        }
+        Expr::DictComp {
+            key,
+            value,
+            iter,
+            ifs,
+            ..
+        } => {
+            validate_expr_for_map(key, source)?;
+            validate_expr_for_map(value, source)?;
+            validate_expr_for_map(iter, source)?;
+            for expr in ifs {
+                validate_expr_for_map(expr, source)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_regex_pattern_for_map(pattern: &RegexPattern, source: &str) -> Result<(), ParseError> {
+    if let RegexPattern::Interpolated(parts) = pattern {
+        for part in parts {
+            validate_fstring_part_for_map(part, source)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_fstring_part_for_map(part: &FStringPart, source: &str) -> Result<(), ParseError> {
+    if let FStringPart::Expr(expr) = part {
+        validate_expr_for_map(expr, source)?;
+    }
+    Ok(())
+}
+
 fn validate_no_awk_syntax(program: &Program, source: &str) -> Result<(), ParseError> {
     for stmt in &program.stmts {
         validate_stmt(stmt, source)?;
@@ -310,6 +692,9 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
         Expr::Name { name, span } => {
             if AWK_ONLY_NAMES.contains(&name.as_str()) {
                 return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
+            }
+            if MAP_ONLY_NAMES.contains(&name.as_str()) {
+                return Err(error_with_span(MAP_ONLY_MESSAGE, span.clone(), source));
             }
         }
         Expr::Placeholder { .. } => {}

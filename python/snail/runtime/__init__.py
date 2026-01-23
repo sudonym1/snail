@@ -41,6 +41,7 @@ _subprocess_capture = None
 _subprocess_status = None
 _jmespath_query = None
 _js = None
+_lazy_text_class = None
 
 
 def _get_compact_try():
@@ -106,6 +107,15 @@ def _get_js():
     return _js
 
 
+def _get_lazy_text_class():
+    global _lazy_text_class
+    if _lazy_text_class is None:
+        from .lazy_text import LazyText
+
+        _lazy_text_class = LazyText
+    return _lazy_text_class
+
+
 def _lazy_compact_try(expr_fn, fallback_fn=None):
     return _get_compact_try()(expr_fn, fallback_fn)
 
@@ -165,3 +175,4 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_contains__"] = __snail_contains__
     globals_dict["__snail_contains_not__"] = __snail_contains_not__
     globals_dict["js"] = _lazy_js
+    globals_dict["__SnailLazyText"] = _get_lazy_text_class()

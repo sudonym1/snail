@@ -1,0 +1,235 @@
+use pyo3::prelude::*;
+use pyo3::types::PyList;
+use snail_ast::*;
+use snail_error::LowerError;
+
+use crate::constants::*;
+use crate::helpers::{assign_name, name_expr, string_expr};
+use crate::py_ast::{AstBuilder, py_err_to_lower};
+use crate::stmt::lower_block_with_auto_print;
+
+pub fn lower_map_program(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
+    lower_map_program_with_auto_print(py, program, false)
+}
+
+pub fn lower_map_program_with_auto_print(
+    py: Python<'_>,
+    program: &Program,
+    auto_print_last: bool,
+) -> Result<PyObject, LowerError> {
+    let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
+    let span = program.span.clone();
+    let mut body = Vec::new();
+
+    // import sys
+    let sys_import = builder
+        .call_node(
+            "Import",
+            vec![
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        builder
+                            .call_node_no_loc(
+                                "alias",
+                                vec![
+                                    "sys".to_string().into_py(builder.py()),
+                                    builder.py().None().into_py(builder.py()),
+                                ],
+                            )
+                            .map_err(py_err_to_lower)?,
+                    ],
+                )
+                .into_py(builder.py()),
+            ],
+            &span,
+        )
+        .map_err(py_err_to_lower)?;
+    body.push(sys_import);
+
+    // __snail_paths = sys.argv[1:] or [line.rstrip('\n') for line in sys.stdin if line.rstrip('\n')]
+    let paths_expr = lower_paths_source(&builder, &span)?;
+    body.push(assign_name(&builder, "__snail_paths", paths_expr, &span)?);
+
+    // Generate file loop
+    let file_loop = lower_map_file_loop(&builder, program, &span, auto_print_last)?;
+    body.push(file_loop);
+
+    builder.module(body, &span).map_err(py_err_to_lower)
+}
+
+fn lower_paths_source(builder: &AstBuilder<'_>, span: &SourceSpan) -> Result<PyObject, LowerError> {
+    // sys.argv[1:]
+    builder
+        .call_node(
+            "Subscript",
+            vec![
+                builder
+                    .call_node(
+                        "Attribute",
+                        vec![
+                            name_expr(
+                                builder,
+                                "sys",
+                                span,
+                                builder.load_ctx().map_err(py_err_to_lower)?,
+                            )?,
+                            "argv".to_string().into_py(builder.py()),
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?,
+                builder
+                    .call_node(
+                        "Slice",
+                        vec![
+                            builder
+                                .call_node("Constant", vec![1i64.into_py(builder.py())], span)
+                                .map_err(py_err_to_lower)?,
+                            builder.py().None().into_py(builder.py()),
+                            builder.py().None().into_py(builder.py()),
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn lower_map_file_loop(
+    builder: &AstBuilder<'_>,
+    program: &Program,
+    span: &SourceSpan,
+    auto_print_last: bool,
+) -> Result<PyObject, LowerError> {
+    // for __snail_src in __snail_paths:
+    //     with open(__snail_src, 'r') as __snail_fd:
+    //         __snail_text = __SnailLazyText(__snail_fd)
+    //         # user code
+
+    // Build the with statement body
+    let mut with_body = Vec::new();
+
+    // __snail_text = __SnailLazyText(__snail_fd)
+    let lazy_text_call = builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_LAZY_TEXT_CLASS,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(
+                    builder.py(),
+                    vec![name_expr(
+                        builder,
+                        SNAIL_MAP_FD_PYVAR,
+                        span,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    )?],
+                )
+                .into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    with_body.push(assign_name(
+        builder,
+        SNAIL_MAP_TEXT_PYVAR,
+        lazy_text_call,
+        span,
+    )?);
+
+    // Lower user code
+    let user_code =
+        lower_block_with_auto_print(builder, &program.stmts, auto_print_last, &program.span)?;
+    with_body.extend(user_code);
+
+    // open(__snail_src, 'r')
+    let open_call = builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    "open",
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        name_expr(
+                            builder,
+                            SNAIL_MAP_SRC_PYVAR,
+                            span,
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        )?,
+                        string_expr(builder, "r", false, StringDelimiter::Double, span)?,
+                    ],
+                )
+                .into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    // with open(...) as __snail_fd:
+    let with_item = builder
+        .call_node_no_loc(
+            "withitem",
+            vec![
+                open_call,
+                name_expr(
+                    builder,
+                    SNAIL_MAP_FD_PYVAR,
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+            ],
+        )
+        .map_err(py_err_to_lower)?;
+
+    let with_stmt = builder
+        .call_node(
+            "With",
+            vec![
+                PyList::new_bound(builder.py(), vec![with_item]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), with_body).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    // for __snail_src in __snail_paths:
+    builder
+        .call_node(
+            "For",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_MAP_SRC_PYVAR,
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+                name_expr(
+                    builder,
+                    "__snail_paths",
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(builder.py(), vec![with_stmt]).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}

@@ -1,0 +1,6 @@
+#!/usr/bin/env -S snail --map -f
+# Process files passed as arguments or via stdin
+print("File:", $src)
+print("Size:", len($text), "bytes")
+print("First line:", $text.split('\n')[0] if $text else "(empty)")
+print("---")

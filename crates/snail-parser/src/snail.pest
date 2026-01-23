@@ -214,10 +214,10 @@ literal = { number | string | boolean | none }
 boolean = { "True" | "False" }
 none = { "None" }
 
-// Special variables: exception, AWK fields, injected vars
+// Special variables: exception, AWK fields, map vars, injected vars
 exception_var = { "$e" }
 field_index_var = @{ "$" ~ ASCII_DIGIT+ }
-injected_var = { "$fn" | "$n" | "$p" | "$m" | "$f" }
+injected_var = { "$text" | "$src" | "$fn" | "$fd" | "$n" | "$p" | "$m" | "$f" }
 
 // Number, string, and regex literals
 number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }

@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
 use snail_core::{
     CompileMode, compile_awk_source_with_begin_end, compile_snail_source_with_auto_print,
-    format_snail_error, parse_awk_program, parse_program,
+    format_snail_error, parse_awk_program, parse_map_program, parse_program,
 };
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -31,8 +31,9 @@ fn parse_mode(mode: &str) -> PyResult<CompileMode> {
     match mode {
         "snail" => Ok(CompileMode::Snail),
         "awk" => Ok(CompileMode::Awk),
+        "map" => Ok(CompileMode::Map),
         _ => Err(PyRuntimeError::new_err(format!(
-            "unknown mode: {mode} (expected 'snail' or 'awk')"
+            "unknown mode: {mode} (expected 'snail', 'awk', or 'map')"
         ))),
     }
 }
@@ -312,6 +313,9 @@ fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
             .map(|_| ())
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
         CompileMode::Awk => parse_awk_program(source)
+            .map(|_| ())
+            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
+        CompileMode::Map => parse_map_program(source)
             .map(|_| ())
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
     }
