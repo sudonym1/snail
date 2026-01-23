@@ -287,16 +287,16 @@ pattern/action pairs evaluated for each input line. A rule with only a pattern
 prints matching lines by default, and a lone block runs for every line.
 
 Begin and end blocks are specified via CLI flags:
-- `-b <code>`: Code to run before processing lines (repeatable)
-- `-e <code>`: Code to run after processing lines (repeatable)
+- `-b <code>` or `--begin <code>`: Code to run before processing lines (repeatable)
+- `-e <code>` or `--end <code>`: Code to run after processing lines (repeatable)
 
 Example:
 ```bash
-echo "hello" | snail --awk -b 'print("start")' -e 'print("done")' '{ print($0) }'
+echo "hello" | snail --awk --begin 'print("start")' --end 'print("done")' '{ print($0) }'
 # Output: start\nhello\ndone
 ```
 
-Multiple `-b` and `-e` flags are processed in order. See `examples/awk.snail`
+Multiple `-b`/`--begin` and `-e`/`--end` flags are processed in order. See `examples/awk.snail`
 for a runnable sample program.
 
 While processing, Snail populates awk-style variables:

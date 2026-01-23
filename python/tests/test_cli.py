@@ -292,11 +292,29 @@ def test_awk_begin_flag(
     assert captured.out == "start\nline\n"
 
 
+def test_awk_begin_long_flag(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
+    assert main(["--awk", "--begin", "print('start')", "{ print($0) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "start\nline\n"
+
+
 def test_awk_end_flag(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
     assert main(["--awk", "-e", "print('done')", "{ print($0) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "line\ndone\n"
+
+
+def test_awk_end_long_flag(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
+    assert main(["--awk", "--end", "print('done')", "{ print($0) }"]) == 0
     captured = capsys.readouterr()
     assert captured.out == "line\ndone\n"
 
@@ -308,9 +326,9 @@ def test_awk_multiple_begin_end_flags(
     assert main([
         "--awk",
         "-b", "print('b1')",
-        "-b", "print('b2')",
+        "--begin", "print('b2')",
         "-e", "print('e1')",
-        "-e", "print('e2')",
+        "--end", "print('e2')",
         "{ print($0) }",
     ]) == 0
     captured = capsys.readouterr()
@@ -333,10 +351,10 @@ def test_awk_begin_end_interleaved_order(
 
 
 def test_begin_end_without_awk_mode_fails(capsys: pytest.CaptureFixture[str]) -> None:
-    result = main(["-b", "print('x')", "print('y')"])
+    result = main(["--begin", "print('x')", "print('y')"])
     assert result == 2
     captured = capsys.readouterr()
-    assert "-b and -e options require --awk mode" in captured.err
+    assert "-b/--begin and -e/--end options require --awk mode" in captured.err
 
 
 # --- Tests for auto-import ---

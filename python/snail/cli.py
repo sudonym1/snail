@@ -107,8 +107,8 @@ def _print_help(file=sys.stdout) -> None:
     print("  -f <file>               read Snail source from file", file=file)
     print("  -a, --awk               awk mode", file=file)
     print("  -m, --map               map mode (process files one at a time)", file=file)
-    print("  -b <code>               begin block code (awk mode only, repeatable)", file=file)
-    print("  -e <code>               end block code (awk mode only, repeatable)", file=file)
+    print("  -b, --begin <code>       begin block code (awk mode only, repeatable)", file=file)
+    print("  -e, --end <code>         end block code (awk mode only, repeatable)", file=file)
     print("  -P, --no-print          disable auto-print of last expression", file=file)
     print("  -I, --no-auto-import    disable auto-imports", file=file)
     print("  --debug                 parse and compile, then print, do not run", file=file)
@@ -130,7 +130,7 @@ def _parse_args(argv: list[str]) -> _Args:
                 # Already found code, rest are args
                 args.args.extend(argv[idx:])
                 return args
-            # This is the code, continue parsing for -b/-e after
+            # This is the code, continue parsing for -b/--begin and -e/--end after
             args.args = [token]
             code_found = True
             idx += 1
@@ -168,15 +168,15 @@ def _parse_args(argv: list[str]) -> _Args:
             args.file = argv[idx + 1]
             idx += 2
             continue
-        if token == "-b":
+        if token in ("-b", "--begin"):
             if idx + 1 >= len(argv):
-                raise ValueError("option -b requires an argument")
+                raise ValueError(f"option {token} requires an argument")
             args.begin_code.append(argv[idx + 1])
             idx += 2
             continue
-        if token == "-e":
+        if token in ("-e", "--end"):
             if idx + 1 >= len(argv):
-                raise ValueError("option -e requires an argument")
+                raise ValueError(f"option {token} requires an argument")
             args.end_code.append(argv[idx + 1])
             idx += 2
             continue
@@ -233,9 +233,9 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --awk and --map cannot be used together", file=sys.stderr)
         return 2
 
-    # Validate -b/-e only with --awk mode
+    # Validate -b/--begin and -e/--end only with --awk mode
     if (namespace.begin_code or namespace.end_code) and not namespace.awk:
-        print("error: -b and -e options require --awk mode", file=sys.stderr)
+        print("error: -b/--begin and -e/--end options require --awk mode", file=sys.stderr)
         return 2
 
     mode = "map" if namespace.map else ("awk" if namespace.awk else "snail")
