@@ -111,8 +111,14 @@ def _print_help(file=None) -> None:
     print("  -f <file>               read Snail source from file", file=file)
     print("  -a, --awk               awk mode", file=file)
     print("  -m, --map               map mode (process files one at a time)", file=file)
-    print("  -b, --begin <code>       begin block code (awk mode only, repeatable)", file=file)
-    print("  -e, --end <code>         end block code (awk mode only, repeatable)", file=file)
+    print(
+        "  -b, --begin <code>       begin block code (awk/map mode, repeatable)",
+        file=file,
+    )
+    print(
+        "  -e, --end <code>         end block code (awk/map mode, repeatable)",
+        file=file,
+    )
     print("  -P, --no-print          disable auto-print of last expression", file=file)
     print("  -I, --no-auto-import    disable auto-imports", file=file)
     print("  --debug                 parse and compile, then print, do not run", file=file)
@@ -286,9 +292,12 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --awk and --map cannot be used together", file=sys.stderr)
         return 2
 
-    # Validate -b/--begin and -e/--end only with --awk mode
-    if (namespace.begin_code or namespace.end_code) and not namespace.awk:
-        print("error: -b/--begin and -e/--end options require --awk mode", file=sys.stderr)
+    # Validate -b/--begin and -e/--end only with --awk or --map mode
+    if (namespace.begin_code or namespace.end_code) and not (namespace.awk or namespace.map):
+        print(
+            "error: -b/--begin and -e/--end options require --awk or --map mode",
+            file=sys.stderr,
+        )
         return 2
 
     mode = "map" if namespace.map else ("awk" if namespace.awk else "snail")

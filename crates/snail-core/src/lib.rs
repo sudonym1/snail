@@ -53,3 +53,37 @@ pub fn compile_awk_source_with_begin_end(
     let module = lower_awk_program_with_auto_print(py, &program, auto_print_last)?;
     Ok(module)
 }
+
+/// Compile a map program with separate begin and end code blocks.
+/// Each begin/end source is parsed as a map program.
+pub fn compile_map_source_with_begin_end(
+    py: Python<'_>,
+    main_source: &str,
+    begin_sources: &[&str],
+    end_sources: &[&str],
+    auto_print_last: bool,
+) -> Result<PyObject, SnailError> {
+    let program = parse_map_program(main_source)?;
+    let mut begin_blocks = Vec::new();
+    for source in begin_sources {
+        let begin_program = parse_map_program(source)?;
+        if !begin_program.stmts.is_empty() {
+            begin_blocks.push(begin_program.stmts);
+        }
+    }
+    let mut end_blocks = Vec::new();
+    for source in end_sources {
+        let end_program = parse_map_program(source)?;
+        if !end_program.stmts.is_empty() {
+            end_blocks.push(end_program.stmts);
+        }
+    }
+    let module = lower_map_program_with_begin_end(
+        py,
+        &program,
+        &begin_blocks,
+        &end_blocks,
+        auto_print_last,
+    )?;
+    Ok(module)
+}

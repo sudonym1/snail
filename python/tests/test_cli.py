@@ -30,6 +30,12 @@ bad_email = "bad@@email"
 phone = "867-5309"
 """
 
+
+def _ensure_readme_map_file(tmp_path: Path) -> Path:
+    map_file = tmp_path / "file1"
+    map_file.write_text("readme map input\n")
+    return map_file
+
 def test_parse_only(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug", "x = 1"]) == 0
     captured = capsys.readouterr()
@@ -407,11 +413,11 @@ def test_awk_begin_end_interleaved_order(
     assert captured.out == "start\nx\nend\n"
 
 
-def test_begin_end_without_awk_mode_fails(capsys: pytest.CaptureFixture[str]) -> None:
+def test_begin_end_without_mode_fails(capsys: pytest.CaptureFixture[str]) -> None:
     result = main(["--begin", "print('x')", "print('y')"])
     assert result == 2
     captured = capsys.readouterr()
-    assert "-b/--begin and -e/--end options require --awk mode" in captured.err
+    assert "-b/--begin and -e/--end options require --awk or --map mode" in captured.err
 
 
 # --- Tests for auto-import ---
@@ -565,6 +571,8 @@ def _snail_block_to_source(block: str) -> str | None:
 def _parse_snail_header(header: str) -> tuple[str, str | None]:
     if header == "snail":
         return ("snail", None)
+    if header == "snail-map":
+        return ("snail-map", None)
     if header.startswith("snail-awk"):
         if header == "snail-awk":
             return ("snail-awk", None)
@@ -587,7 +595,7 @@ def _collect_readme_snail_sources(path: Path) -> list[tuple[str, int, str, str |
     sources: list[tuple[str, int, str, str | None]] = []
 
     fence_re = re.compile(
-        r"```(?P<header>snail(?:-awk(?:\([^)]*\))?)?)\n(?P<body>.*?)\n```",
+        r"```(?P<header>snail(?:-awk(?:\([^)]*\))?|-map)?)\n(?P<body>.*?)\n```",
         re.S,
     )
     for match in fence_re.finditer(content):
@@ -607,9 +615,9 @@ _README_SNIPPET_IDS = [
 ]
 
 
-def _collect_readme_oneliners(path: Path) -> list[tuple[int, bool, list[str]]]:
+def _collect_readme_oneliners(path: Path) -> list[tuple[int, str, list[str]]]:
     content = path.read_text()
-    oneliners: list[tuple[int, bool, list[str]]] = []
+    oneliners: list[tuple[int, str, list[str]]] = []
     fence_re = re.compile(r"```bash\n(?P<body>.*?)\n```", re.S)
     for match in fence_re.finditer(content):
         body = match.group("body")
@@ -620,43 +628,66 @@ def _collect_readme_oneliners(path: Path) -> list[tuple[int, bool, list[str]]]:
                 continue
             line_no = start_line + 1 + index
             try:
-                awk, argv = _parse_oneliner_command(stripped)
-                oneliners.append((line_no, awk, argv))
+                mode, argv = _parse_oneliner_command(stripped)
+                oneliners.append((line_no, mode, argv))
             except Exception:
                 pass
     return oneliners
 
 
-def _parse_oneliner_command(command: str) -> tuple[bool, list[str]]:
+def _parse_oneliner_command(command: str) -> tuple[str, list[str]]:
     tokens = shlex.split(command)
     idx = tokens.index("snail")
     tokens = tokens[idx+1:]
-    awk = False
+    mode = "snail"
     i = 0
     while i < len(tokens):
         tok = tokens[i]
         if tok in ("-a", "--awk"):
-            awk = True
+            if mode != "snail":
+                raise ValueError("oneliner cannot mix --awk and --map")
+            mode = "awk"
+            i += 1
+            continue
+        if tok in ("-m", "--map"):
+            if mode != "snail":
+                raise ValueError("oneliner cannot mix --awk and --map")
+            mode = "map"
             i += 1
             continue
         break
     argv = tokens[i:]
     if not argv:
         raise ValueError(f"oneliner missing code: {command}")
-    return awk, argv
+    return mode, argv
+
+
+def _replace_map_oneliner_args(argv: list[str], map_file: Path) -> list[str]:
+    idx = 0
+    while idx < len(argv):
+        tok = argv[idx]
+        if tok in ("-b", "--begin", "-e", "--end", "-f"):
+            idx += 2
+            continue
+        if tok.startswith("-"):
+            idx += 1
+            continue
+        idx += 1
+        break
+    return [*argv[:idx], str(map_file)]
 
 
 _README_ONELINERS = _collect_readme_oneliners(ROOT / "README.md")
 if _README_ONELINERS:
     _README_ONELINER_PARAMS = [
-        pytest.param(line_no, awk, argv, id=f"oneliner@README.md:{line_no}")
-        for line_no, awk, argv in _README_ONELINERS
+        pytest.param(line_no, mode, argv, id=f"oneliner@README.md:{line_no}")
+        for line_no, mode, argv in _README_ONELINERS
     ]
 else:
     _README_ONELINER_PARAMS = [
         pytest.param(
             0,
-            False,
+            "snail",
             [],
             marks=pytest.mark.skip(
                 reason="no ```snail-oneliner blocks found in README.md"
@@ -672,7 +703,12 @@ else:
     ids=_README_SNIPPET_IDS,
 )
 def test_readme_snail_blocks_parse(
-    lang: str, line_no: int, source: str, stdin_input: str | None, monkeypatch: pytest.MonkeyPatch
+    lang: str,
+    line_no: int,
+    source: str,
+    stdin_input: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     path = ROOT / "README.md"
     def _fake_run(cmd, shell=False, check=False, text=False, input=None, stdout=None):
@@ -684,17 +720,24 @@ def test_readme_snail_blocks_parse(
         if stdin_input is not None:
             sys.stdin = io.StringIO(stdin_input)
         assert main(["--awk", source]) == 0, f"failed at {path}:{line_no}"
+    elif lang == "snail-map":
+        map_file = _ensure_readme_map_file(tmp_path)
+        assert main(["--map", source, str(map_file)]) == 0, f"failed at {path}:{line_no}"
     else:
         combined = f"{README_SNIPPET_PREAMBLE}\n{source}"
         assert main([combined]) == 0, f"failed at {path}:{line_no}"
 
 
 @pytest.mark.parametrize(
-    "line_no,awk,argv",
+    "line_no,mode,argv",
     _README_ONELINER_PARAMS,
 )
 def test_readme_snail_oneliners(
-    line_no: int, awk: bool, argv: list[str], monkeypatch: pytest.MonkeyPatch
+    line_no: int,
+    mode: str,
+    argv: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     path = ROOT / "README.md"
 
@@ -703,8 +746,12 @@ def test_readme_snail_oneliners(
         return subprocess.CompletedProcess(cmd, 0, stdout=out)
 
     monkeypatch.setattr(subprocess, "run", _fake_run)
-    if awk:
+    if mode == "awk":
         assert main(["--awk", *argv]) == 0, f"failed at {path}:{line_no}"
+    elif mode == "map":
+        map_file = _ensure_readme_map_file(tmp_path)
+        map_argv = _replace_map_oneliner_args(argv, map_file)
+        assert main(["--map", *map_argv]) == 0, f"failed at {path}:{line_no}"
     else:
         combined = f"{README_SNIPPET_PREAMBLE}\n{argv[0]}"
         assert main([combined, *argv[1:]]) == 0, f"failed at {path}:{line_no}"
@@ -763,6 +810,62 @@ def test_map_mode_lazy_text(
     assert result == 0
     captured = capsys.readouterr()
     assert "''" in captured.out
+
+
+def test_map_begin_end_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    file_a = tmp_path / "a.txt"
+    file_b = tmp_path / "b.txt"
+    file_a.write_text("alpha")
+    file_b.write_text("beta")
+    result = main([
+        "--map",
+        "-b",
+        "print('start')",
+        "-e",
+        "print('done')",
+        "print($src)",
+        str(file_a),
+        str(file_b),
+    ])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "start",
+        str(file_a),
+        str(file_b),
+        "done",
+    ]
+
+
+def test_map_multiple_begin_end_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("alpha")
+    result = main([
+        "--map",
+        "--begin",
+        "print('b1')",
+        "-b",
+        "print('b2')",
+        "print($src)",
+        "-e",
+        "print('e1')",
+        "--end",
+        "print('e2')",
+        str(file_a),
+    ])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "b1",
+        "b2",
+        str(file_a),
+        "e1",
+        "e2",
+    ]
 
 
 def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) -> None:

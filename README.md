@@ -67,6 +67,28 @@ Begin/end blocks use CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and tear
 echo -e "5\n4\n3\n2\n1" | snail --awk --begin 'total = 0' --end 'print("Sum:", total)' '/^[0-9]+/ { total = total + int($1) }'
 ```
 
+### Map Mode
+
+Process files one at a time instead of line-by-line:
+
+```snail-map
+print("File:", $src)
+print("Size:", len($text), "bytes")
+```
+
+**Built-in variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `$src` | Current file path |
+| `$fd` | Open file handle for the current file |
+| `$text` | Lazy text view of the current file contents |
+
+Begin/end blocks use CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown:
+```bash
+snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
+```
+
 ### Compact Error Handling
 
 The `?` operator makes error handling terse yet expressive:
@@ -226,6 +248,7 @@ Documentation is WIP
 - **[Language Reference](docs/REFERENCE.md)** — Complete syntax and semantics
 - **[examples/all_syntax.snail](examples/all_syntax.snail)** — Every feature in one file
 - **[examples/awk.snail](examples/awk.snail)** — Awk mode examples
+- **[examples/map.snail](examples/map.snail)** — Map mode examples
 
 ## 🔌 Editor Support
 
