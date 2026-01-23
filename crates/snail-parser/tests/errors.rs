@@ -245,3 +245,38 @@ fn awk_with_empty_begin_end() {
     assert!(program.begin_blocks.is_empty());
     assert!(program.end_blocks.is_empty());
 }
+
+// ========== F-String Interpolation Tests ==========
+
+#[test]
+fn rejects_invalid_fstring_interpolation_syntax() {
+    // Original bug case: x(!) should fail, not silently parse as x
+    let err = parse_err(r#"s = "{x(!)}""#);
+    let message = err.to_string();
+    assert!(message.contains("unexpected"));
+}
+
+#[test]
+fn rejects_trailing_garbage_in_fstring() {
+    let err = parse_err(r#"s = "{x abc}""#);
+    let message = err.to_string();
+    assert!(message.contains("unexpected"));
+}
+
+#[test]
+fn rejects_invalid_operator_in_fstring() {
+    let err = parse_err(r#"s = "{x @@ y}""#);
+    let message = err.to_string();
+    assert!(message.contains("unexpected"));
+}
+
+#[test]
+fn valid_fstring_expressions_still_work() {
+    parse_ok(r#"s = "{x}""#);
+    parse_ok(r#"s = "{x()}""#);
+    parse_ok(r#"s = "{x(1, 2)}""#);
+    parse_ok(r#"s = "{x.y.z}""#);
+    parse_ok(r#"s = "{a + b * c}""#);
+    parse_ok(r#"s = "{items[0]}""#);
+    parse_ok(r#"s = "{f(g(h()))}""#);
+}

@@ -168,6 +168,23 @@ pub fn parse_inline_expr(
     let pair = pairs
         .next()
         .ok_or_else(|| ParseError::new("missing f-string expression"))?;
+
+    // Check that the entire expression text was consumed
+    let consumed_end = pair.as_span().end();
+    if consumed_end < expr_text.len() {
+        let unconsumed_start = expr_offset + consumed_end;
+        let unconsumed_end = expr_offset + expr_text.len();
+        let unconsumed_text = &expr_text[consumed_end..];
+        return Err(error_with_span(
+            format!(
+                "unexpected characters in f-string expression: {:?}",
+                unconsumed_text
+            ),
+            span_from_offset(unconsumed_start, unconsumed_end, source),
+            source,
+        ));
+    }
+
     let mut expr = crate::expr::parse_expr_pair(pair, expr_text)?;
     shift_expr_spans(&mut expr, expr_offset, source);
     Ok(expr)
