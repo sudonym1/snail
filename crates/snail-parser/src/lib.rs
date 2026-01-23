@@ -94,7 +94,7 @@ pub fn parse_awk_program_with_begin_end(
     Ok(program)
 }
 
-const AWK_ONLY_NAMES: [&str; 4] = ["$n", "$fn", "$p", "$m"];
+const AWK_ONLY_NAMES: [&str; 5] = ["$n", "$fn", "$p", "$m", "$f"];
 const AWK_ONLY_MESSAGE: &str = "awk variables are only valid in awk mode; use --awk";
 
 fn validate_no_awk_syntax(program: &Program, source: &str) -> Result<(), ParseError> {

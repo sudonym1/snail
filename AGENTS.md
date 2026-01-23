@@ -136,7 +136,7 @@ Snail → Parser → AST → Lowering → Python AST → in-process exec
    - `Program`: Top-level Snail AST with statement list (`crates/snail-ast/src/ast.rs`)
    - `AwkProgram`: Separate structure with BEGIN/END blocks and pattern/action rules (`crates/snail-ast/src/awk.rs`)
    - All nodes carry `SourceSpan` for traceback accuracy
-   - Awk mode has special `$`-prefixed variables (`$0`, `$1`, `$n`, `$fn`, `$p`, `$m`)
+   - Awk mode has special `$`-prefixed variables (`$0`, `$1`, `$n`, `$fn`, `$f`, `$p`, `$m`)
 
 3. **Lowering** (`crates/snail-lower/`):
    - Transforms Snail AST into Python `ast` nodes via pyo3
@@ -184,6 +184,7 @@ Snail → Parser → AST → Lowering → Python AST → in-process exec
 - Built-in variables (all `$`-prefixed, reserved by Snail):
   - `$0`: current line
   - `$1`, `$2`, ...: whitespace-split fields
+  - `$f`: all fields as a list
   - `$n`: global line number
   - `$fn`: per-file line number
   - `$p`: current file path

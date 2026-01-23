@@ -2,3 +2,4 @@
 $0.startswith("d") { print("matched:", $0) }
 /de(mo)/ { print("regex:", $m.1) }
 { print($fn); print($0) }
+$f[0] == "test" { print("first field:", $f[0]) }

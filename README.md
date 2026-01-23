@@ -50,7 +50,17 @@ Process files line-by-line with familiar awk semantics:
 { print($1, "->", $2) }
 ```
 
-Built-in variables: `$0` (line), `$1`, `$2` etc (access fields), `$n` (line number), `$fn` (per-file line number), `$p` (file path), `$m` (last match).
+**Built-in variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `$0` | Current line (with newline stripped) |
+| `$1`, `$2`, ... | Individual fields (whitespace-split) |
+| `$f` | All fields as a list |
+| `$n` | Global line number (across all files) |
+| `$fn` | Per-file line number |
+| `$p` | Current file path |
+| `$m` | Last regex match object |
 
 Begin/end blocks use CLI flags for setup and teardown:
 ```bash

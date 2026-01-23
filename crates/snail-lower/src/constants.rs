@@ -20,6 +20,7 @@ pub(crate) const SNAIL_AWK_NR: &str = "$n";
 pub(crate) const SNAIL_AWK_FNR: &str = "$fn";
 pub(crate) const SNAIL_AWK_PATH: &str = "$p";
 pub(crate) const SNAIL_AWK_MATCH: &str = "$m";
+pub(crate) const SNAIL_AWK_FIELDS: &str = "$f";
 pub(crate) const SNAIL_AWK_LINE_PYVAR: &str = "__snail_line";
 pub(crate) const SNAIL_AWK_FIELDS_PYVAR: &str = "__snail_fields";
 pub(crate) const SNAIL_AWK_NR_PYVAR: &str = "__snail_nr_user";
@@ -33,6 +34,7 @@ pub(crate) fn injected_py_name(name: &str) -> Option<&'static str> {
         SNAIL_AWK_FNR => Some(SNAIL_AWK_FNR_PYVAR),
         SNAIL_AWK_PATH => Some(SNAIL_AWK_PATH_PYVAR),
         SNAIL_AWK_MATCH => Some(SNAIL_AWK_MATCH_PYVAR),
+        SNAIL_AWK_FIELDS => Some(SNAIL_AWK_FIELDS_PYVAR),
         _ => None,
     }
 }
