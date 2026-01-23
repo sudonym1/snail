@@ -10,6 +10,8 @@ _USAGE = (
     "       snail [options] <code> [args]..."
 )
 _DESCRIPTION = "Snail programming language interpreter"
+_BOOLEAN_FLAGS = frozenset("amPIvh")
+_VALUE_FLAGS = frozenset("fbe")
 
 
 def _display_filename(filename: str) -> str:
@@ -98,7 +100,9 @@ class _Args:
         self.args: list[str] = []
 
 
-def _print_help(file=sys.stdout) -> None:
+def _print_help(file=None) -> None:
+    if file is None:
+        file = sys.stdout
     print(f"usage: {_USAGE}", file=file)
     print("", file=file)
     print(_DESCRIPTION, file=file)
@@ -116,7 +120,56 @@ def _print_help(file=sys.stdout) -> None:
     print("  -h, --help              show this help message and exit", file=file)
 
 
+def _expand_short_options(argv: list[str]) -> list[str]:
+    expanded: list[str] = []
+    idx = 0
+    while idx < len(argv):
+        token = argv[idx]
+        if token == "--":
+            expanded.append(token)
+            expanded.extend(argv[idx + 1 :])
+            return expanded
+        if token == "-" or not token.startswith("-") or token.startswith("--"):
+            expanded.append(token)
+            idx += 1
+            continue
+        if len(token) == 2:
+            expanded.append(token)
+            idx += 1
+            continue
+
+        flags = token[1:]
+        pos = 0
+        while pos < len(flags):
+            flag = flags[pos]
+            if flag in _BOOLEAN_FLAGS:
+                expanded.append(f"-{flag}")
+                pos += 1
+                continue
+            if flag in _VALUE_FLAGS:
+                remainder = flags[pos + 1 :]
+                if not remainder:
+                    expanded.append(f"-{flag}")
+                    pos += 1
+                    continue
+                if all(
+                    ch in _BOOLEAN_FLAGS or ch in _VALUE_FLAGS for ch in remainder
+                ):
+                    raise ValueError(
+                        f"option -{flag} requires an argument and must be last in a "
+                        "combined flag group"
+                    )
+                expanded.append(f"-{flag}")
+                expanded.append(remainder)
+                pos = len(flags)
+                break
+            raise ValueError(f"unknown option: -{flag}")
+        idx += 1
+    return expanded
+
+
 def _parse_args(argv: list[str]) -> _Args:
+    argv = _expand_short_options(argv)
     args = _Args()
     idx = 0
     code_found = False

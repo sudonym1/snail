@@ -259,6 +259,63 @@ def test_chained_in_short_circuit(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "True\n1\n()\n0\n"
 
 
+def test_combined_short_flags_awk(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("foo\n"))
+    assert main(["-aP", "/foo/ { print($0) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "foo\n"
+
+
+def test_combined_short_flag_with_value(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = tmp_path / "script.snail"
+    script.write_text("/foo/ { print($0) }\n")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("foo\nbar\n"))
+    assert main(["-af", str(script)]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "foo\n"
+
+
+def test_combined_short_flag_with_attached_value(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = tmp_path / "script.snail"
+    script.write_text("/foo/ { print($0) }\n")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("foo\nbar\n"))
+    assert main([f"-af{script}"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "foo\n"
+
+
+def test_combined_short_help(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-ah"]) == 0
+    captured = capsys.readouterr()
+    assert "usage:" in captured.out
+
+
+def test_value_flag_not_last_in_combination(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = main(["-fa"])
+    assert result == 2
+    captured = capsys.readouterr()
+    assert "requires an argument" in captured.err
+
+
+def test_unknown_flag_in_combination(capsys: pytest.CaptureFixture[str]) -> None:
+    result = main(["-aX"])
+    assert result == 2
+    captured = capsys.readouterr()
+    assert "unknown option: -X" in captured.err
+
+
 def test_awk_mode(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
