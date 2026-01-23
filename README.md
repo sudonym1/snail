@@ -62,9 +62,9 @@ Process files line-by-line with familiar awk semantics:
 | `$p` | Current file path |
 | `$m` | Last regex match object |
 
-Begin/end blocks use CLI flags for setup and teardown:
+Begin/end blocks use CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown:
 ```bash
-echo -e "5\n4\n3\n2\n1" | snail --awk -b 'total = 0' -e 'print("Sum:", total)' '/^[0-9]+/ { total = total + int($1) }'
+echo -e "5\n4\n3\n2\n1" | snail --awk --begin 'total = 0' --end 'print("Sum:", total)' '/^[0-9]+/ { total = total + int($1) }'
 ```
 
 ### Compact Error Handling
