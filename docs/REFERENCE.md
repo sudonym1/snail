@@ -8,6 +8,23 @@ blocks for curly braces. The examples here mirror the runnable tour in
 - Run a one-liner: `snail "print('hi')"`
 - Execute a file: `snail -f path/to/script.snail`
 
+## Map mode
+Map mode processes input files one at a time:
+```bash
+snail --map "print($src)" file_a.txt file_b.txt
+```
+
+Map mode provides three special variables:
+- `$src`: current file path
+- `$fd`: open file handle for the current file
+- `$text`: lazy text view of the current file contents
+
+You can also run setup/teardown blocks with `--begin` and `--end`, which execute
+once before the first file and once after the last file:
+```bash
+snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
+```
+
 ## Modules and imports
 Snail uses Python's import semantics and exposes the same namespaces:
 ```snail

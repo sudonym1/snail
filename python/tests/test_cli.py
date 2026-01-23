@@ -407,11 +407,11 @@ def test_awk_begin_end_interleaved_order(
     assert captured.out == "start\nx\nend\n"
 
 
-def test_begin_end_without_awk_mode_fails(capsys: pytest.CaptureFixture[str]) -> None:
+def test_begin_end_without_mode_fails(capsys: pytest.CaptureFixture[str]) -> None:
     result = main(["--begin", "print('x')", "print('y')"])
     assert result == 2
     captured = capsys.readouterr()
-    assert "-b/--begin and -e/--end options require --awk mode" in captured.err
+    assert "-b/--begin and -e/--end options require --awk or --map mode" in captured.err
 
 
 # --- Tests for auto-import ---
@@ -763,6 +763,62 @@ def test_map_mode_lazy_text(
     assert result == 0
     captured = capsys.readouterr()
     assert "''" in captured.out
+
+
+def test_map_begin_end_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    file_a = tmp_path / "a.txt"
+    file_b = tmp_path / "b.txt"
+    file_a.write_text("alpha")
+    file_b.write_text("beta")
+    result = main([
+        "--map",
+        "-b",
+        "print('start')",
+        "-e",
+        "print('done')",
+        "print($src)",
+        str(file_a),
+        str(file_b),
+    ])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "start",
+        str(file_a),
+        str(file_b),
+        "done",
+    ]
+
+
+def test_map_multiple_begin_end_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("alpha")
+    result = main([
+        "--map",
+        "--begin",
+        "print('b1')",
+        "-b",
+        "print('b2')",
+        "print($src)",
+        "-e",
+        "print('e1')",
+        "--end",
+        "print('e2')",
+        str(file_a),
+    ])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "b1",
+        "b2",
+        str(file_a),
+        "e1",
+        "e2",
+    ]
 
 
 def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) -> None:

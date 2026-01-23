@@ -5,8 +5,9 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
 use snail_core::{
-    CompileMode, compile_awk_source_with_begin_end, compile_snail_source_with_auto_print,
-    format_snail_error, parse_awk_program, parse_map_program, parse_program,
+    CompileMode, compile_awk_source_with_begin_end, compile_map_source_with_begin_end,
+    compile_snail_source_with_auto_print, format_snail_error, parse_awk_program, parse_map_program,
+    parse_program,
 };
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -112,12 +113,22 @@ fn compile_source(
     let total_start = Instant::now();
     let compile_start = Instant::now();
 
-    // If mode is awk and we have begin/end code, use the specialized function
-    let module = if mode == CompileMode::Awk && (!begin_code.is_empty() || !end_code.is_empty()) {
+    // If mode is awk/map and we have begin/end code, use the specialized function
+    let module = if !begin_code.is_empty() || !end_code.is_empty() {
         let begin_refs: Vec<&str> = begin_code.iter().map(|s| s.as_str()).collect();
         let end_refs: Vec<&str> = end_code.iter().map(|s| s.as_str()).collect();
-        compile_awk_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
-            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
+        match mode {
+            CompileMode::Awk => {
+                compile_awk_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
+                    .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
+            }
+            CompileMode::Map => {
+                compile_map_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
+                    .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
+            }
+            _ => compile_snail_source_with_auto_print(py, source, mode, auto_print)
+                .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?,
+        }
     } else {
         compile_snail_source_with_auto_print(py, source, mode, auto_print)
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?

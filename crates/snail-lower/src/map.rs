@@ -17,6 +17,16 @@ pub fn lower_map_program_with_auto_print(
     program: &Program,
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
+    lower_map_program_with_begin_end(py, program, &[], &[], auto_print_last)
+}
+
+pub fn lower_map_program_with_begin_end(
+    py: Python<'_>,
+    program: &Program,
+    begin_blocks: &[Vec<Stmt>],
+    end_blocks: &[Vec<Stmt>],
+    auto_print_last: bool,
+) -> Result<PyObject, LowerError> {
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
     let span = program.span.clone();
     let mut body = Vec::new();
@@ -51,9 +61,48 @@ pub fn lower_map_program_with_auto_print(
     let paths_expr = lower_paths_source(&builder, &span)?;
     body.push(assign_name(&builder, "__snail_paths", paths_expr, &span)?);
 
+    // Initialize map variables for begin blocks
+    let none_expr = builder
+        .call_node(
+            "Constant",
+            vec![builder.py().None().into_py(builder.py())],
+            &span,
+        )
+        .map_err(py_err_to_lower)?;
+    body.push(assign_name(
+        &builder,
+        SNAIL_MAP_SRC_PYVAR,
+        none_expr.clone_ref(builder.py()),
+        &span,
+    )?);
+    body.push(assign_name(
+        &builder,
+        SNAIL_MAP_FD_PYVAR,
+        none_expr.clone_ref(builder.py()),
+        &span,
+    )?);
+    body.push(assign_name(
+        &builder,
+        SNAIL_MAP_TEXT_PYVAR,
+        none_expr,
+        &span,
+    )?);
+
+    // Begin blocks
+    for block in begin_blocks {
+        let lowered = lower_block_with_auto_print(&builder, block, auto_print_last, &span)?;
+        body.extend(lowered);
+    }
+
     // Generate file loop
     let file_loop = lower_map_file_loop(&builder, program, &span, auto_print_last)?;
     body.push(file_loop);
+
+    // End blocks
+    for block in end_blocks {
+        let lowered = lower_block_with_auto_print(&builder, block, auto_print_last, &span)?;
+        body.extend(lowered);
+    }
 
     builder.module(body, &span).map_err(py_err_to_lower)
 }
