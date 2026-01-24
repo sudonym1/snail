@@ -265,6 +265,38 @@ def test_chained_in_short_circuit(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "True\n1\n()\n0\n"
 
 
+def test_augmented_assignment_and_increments(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "x = 5",
+            "y = ++x",
+            'print("pre", x, y)',
+            "x = 5",
+            "y = x++",
+            'print("post", x, y)',
+            "x = 5",
+            "y = (x += 3)",
+            'print("aug", x, y)',
+            "class C {",
+            "    def __init__(self) {",
+            "        self.val = 1",
+            "    }",
+            "}",
+            "c = C()",
+            "y = ++c.val",
+            'print("attr_pre", c.val, y)',
+            "arr = [10]",
+            "y = arr[0]++",
+            'print("idx_post", arr[0], y)',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "pre 6 6\npost 6 5\naug 8 8\nattr_pre 2 2\nidx_post 11 10\n"
+
+
 def test_combined_short_flags_awk(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

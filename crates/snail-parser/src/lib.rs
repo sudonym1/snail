@@ -356,6 +356,13 @@ fn validate_expr_for_map(expr: &Expr, source: &str) -> Result<(), ParseError> {
             validate_expr_for_map(left, source)?;
             validate_expr_for_map(right, source)?;
         }
+        Expr::AugAssign { target, value, .. } => {
+            validate_assign_target_for_map(target, source)?;
+            validate_expr_for_map(value, source)?;
+        }
+        Expr::PrefixIncr { target, .. } | Expr::PostfixIncr { target, .. } => {
+            validate_assign_target_for_map(target, source)?;
+        }
         Expr::Compare {
             left, comparators, ..
         } => {
@@ -712,6 +719,13 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
         Expr::Binary { left, right, .. } => {
             validate_expr(left, source)?;
             validate_expr(right, source)?;
+        }
+        Expr::AugAssign { target, value, .. } => {
+            validate_assign_target(target, source)?;
+            validate_expr(value, source)?;
+        }
+        Expr::PrefixIncr { target, .. } | Expr::PostfixIncr { target, .. } => {
+            validate_assign_target(target, source)?;
         }
         Expr::Compare {
             left, comparators, ..

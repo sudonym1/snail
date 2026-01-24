@@ -2,7 +2,8 @@ mod common;
 
 use common::*;
 use snail_ast::{
-    Argument, AssignTarget, BinaryOp, Condition, Expr, Parameter, Stmt, StringDelimiter,
+    Argument, AssignTarget, AugAssignOp, BinaryOp, Condition, Expr, IncrOp, Parameter, Stmt,
+    StringDelimiter,
 };
 use snail_parser::parse_program;
 
@@ -436,6 +437,138 @@ fn parses_attribute_and_index_assignment_targets() {
         other => panic!("Expected attribute target, got {other:?}"),
     }
     expect_number(value, "3");
+}
+
+#[test]
+fn parses_augmented_assignment_and_increments() {
+    let source = "x += 5\n++x\nx++\nobj.value += 2\n++obj.value\nobj.value++\nitems[0] += 3\n++items[0]\nitems[0]++\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 9);
+
+    match expect_expr_stmt(&program.stmts[0]) {
+        Expr::AugAssign {
+            target, op, value, ..
+        } => {
+            assert!(matches!(op, AugAssignOp::Add));
+            match target.as_ref() {
+                AssignTarget::Name { name, .. } => assert_eq!(name, "x"),
+                other => panic!("Expected name target, got {other:?}"),
+            }
+            expect_number(value, "5");
+        }
+        other => panic!("Expected aug assign expr, got {other:?}"),
+    }
+
+    match expect_expr_stmt(&program.stmts[1]) {
+        Expr::PrefixIncr { op, target, .. } => {
+            assert!(matches!(op, IncrOp::Increment));
+            match target.as_ref() {
+                AssignTarget::Name { name, .. } => assert_eq!(name, "x"),
+                other => panic!("Expected name target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected prefix incr expr, got {other:?}"),
+    }
+
+    match expect_expr_stmt(&program.stmts[2]) {
+        Expr::PostfixIncr { op, target, .. } => {
+            assert!(matches!(op, IncrOp::Increment));
+            match target.as_ref() {
+                AssignTarget::Name { name, .. } => assert_eq!(name, "x"),
+                other => panic!("Expected name target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected postfix incr expr, got {other:?}"),
+    }
+
+    match expect_expr_stmt(&program.stmts[3]) {
+        Expr::AugAssign {
+            target, op, value, ..
+        } => {
+            assert!(matches!(op, AugAssignOp::Add));
+            match target.as_ref() {
+                AssignTarget::Attribute { attr, .. } => assert_eq!(attr, "value"),
+                other => panic!("Expected attribute target, got {other:?}"),
+            }
+            expect_number(value, "2");
+        }
+        other => panic!("Expected aug assign expr, got {other:?}"),
+    }
+
+    match expect_expr_stmt(&program.stmts[4]) {
+        Expr::PrefixIncr { op, target, .. } => {
+            assert!(matches!(op, IncrOp::Increment));
+            match target.as_ref() {
+                AssignTarget::Attribute { attr, .. } => assert_eq!(attr, "value"),
+                other => panic!("Expected attribute target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected prefix incr expr, got {other:?}"),
+    }
+
+    match expect_expr_stmt(&program.stmts[5]) {
+        Expr::PostfixIncr { op, target, .. } => {
+            assert!(matches!(op, IncrOp::Increment));
+            match target.as_ref() {
+                AssignTarget::Attribute { attr, .. } => assert_eq!(attr, "value"),
+                other => panic!("Expected attribute target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected postfix incr expr, got {other:?}"),
+    }
+
+    match expect_expr_stmt(&program.stmts[6]) {
+        Expr::AugAssign {
+            target, op, value, ..
+        } => {
+            assert!(matches!(op, AugAssignOp::Add));
+            match target.as_ref() {
+                AssignTarget::Index {
+                    value: index_value, ..
+                } => {
+                    expect_name(index_value.as_ref(), "items");
+                }
+                other => panic!("Expected index target, got {other:?}"),
+            }
+            expect_number(value, "3");
+        }
+        other => panic!("Expected aug assign expr, got {other:?}"),
+    }
+
+    match expect_expr_stmt(&program.stmts[7]) {
+        Expr::PrefixIncr { op, target, .. } => {
+            assert!(matches!(op, IncrOp::Increment));
+            match target.as_ref() {
+                AssignTarget::Index {
+                    value: index_value, ..
+                } => {
+                    expect_name(index_value.as_ref(), "items");
+                }
+                other => panic!("Expected index target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected prefix incr expr, got {other:?}"),
+    }
+
+    match expect_expr_stmt(&program.stmts[8]) {
+        Expr::PostfixIncr { op, target, .. } => {
+            assert!(matches!(op, IncrOp::Increment));
+            match target.as_ref() {
+                AssignTarget::Index {
+                    value: index_value, ..
+                } => {
+                    expect_name(index_value.as_ref(), "items");
+                }
+                other => panic!("Expected index target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected postfix incr expr, got {other:?}"),
+    }
+}
+
+#[test]
+fn parser_rejects_invalid_increment_target() {
+    parse_err("++5");
 }
 
 #[test]

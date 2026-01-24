@@ -1,5 +1,5 @@
 use pest::iterators::Pair;
-use snail_ast::{Argument, AssignTarget, BinaryOp, CompareOp, Expr, UnaryOp};
+use snail_ast::{Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Expr, IncrOp, UnaryOp};
 use snail_error::ParseError;
 
 use crate::Rule;
@@ -8,11 +8,13 @@ use crate::literal::{
     parse_regex_literal, parse_slice, parse_structured_accessor, parse_subprocess,
     parse_tuple_literal,
 };
+use crate::stmt::parse_assign_target_ref_expr;
 use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
 
 pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match pair.as_rule() {
         Rule::expr
+        | Rule::aug_assign_expr
         | Rule::if_expr
         | Rule::or_expr
         | Rule::and_expr
@@ -73,6 +75,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
 fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match pair.as_rule() {
         Rule::expr => parse_expr_rule(pair.into_inner().next().unwrap(), source),
+        Rule::aug_assign_expr => parse_aug_assign_expr(pair, source),
         Rule::if_expr => parse_if_expr(pair, source),
         Rule::or_expr => fold_left_binary(pair, source, BinaryOp::Or),
         Rule::and_expr => fold_left_binary(pair, source, BinaryOp::And),
@@ -97,6 +100,46 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
             source,
         )),
     }
+}
+
+fn parse_aug_assign_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let target_pair = inner.next().ok_or_else(|| {
+        error_with_span("missing augmented assignment target", span.clone(), source)
+    })?;
+    let op_pair = inner.next().ok_or_else(|| {
+        error_with_span(
+            "missing augmented assignment operator",
+            span.clone(),
+            source,
+        )
+    })?;
+    let value_pair = inner.next().ok_or_else(|| {
+        error_with_span("missing augmented assignment value", span.clone(), source)
+    })?;
+
+    let target_inner = if target_pair.as_rule() == Rule::aug_target {
+        target_pair.into_inner().next().ok_or_else(|| {
+            error_with_span("missing augmented assignment target", span.clone(), source)
+        })?
+    } else {
+        target_pair
+    };
+    let target_expr = parse_assign_target_ref_expr(target_inner, source)?;
+    let target = restricted_assign_target_from_expr(
+        target_expr,
+        source,
+        "augmented assignment target must be a name, attribute, or index",
+    )?;
+    let op = parse_aug_assign_op(op_pair, source)?;
+    let value = parse_expr_pair(value_pair, source)?;
+    Ok(Expr::AugAssign {
+        target: Box::new(target),
+        op,
+        value: Box::new(value),
+        span,
+    })
 }
 
 fn parse_if_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -339,7 +382,7 @@ fn parse_unary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let mut inner = pair.into_inner().peekable();
     let mut ops = Vec::new();
     while let Some(next) = inner.peek() {
-        if next.as_rule() != Rule::unary_op {
+        if next.as_rule() != Rule::unary_op && next.as_rule() != Rule::prefix_incr {
             break;
         }
         ops.push(inner.next().unwrap());
@@ -349,23 +392,53 @@ fn parse_unary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         .ok_or_else(|| error_with_span("missing unary operand", pair_span, source))?;
     let mut expr = parse_expr_pair(base_pair, source)?;
     for op_pair in ops.into_iter().rev() {
-        let op = match op_pair.as_str() {
-            "+" => UnaryOp::Plus,
-            "-" => UnaryOp::Minus,
-            _ => {
-                return Err(error_with_span(
-                    format!("unknown unary op: {}", op_pair.as_str()),
-                    span_from_pair(&op_pair, source),
-                    source,
-                ));
+        match op_pair.as_rule() {
+            Rule::unary_op => {
+                let op = match op_pair.as_str() {
+                    "+" => UnaryOp::Plus,
+                    "-" => UnaryOp::Minus,
+                    _ => {
+                        return Err(error_with_span(
+                            format!("unknown unary op: {}", op_pair.as_str()),
+                            span_from_pair(&op_pair, source),
+                            source,
+                        ));
+                    }
+                };
+                let span = merge_span(&span_from_pair(&op_pair, source), expr_span(&expr));
+                expr = Expr::Unary {
+                    op,
+                    expr: Box::new(expr),
+                    span,
+                };
             }
-        };
-        let span = merge_span(&span_from_pair(&op_pair, source), expr_span(&expr));
-        expr = Expr::Unary {
-            op,
-            expr: Box::new(expr),
-            span,
-        };
+            Rule::prefix_incr => {
+                let op = match op_pair.as_str() {
+                    "++" => IncrOp::Increment,
+                    "--" => IncrOp::Decrement,
+                    _ => {
+                        return Err(error_with_span(
+                            format!("unknown prefix op: {}", op_pair.as_str()),
+                            span_from_pair(&op_pair, source),
+                            source,
+                        ));
+                    }
+                };
+                let target_span = expr_span(&expr).clone();
+                let target = restricted_assign_target_from_expr(
+                    expr,
+                    source,
+                    "increment/decrement target must be a name, attribute, or index",
+                )?;
+                let span = merge_span(&span_from_pair(&op_pair, source), &target_span);
+                expr = Expr::PrefixIncr {
+                    op,
+                    target: Box::new(target),
+                    span,
+                };
+            }
+            _ => {}
+        }
     }
     Ok(expr)
 }
@@ -411,8 +484,16 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
         .next()
         .ok_or_else(|| error_with_span("missing primary", pair_span, source))?;
     let mut expr = parse_expr_pair(atom_pair, source)?;
+    let mut postfix_seen = false;
     for suffix in inner {
         let suffix_span = span_from_pair(&suffix, source);
+        if postfix_seen {
+            return Err(error_with_span(
+                "postfix increment/decrement must be the final suffix",
+                suffix_span,
+                source,
+            ));
+        }
         match suffix.as_rule() {
             Rule::call => {
                 let args = parse_call(suffix, source)?;
@@ -470,6 +551,32 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                     fallback: fallback.map(Box::new),
                     span,
                 };
+            }
+            Rule::postfix_incr => {
+                let op = match suffix.as_str() {
+                    "++" => IncrOp::Increment,
+                    "--" => IncrOp::Decrement,
+                    _ => {
+                        return Err(error_with_span(
+                            format!("unknown postfix op: {}", suffix.as_str()),
+                            suffix_span,
+                            source,
+                        ));
+                    }
+                };
+                let target_span = expr_span(&expr).clone();
+                let target = restricted_assign_target_from_expr(
+                    expr,
+                    source,
+                    "increment/decrement target must be a name, attribute, or index",
+                )?;
+                let span = merge_span(&target_span, &suffix_span);
+                expr = Expr::PostfixIncr {
+                    op,
+                    target: Box::new(target),
+                    span,
+                };
+                postfix_seen = true;
             }
             _ => {}
         }
@@ -633,4 +740,39 @@ pub fn assign_target_from_expr(expr: Expr, source: &str) -> Result<AssignTarget,
             ))
         }
     }
+}
+
+fn restricted_assign_target_from_expr(
+    expr: Expr,
+    source: &str,
+    message: &str,
+) -> Result<AssignTarget, ParseError> {
+    let span = expr_span(&expr).clone();
+    let target = assign_target_from_expr(expr, source)?;
+    match target {
+        AssignTarget::Name { .. } | AssignTarget::Attribute { .. } | AssignTarget::Index { .. } => {
+            Ok(target)
+        }
+        _ => Err(error_with_span(message, span, source)),
+    }
+}
+
+fn parse_aug_assign_op(pair: Pair<'_, Rule>, source: &str) -> Result<AugAssignOp, ParseError> {
+    let op = match pair.as_str() {
+        "+=" => AugAssignOp::Add,
+        "-=" => AugAssignOp::Sub,
+        "*=" => AugAssignOp::Mul,
+        "/=" => AugAssignOp::Div,
+        "//=" => AugAssignOp::FloorDiv,
+        "%=" => AugAssignOp::Mod,
+        "**=" => AugAssignOp::Pow,
+        _ => {
+            return Err(error_with_span(
+                format!("unknown augmented assignment operator: {}", pair.as_str()),
+                span_from_pair(&pair, source),
+                source,
+            ));
+        }
+    };
+    Ok(op)
 }

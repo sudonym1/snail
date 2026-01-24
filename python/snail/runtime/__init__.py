@@ -42,6 +42,10 @@ _subprocess_status = None
 _jmespath_query = None
 _js = None
 _lazy_text_class = None
+_incr_attr = None
+_incr_index = None
+_aug_attr = None
+_aug_index = None
 
 
 def _get_compact_try():
@@ -116,6 +120,42 @@ def _get_lazy_text_class():
     return _lazy_text_class
 
 
+def _get_incr_attr():
+    global _incr_attr
+    if _incr_attr is None:
+        from .augmented import __snail_incr_attr
+
+        _incr_attr = __snail_incr_attr
+    return _incr_attr
+
+
+def _get_incr_index():
+    global _incr_index
+    if _incr_index is None:
+        from .augmented import __snail_incr_index
+
+        _incr_index = __snail_incr_index
+    return _incr_index
+
+
+def _get_aug_attr():
+    global _aug_attr
+    if _aug_attr is None:
+        from .augmented import __snail_aug_attr
+
+        _aug_attr = __snail_aug_attr
+    return _aug_attr
+
+
+def _get_aug_index():
+    global _aug_index
+    if _aug_index is None:
+        from .augmented import __snail_aug_index
+
+        _aug_index = __snail_aug_index
+    return _aug_index
+
+
 def _lazy_compact_try(expr_fn, fallback_fn=None):
     return _get_compact_try()(expr_fn, fallback_fn)
 
@@ -142,6 +182,22 @@ def _lazy_jmespath_query(query: str):
 
 def _lazy_js(input_data=None):
     return _get_js()(input_data)
+
+
+def _lazy_incr_attr(obj, attr: str, delta: int, pre: bool):
+    return _get_incr_attr()(obj, attr, delta, pre)
+
+
+def _lazy_incr_index(obj, index, delta: int, pre: bool):
+    return _get_incr_index()(obj, index, delta, pre)
+
+
+def _lazy_aug_attr(obj, attr: str, value, op: str):
+    return _get_aug_attr()(obj, attr, value, op)
+
+
+def _lazy_aug_index(obj, index, value, op: str):
+    return _get_aug_index()(obj, index, value, op)
 
 
 def __snail_partial(func, /, *args, **kwargs):
@@ -174,5 +230,9 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_partial"] = __snail_partial
     globals_dict["__snail_contains__"] = __snail_contains__
     globals_dict["__snail_contains_not__"] = __snail_contains_not__
+    globals_dict["__snail_incr_attr"] = _lazy_incr_attr
+    globals_dict["__snail_incr_index"] = _lazy_incr_index
+    globals_dict["__snail_aug_attr"] = _lazy_aug_attr
+    globals_dict["__snail_aug_index"] = _lazy_aug_index
     globals_dict["js"] = _lazy_js
     globals_dict["__SnailLazyText"] = _get_lazy_text_class()

@@ -1,6 +1,6 @@
 use pest::Parser;
 use pest::iterators::Pair;
-use snail_ast::{Argument, Expr, FStringPart, SourceSpan, StringDelimiter};
+use snail_ast::{Argument, AssignTarget, Expr, FStringPart, SourceSpan, StringDelimiter};
 use snail_error::ParseError;
 
 use crate::util::{
@@ -413,6 +413,20 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             shift_expr_spans(right, offset, source);
             *span = shift_span(span, offset, source);
         }
+        Expr::AugAssign {
+            target,
+            value,
+            span,
+            ..
+        } => {
+            shift_assign_target_spans(target, offset, source);
+            shift_expr_spans(value, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        Expr::PrefixIncr { target, span, .. } | Expr::PostfixIncr { target, span, .. } => {
+            shift_assign_target_spans(target, offset, source);
+            *span = shift_span(span, offset, source);
+        }
         Expr::Compare {
             left,
             comparators,
@@ -500,6 +514,33 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             shift_expr_spans(iter, offset, source);
             for cond in ifs {
                 shift_expr_spans(cond, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+    }
+}
+
+fn shift_assign_target_spans(target: &mut AssignTarget, offset: usize, source: &str) {
+    match target {
+        AssignTarget::Name { span, .. } => {
+            *span = shift_span(span, offset, source);
+        }
+        AssignTarget::Attribute { value, span, .. } => {
+            shift_expr_spans(value, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        AssignTarget::Index { value, index, span } => {
+            shift_expr_spans(value, offset, source);
+            shift_expr_spans(index, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        AssignTarget::Starred { target, span } => {
+            shift_assign_target_spans(target, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        AssignTarget::Tuple { elements, span } | AssignTarget::List { elements, span } => {
+            for element in elements {
+                shift_assign_target_spans(element, offset, source);
             }
             *span = shift_span(span, offset, source);
         }

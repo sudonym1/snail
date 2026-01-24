@@ -5,7 +5,10 @@ use snail_error::LowerError;
 
 use crate::constants::*;
 use crate::helpers::{byte_string_expr, name_expr, number_expr, regex_pattern_expr, string_expr};
-use crate::operators::{lower_binary_op, lower_bool_op, lower_compare_op, lower_unary_op};
+use crate::operators::{
+    aug_op_to_string, lower_aug_assign_op, lower_binary_op, lower_bool_op, lower_compare_op,
+    lower_unary_op,
+};
 use crate::py_ast::{AstBuilder, py_err_to_lower};
 
 pub(crate) fn lower_expr(builder: &AstBuilder<'_>, expr: &Expr) -> Result<PyObject, LowerError> {
@@ -645,6 +648,18 @@ pub(crate) fn lower_expr_with_exception(
                     .map_err(py_err_to_lower)
             }
         }
+        Expr::AugAssign {
+            target,
+            op,
+            value,
+            span,
+        } => lower_aug_assign(builder, target, *op, value, span, exception_name),
+        Expr::PrefixIncr { op, target, span } => {
+            lower_incr(builder, target, *op, true, span, exception_name)
+        }
+        Expr::PostfixIncr { op, target, span } => {
+            lower_incr(builder, target, *op, false, span, exception_name)
+        }
         Expr::Compare {
             left,
             ops,
@@ -1047,6 +1062,254 @@ pub(crate) fn lower_expr_with_exception(
     }
 }
 
+fn lower_aug_assign(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+    op: AugAssignOp,
+    value: &Expr,
+    span: &SourceSpan,
+    exception_name: Option<&str>,
+) -> Result<PyObject, LowerError> {
+    match target {
+        AssignTarget::Name { name, .. } => {
+            let left = name_expr(
+                builder,
+                name,
+                span,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            )?;
+            let right = lower_expr_with_exception(builder, value, exception_name)?;
+            let op_node = lower_aug_assign_op(builder, op)?;
+            let binop = builder
+                .call_node("BinOp", vec![left, op_node, right], span)
+                .map_err(py_err_to_lower)?;
+            named_expr(builder, name, binop, span)
+        }
+        AssignTarget::Attribute {
+            value: target_value,
+            attr,
+            ..
+        } => {
+            let object = lower_expr_with_exception(builder, target_value, exception_name)?;
+            let attr_node = builder
+                .call_node(
+                    "Constant",
+                    vec![attr.to_string().into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            let rhs = lower_expr_with_exception(builder, value, exception_name)?;
+            let op_node = builder
+                .call_node(
+                    "Constant",
+                    vec![aug_op_to_string(op).to_string().into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            lower_runtime_call(
+                builder,
+                SNAIL_AUG_ATTR,
+                vec![object, attr_node, rhs, op_node],
+                span,
+            )
+        }
+        AssignTarget::Index {
+            value: target_value,
+            index: target_index,
+            ..
+        } => {
+            let object = lower_expr_with_exception(builder, target_value, exception_name)?;
+            let index = lower_expr_with_exception(builder, target_index, exception_name)?;
+            let rhs = lower_expr_with_exception(builder, value, exception_name)?;
+            let op_node = builder
+                .call_node(
+                    "Constant",
+                    vec![aug_op_to_string(op).to_string().into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            lower_runtime_call(
+                builder,
+                SNAIL_AUG_INDEX,
+                vec![object, index, rhs, op_node],
+                span,
+            )
+        }
+        AssignTarget::Starred { .. } | AssignTarget::Tuple { .. } | AssignTarget::List { .. } => {
+            Err(LowerError::new(
+                "augmented assignment target must be a name, attribute, or index",
+            ))
+        }
+    }
+}
+
+fn lower_incr(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+    op: IncrOp,
+    pre: bool,
+    span: &SourceSpan,
+    exception_name: Option<&str>,
+) -> Result<PyObject, LowerError> {
+    match target {
+        AssignTarget::Name { name, .. } => {
+            if pre {
+                return lower_named_incr(builder, name, op, span);
+            }
+            lower_postfix_name_incr(builder, name, op, span)
+        }
+        AssignTarget::Attribute { value, attr, .. } => {
+            let object = lower_expr_with_exception(builder, value, exception_name)?;
+            let attr_node = builder
+                .call_node(
+                    "Constant",
+                    vec![attr.to_string().into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            let delta = number_expr(builder, incr_delta(op), span)?;
+            let pre_node = builder
+                .call_node("Constant", vec![pre.into_py(builder.py())], span)
+                .map_err(py_err_to_lower)?;
+            lower_runtime_call(
+                builder,
+                SNAIL_INCR_ATTR,
+                vec![object, attr_node, delta, pre_node],
+                span,
+            )
+        }
+        AssignTarget::Index { value, index, .. } => {
+            let object = lower_expr_with_exception(builder, value, exception_name)?;
+            let index = lower_expr_with_exception(builder, index, exception_name)?;
+            let delta = number_expr(builder, incr_delta(op), span)?;
+            let pre_node = builder
+                .call_node("Constant", vec![pre.into_py(builder.py())], span)
+                .map_err(py_err_to_lower)?;
+            lower_runtime_call(
+                builder,
+                SNAIL_INCR_INDEX,
+                vec![object, index, delta, pre_node],
+                span,
+            )
+        }
+        AssignTarget::Starred { .. } | AssignTarget::Tuple { .. } | AssignTarget::List { .. } => {
+            Err(LowerError::new(
+                "increment/decrement target must be a name, attribute, or index",
+            ))
+        }
+    }
+}
+
+fn lower_runtime_call(
+    builder: &AstBuilder<'_>,
+    helper_name: &str,
+    args: Vec<PyObject>,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let func = name_expr(
+        builder,
+        helper_name,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    builder
+        .call_node(
+            "Call",
+            vec![
+                func,
+                PyList::new_bound(builder.py(), args).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn lower_named_incr(
+    builder: &AstBuilder<'_>,
+    name: &str,
+    op: IncrOp,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let left = name_expr(
+        builder,
+        name,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let delta = number_expr(builder, "1", span)?;
+    let aug_op = match op {
+        IncrOp::Increment => AugAssignOp::Add,
+        IncrOp::Decrement => AugAssignOp::Sub,
+    };
+    let op_node = lower_aug_assign_op(builder, aug_op)?;
+    let binop = builder
+        .call_node("BinOp", vec![left, op_node, delta], span)
+        .map_err(py_err_to_lower)?;
+    named_expr(builder, name, binop, span)
+}
+
+fn lower_postfix_name_incr(
+    builder: &AstBuilder<'_>,
+    name: &str,
+    op: IncrOp,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let current = name_expr(
+        builder,
+        name,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let tmp_assign = named_expr(builder, SNAIL_INCR_TMP, current, span)?;
+    let update = lower_named_incr(builder, name, op, span)?;
+    let tmp_load = name_expr(
+        builder,
+        SNAIL_INCR_TMP,
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let tuple_expr = builder
+        .call_node(
+            "Tuple",
+            vec![
+                PyList::new_bound(builder.py(), vec![tmp_assign, update, tmp_load])
+                    .into_py(builder.py()),
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    let index_expr = builder
+        .call_node(
+            "UnaryOp",
+            vec![
+                lower_unary_op(builder, UnaryOp::Minus)?,
+                number_expr(builder, "1", span)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    builder
+        .call_node(
+            "Subscript",
+            vec![
+                tuple_expr,
+                index_expr,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+fn incr_delta(op: IncrOp) -> &'static str {
+    match op {
+        IncrOp::Increment => "1",
+        IncrOp::Decrement => "-1",
+    }
+}
+
 fn lower_subprocess_object(
     builder: &AstBuilder<'_>,
     kind: &SubprocessKind,
@@ -1215,6 +1478,13 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
             count_placeholders(left, info);
             count_placeholders(right, info);
         }
+        Expr::AugAssign { target, value, .. } => {
+            count_placeholders_in_assign_target(target, info);
+            count_placeholders(value, info);
+        }
+        Expr::PrefixIncr { target, .. } | Expr::PostfixIncr { target, .. } => {
+            count_placeholders_in_assign_target(target, info);
+        }
         Expr::Compare {
             left, comparators, ..
         } => {
@@ -1315,6 +1585,23 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
     }
 }
 
+fn count_placeholders_in_assign_target(target: &AssignTarget, info: &mut PlaceholderInfo) {
+    match target {
+        AssignTarget::Name { .. } => {}
+        AssignTarget::Attribute { value, .. } => count_placeholders(value, info),
+        AssignTarget::Index { value, index, .. } => {
+            count_placeholders(value, info);
+            count_placeholders(index, info);
+        }
+        AssignTarget::Starred { target, .. } => count_placeholders_in_assign_target(target, info),
+        AssignTarget::Tuple { elements, .. } | AssignTarget::List { elements, .. } => {
+            for element in elements {
+                count_placeholders_in_assign_target(element, info);
+            }
+        }
+    }
+}
+
 fn count_placeholders_in_regex(pattern: &RegexPattern, info: &mut PlaceholderInfo) {
     if let RegexPattern::Interpolated(parts) = pattern {
         for part in parts {
@@ -1386,6 +1673,27 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             left: Box::new(substitute_placeholder(left, replacement)),
             op: *op,
             right: Box::new(substitute_placeholder(right, replacement)),
+            span: span.clone(),
+        },
+        Expr::AugAssign {
+            target,
+            op,
+            value,
+            span,
+        } => Expr::AugAssign {
+            target: Box::new(substitute_placeholder_in_assign_target(target, replacement)),
+            op: *op,
+            value: Box::new(substitute_placeholder(value, replacement)),
+            span: span.clone(),
+        },
+        Expr::PrefixIncr { op, target, span } => Expr::PrefixIncr {
+            op: *op,
+            target: Box::new(substitute_placeholder_in_assign_target(target, replacement)),
+            span: span.clone(),
+        },
+        Expr::PostfixIncr { op, target, span } => Expr::PostfixIncr {
+            op: *op,
+            target: Box::new(substitute_placeholder_in_assign_target(target, replacement)),
             span: span.clone(),
         },
         Expr::Compare {
@@ -1542,6 +1850,46 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             ifs: ifs
                 .iter()
                 .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+    }
+}
+
+fn substitute_placeholder_in_assign_target(
+    target: &AssignTarget,
+    replacement: &Expr,
+) -> AssignTarget {
+    match target {
+        AssignTarget::Name { name, span } => AssignTarget::Name {
+            name: name.clone(),
+            span: span.clone(),
+        },
+        AssignTarget::Attribute { value, attr, span } => AssignTarget::Attribute {
+            value: Box::new(substitute_placeholder(value, replacement)),
+            attr: attr.clone(),
+            span: span.clone(),
+        },
+        AssignTarget::Index { value, index, span } => AssignTarget::Index {
+            value: Box::new(substitute_placeholder(value, replacement)),
+            index: Box::new(substitute_placeholder(index, replacement)),
+            span: span.clone(),
+        },
+        AssignTarget::Starred { target, span } => AssignTarget::Starred {
+            target: Box::new(substitute_placeholder_in_assign_target(target, replacement)),
+            span: span.clone(),
+        },
+        AssignTarget::Tuple { elements, span } => AssignTarget::Tuple {
+            elements: elements
+                .iter()
+                .map(|element| substitute_placeholder_in_assign_target(element, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        AssignTarget::List { elements, span } => AssignTarget::List {
+            elements: elements
+                .iter()
+                .map(|element| substitute_placeholder_in_assign_target(element, replacement))
                 .collect(),
             span: span.clone(),
         },

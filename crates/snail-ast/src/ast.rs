@@ -216,6 +216,22 @@ pub enum Expr {
         right: Box<Expr>,
         span: SourceSpan,
     },
+    AugAssign {
+        target: Box<AssignTarget>,
+        op: AugAssignOp,
+        value: Box<Expr>,
+        span: SourceSpan,
+    },
+    PrefixIncr {
+        op: IncrOp,
+        target: Box<AssignTarget>,
+        span: SourceSpan,
+    },
+    PostfixIncr {
+        op: IncrOp,
+        target: Box<AssignTarget>,
+        span: SourceSpan,
+    },
     Compare {
         left: Box<Expr>,
         ops: Vec<CompareOp>,
@@ -401,6 +417,23 @@ pub enum BinaryOp {
     Mod,
     Pow,
     Pipeline,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AugAssignOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    FloorDiv,
+    Mod,
+    Pow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IncrOp {
+    Increment,
+    Decrement,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
