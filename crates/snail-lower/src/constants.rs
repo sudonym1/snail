@@ -9,11 +9,16 @@ pub const SNAIL_JMESPATH_QUERY: &str = "__snail_jmespath_query";
 pub const SNAIL_PARTIAL_HELPER: &str = "__snail_partial";
 pub const SNAIL_CONTAINS_HELPER: &str = "__snail_contains__";
 pub const SNAIL_CONTAINS_NOT_HELPER: &str = "__snail_contains_not__";
+pub const SNAIL_INCR_ATTR: &str = "__snail_incr_attr";
+pub const SNAIL_INCR_INDEX: &str = "__snail_incr_index";
+pub const SNAIL_AUG_ATTR: &str = "__snail_aug_attr";
+pub const SNAIL_AUG_INDEX: &str = "__snail_aug_index";
 pub(crate) const SNAIL_LET_VALUE: &str = "__snail_let_value";
 pub(crate) const SNAIL_LET_OK: &str = "__snail_let_ok";
 pub(crate) const SNAIL_LET_KEEP: &str = "__snail_let_keep";
 pub(crate) const SNAIL_COMPARE_LEFT: &str = "__snail_compare_left";
 pub(crate) const SNAIL_COMPARE_RIGHT: &str = "__snail_compare_right";
+pub(crate) const SNAIL_INCR_TMP: &str = "__snail_incr_tmp";
 
 // Awk-related constants (public within crate)
 pub(crate) const SNAIL_AWK_NR: &str = "$n";

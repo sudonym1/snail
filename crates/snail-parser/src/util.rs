@@ -146,6 +146,9 @@ pub fn expr_span(expr: &snail_ast::Expr) -> &SourceSpan {
         | snail_ast::Expr::None { span }
         | snail_ast::Expr::Unary { span, .. }
         | snail_ast::Expr::Binary { span, .. }
+        | snail_ast::Expr::AugAssign { span, .. }
+        | snail_ast::Expr::PrefixIncr { span, .. }
+        | snail_ast::Expr::PostfixIncr { span, .. }
         | snail_ast::Expr::Compare { span, .. }
         | snail_ast::Expr::IfExpr { span, .. }
         | snail_ast::Expr::TryExpr { span, .. }

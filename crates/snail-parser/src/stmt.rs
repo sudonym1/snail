@@ -573,7 +573,10 @@ fn parse_assign_target_ref(pair: Pair<'_, Rule>, source: &str) -> Result<AssignT
     assign_target_from_expr(expr, source)
 }
 
-fn parse_assign_target_ref_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+pub(crate) fn parse_assign_target_ref_expr(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
     let atom_pair = inner

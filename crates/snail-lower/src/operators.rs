@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use snail_ast::{BinaryOp, CompareOp, UnaryOp};
+use snail_ast::{AugAssignOp, BinaryOp, CompareOp, UnaryOp};
 use snail_error::LowerError;
 
 use crate::py_ast::{AstBuilder, py_err_to_lower};
@@ -35,6 +35,34 @@ pub(crate) fn lower_binary_op(
         }
     };
     builder.op(name).map_err(py_err_to_lower)
+}
+
+pub(crate) fn lower_aug_assign_op(
+    builder: &AstBuilder<'_>,
+    op: AugAssignOp,
+) -> Result<PyObject, LowerError> {
+    let name = match op {
+        AugAssignOp::Add => "Add",
+        AugAssignOp::Sub => "Sub",
+        AugAssignOp::Mul => "Mult",
+        AugAssignOp::Div => "Div",
+        AugAssignOp::FloorDiv => "FloorDiv",
+        AugAssignOp::Mod => "Mod",
+        AugAssignOp::Pow => "Pow",
+    };
+    builder.op(name).map_err(py_err_to_lower)
+}
+
+pub(crate) fn aug_op_to_string(op: AugAssignOp) -> &'static str {
+    match op {
+        AugAssignOp::Add => "+",
+        AugAssignOp::Sub => "-",
+        AugAssignOp::Mul => "*",
+        AugAssignOp::Div => "/",
+        AugAssignOp::FloorDiv => "//",
+        AugAssignOp::Mod => "%",
+        AugAssignOp::Pow => "**",
+    }
 }
 
 pub(crate) fn lower_bool_op(

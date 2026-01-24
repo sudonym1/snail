@@ -127,6 +127,19 @@ fallback = "yes" if flag else "no"
 power = -2 ** 3
 mix = (1 + 2) * 3 - 4 / 2 + 5 % 2 + 7 // 2
 
+counter_val = 0
+pre_counter = ++counter_val
+post_counter = counter_val++
+aug_counter = (counter_val += 3)
+counter_obj = Counter(0)
+pre_attr = ++counter_obj.start
+post_attr = counter_obj.start++
+aug_attr = (counter_obj.start += 2)
+scratch = [10]
+pre_idx = ++scratch[0]
+post_idx = scratch[0]++
+aug_idx = (scratch[0] += 4)
+
 counter = Counter(10)
 value = counter.inc(5)
 root_val = root(16)

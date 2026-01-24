@@ -100,17 +100,21 @@ assign_target_items = { assign_target_item ~ ("," ~ assign_target_item)* ~ ","? 
 assign_tuple = { "(" ~ assign_target_tuple ~ ")" }
 expr_stmt = { expr }
 
-// Expressions: precedence from lowest (if) to highest (power)
-expr = { if_expr }
+// Expressions: precedence from lowest (aug assignment) to highest (power)
+expr = { aug_assign_expr | if_expr }
+
+aug_assign_expr = { aug_target ~ aug_op ~ expr }
+aug_target = { assign_target_ref }
+aug_op = { "+=" | "-=" | "**=" | "*=" | "//=" | "/=" | "%=" }
 
 // Compact try operator: expr? or expr:fallback?
 try_suffix = { try_fallback? ~ "?" }
 try_fallback = { ":" ~ try_fallback_unary }
 
 // Fallback expression grammar (mirrors unary/power/primary but without try_suffix)
-try_fallback_unary = { unary_op* ~ try_fallback_power }
+try_fallback_unary = { (prefix_incr | unary_op)* ~ try_fallback_power }
 try_fallback_power = { try_fallback_primary ~ (pow_op ~ try_fallback_primary)* }
-try_fallback_primary = { atom ~ (call | attribute | index)* }
+try_fallback_primary = { atom ~ (call | attribute | index | postfix_incr)* }
 
 // Ternary conditional
 if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }
@@ -134,13 +138,15 @@ sum = { product ~ (add_op ~ product)* }
 add_op = { "+" | "-" }
 product = { unary ~ (mul_op ~ unary)* }
 mul_op = { "//" | "*" | "/" | "%" }
-unary = { unary_op* ~ power }
+unary = { (prefix_incr | unary_op)* ~ power }
 unary_op = { "+" | "-" }
+prefix_incr = { "++" | "--" }
 power = { primary ~ (pow_op ~ primary)* }
 pow_op = { "**" }
 
 // Primary expressions: atoms with postfix operations
-primary = { atom ~ (call | attribute | index | try_suffix)* }
+primary = { atom ~ (call | attribute | index | try_suffix | postfix_incr)* }
+postfix_incr = { "++" | "--" }
 
 // Function calls with positional, keyword, *args, **kwargs
 call = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ")" }
