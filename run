@@ -1,5 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-uv run -- python -m maturin develop
+needs_rebuild=0
+if [[ ! -f .last-build ]]; then
+  needs_rebuild=1
+else
+  while IFS= read -r -d '' file; do
+    if [[ "$file" -nt .last-build ]]; then
+      needs_rebuild=1
+      break
+    fi
+  done < <(git ls-files -co --exclude-standard -z)
+fi
+
+if (( needs_rebuild )); then
+  uv run -- python -m maturin develop
+  : > .last-build
+fi
+
 exec uv run -- snail "$@"
