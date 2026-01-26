@@ -616,6 +616,19 @@ fn parser_rejects_prefix_incr_on_try_expr() {
 }
 
 #[test]
+fn parser_rejects_compact_try_on_binding_expressions() {
+    parse_err("x++?");
+    parse_err("y:0? *= 3");
+    parse_err("x? += 1");
+
+    let program = parse_ok("(x++)?");
+    assert_eq!(program.stmts.len(), 1);
+
+    let program = parse_ok("x += y:0?");
+    assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
 fn parses_list_and_dict_literals_and_comprehensions() {
     let source = "nums = [1, 2, 3]\npairs = {\"a\": 1, \"b\": 2}\nevens = [n for n in nums if n % 2 == 0]\nlookup = {n: n * 2 for n in nums if n > 1}\n";
     let program = parse_ok(source);

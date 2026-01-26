@@ -538,6 +538,16 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                 };
             }
             Rule::try_suffix => {
+                if matches!(
+                    expr,
+                    Expr::AugAssign { .. } | Expr::PrefixIncr { .. } | Expr::PostfixIncr { .. }
+                ) {
+                    return Err(error_with_span(
+                        "compact try cannot wrap a binding expression",
+                        expr_span(&expr).clone(),
+                        source,
+                    ));
+                }
                 let mut suffix_inner = suffix.into_inner();
                 let fallback = suffix_inner
                     .next()
