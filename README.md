@@ -1,11 +1,10 @@
 <p align="center">
   <img src="logo.png" alt="Snail logo" width="200">
 </p>
-<p align="center"><em>What do you get when you shove a snake in a shell?</em></p>
 
 <h1 align="center">Snail</h1>
 
-**Snail** is a programming language that compiles to Python, combining Python's familiarity and extensive libraries with Perl/awk-inspired syntax for quick scripts and one-liners.
+**Snail** is a programming language that compiles to Python, combining Python's familiarity and extensive libraries with Perl/awk-inspired syntax for quick scripts and one-liners. Its what you get when you shove a snake in a shell.
 
 ## AI Slop!
 
