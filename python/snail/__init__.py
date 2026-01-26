@@ -1,4 +1,4 @@
-from ._native import __build_info__, compile, compile_ast, exec, parse
+from ._native import __build_info__, compile, compile_ast, exec, parse, parse_ast
 
 
 def _resolve_version() -> str:
@@ -22,4 +22,12 @@ def __dir__() -> list[str]:
     return sorted(list(globals().keys()) + ["__version__"])
 
 
-__all__ = ["compile", "compile_ast", "exec", "parse", "__version__", "__build_info__"]
+__all__ = [
+    "compile",
+    "compile_ast",
+    "exec",
+    "parse",
+    "parse_ast",
+    "__version__",
+    "__build_info__",
+]

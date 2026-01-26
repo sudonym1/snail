@@ -36,10 +36,51 @@ def _ensure_readme_map_file(tmp_path: Path) -> Path:
     map_file.write_text("readme map input\n")
     return map_file
 
+
 def test_parse_only(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug", "x = 1"]) == 0
     captured = capsys.readouterr()
     assert captured.out.strip() == "x = 1"
+
+
+def test_debug_snail_ast_basic(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--debug-snail-ast", "x = 1"]) == 0
+    captured = capsys.readouterr()
+    assert "Program" in captured.out
+    assert "Assign" in captured.out
+
+
+def test_debug_snail_ast_awk(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--debug-snail-ast", "--awk", "/foo/"]) == 0
+    captured = capsys.readouterr()
+    assert "AwkProgram" in captured.out
+
+
+def test_debug_snail_ast_map(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--debug-snail-ast", "--map", "print($src)"]) == 0
+    captured = capsys.readouterr()
+    assert "Program" in captured.out
+
+
+def test_debug_snail_ast_begin_end(capsys: pytest.CaptureFixture[str]) -> None:
+    assert (
+        main(
+            [
+                "--debug-snail-ast",
+                "--awk",
+                "-b",
+                "x = 1",
+                "-e",
+                "print(x)",
+                "/foo/",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert "begin_blocks" in captured.out
+    assert "end_blocks" in captured.out
+    assert "Assign" in captured.out
 
 
 def test_traceback_highlights_inline_snail() -> None:

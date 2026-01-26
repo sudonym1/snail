@@ -5,9 +5,9 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
 use snail_core::{
-    CompileMode, compile_awk_source_with_begin_end, compile_map_source_with_begin_end,
-    compile_snail_source_with_auto_print, format_snail_error, parse_awk_program, parse_map_program,
-    parse_program,
+    CompileMode, ParseError, Program, compile_awk_source_with_begin_end,
+    compile_map_source_with_begin_end, compile_snail_source_with_auto_print, format_snail_error,
+    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program, parse_program,
 };
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -316,6 +316,69 @@ fn exec_py(
     result
 }
 
+#[allow(dead_code)]
+#[derive(Debug)]
+struct MapAst {
+    program: Program,
+    begin_blocks: Vec<Program>,
+    end_blocks: Vec<Program>,
+}
+
+#[pyfunction(name = "parse_ast")]
+#[pyo3(signature = (source, *, mode = "snail", filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
+fn parse_ast_py(
+    source: &str,
+    mode: &str,
+    filename: &str,
+    begin_code: Vec<String>,
+    end_code: Vec<String>,
+) -> PyResult<String> {
+    let err_to_syntax =
+        |err: ParseError| PySyntaxError::new_err(format_snail_error(&err.into(), filename));
+    match parse_mode(mode)? {
+        CompileMode::Snail => parse_program(source)
+            .map(|program| format!("{:#?}", program))
+            .map_err(err_to_syntax),
+        CompileMode::Awk => {
+            let program = if begin_code.is_empty() && end_code.is_empty() {
+                parse_awk_program(source).map_err(err_to_syntax)?
+            } else {
+                let begin_refs: Vec<&str> = begin_code.iter().map(|s| s.as_str()).collect();
+                let end_refs: Vec<&str> = end_code.iter().map(|s| s.as_str()).collect();
+                parse_awk_program_with_begin_end(source, &begin_refs, &end_refs)
+                    .map_err(err_to_syntax)?
+            };
+            Ok(format!("{:#?}", program))
+        }
+        CompileMode::Map => {
+            let program = parse_map_program(source).map_err(err_to_syntax)?;
+            if begin_code.is_empty() && end_code.is_empty() {
+                return Ok(format!("{:#?}", program));
+            }
+            let mut begin_blocks = Vec::new();
+            for source in &begin_code {
+                let begin_program = parse_map_program(source).map_err(err_to_syntax)?;
+                if !begin_program.stmts.is_empty() {
+                    begin_blocks.push(begin_program);
+                }
+            }
+            let mut end_blocks = Vec::new();
+            for source in &end_code {
+                let end_program = parse_map_program(source).map_err(err_to_syntax)?;
+                if !end_program.stmts.is_empty() {
+                    end_blocks.push(end_program);
+                }
+            }
+            let map_ast = MapAst {
+                program,
+                begin_blocks,
+                end_blocks,
+            };
+            Ok(format!("{:#?}", map_ast))
+        }
+    }
+}
+
 #[pyfunction(name = "parse")]
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>"))]
 fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
@@ -339,11 +402,19 @@ fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(compile_py, module)?)?;
     module.add_function(wrap_pyfunction!(compile_ast_py, module)?)?;
     module.add_function(wrap_pyfunction!(exec_py, module)?)?;
+    module.add_function(wrap_pyfunction!(parse_ast_py, module)?)?;
     module.add_function(wrap_pyfunction!(parse_py, module)?)?;
     module.add("__build_info__", build_info_dict(py)?)?;
     module.add(
         "__all__",
-        vec!["compile", "compile_ast", "exec", "parse", "__build_info__"],
+        vec![
+            "compile",
+            "compile_ast",
+            "exec",
+            "parse_ast",
+            "parse",
+            "__build_info__",
+        ],
     )?;
     if profile {
         log_profile("module_init", total_start.elapsed());
