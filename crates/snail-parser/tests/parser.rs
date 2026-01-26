@@ -572,6 +572,50 @@ fn parser_rejects_invalid_increment_target() {
 }
 
 #[test]
+fn parses_parenthesized_expressions() {
+    // Simple parenthesized expression creates Expr::Paren
+    let source = "(x)";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    match expect_expr_stmt(&program.stmts[0]) {
+        Expr::Paren { expr, .. } => {
+            expect_name(expr.as_ref(), "x");
+        }
+        other => panic!("Expected Paren expression, got {other:?}"),
+    }
+
+    // (++x)? is valid: TryExpr around Paren around PrefixIncr
+    let source = "(++x)?";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    match expect_expr_stmt(&program.stmts[0]) {
+        Expr::TryExpr { expr, fallback, .. } => {
+            assert!(fallback.is_none());
+            match expr.as_ref() {
+                Expr::Paren { expr: inner, .. } => match inner.as_ref() {
+                    Expr::PrefixIncr { op, target, .. } => {
+                        assert!(matches!(op, IncrOp::Increment));
+                        match target.as_ref() {
+                            AssignTarget::Name { name, .. } => assert_eq!(name, "x"),
+                            other => panic!("Expected name target, got {other:?}"),
+                        }
+                    }
+                    other => panic!("Expected PrefixIncr, got {other:?}"),
+                },
+                other => panic!("Expected Paren, got {other:?}"),
+            }
+        }
+        other => panic!("Expected TryExpr, got {other:?}"),
+    }
+}
+
+#[test]
+fn parser_rejects_prefix_incr_on_try_expr() {
+    // ++x? is invalid: try expression result cannot be incremented
+    parse_err("++x?");
+}
+
+#[test]
 fn parses_list_and_dict_literals_and_comprehensions() {
     let source = "nums = [1, 2, 3]\npairs = {\"a\": 1, \"b\": 2}\nevens = [n for n in nums if n % 2 == 0]\nlookup = {n: n * 2 for n in nums if n > 1}\n";
     let program = parse_ok(source);
