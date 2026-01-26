@@ -64,6 +64,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::regex => parse_regex_literal(pair, source),
         Rule::subprocess => parse_subprocess(pair, source),
         Rule::structured_accessor => parse_structured_accessor(pair, source),
+        Rule::paren_expr => parse_paren_expr(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -93,6 +94,7 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::try_fallback_power => parse_power(pair, source),
         Rule::try_fallback_primary => parse_primary(pair, source),
         Rule::compound_expr => parse_compound_expr(pair, source),
+        Rule::paren_expr => parse_paren_expr(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
@@ -657,6 +659,18 @@ fn parse_compound_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
     Ok(Expr::Compound { expressions, span })
 }
 
+fn parse_paren_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let inner = pair.into_inner().next().ok_or_else(|| {
+        error_with_span("missing expression in parentheses", span.clone(), source)
+    })?;
+    let expr = parse_expr_pair(inner, source)?;
+    Ok(Expr::Paren {
+        expr: Box::new(expr),
+        span,
+    })
+}
+
 fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
@@ -696,13 +710,7 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         Rule::dict_comp => parse_dict_comp(inner_pair, source),
         Rule::regex => parse_regex_literal(inner_pair, source),
         Rule::subprocess => parse_subprocess(inner_pair, source),
-        Rule::expr => {
-            let expr = parse_expr_pair(inner_pair, source)?;
-            Ok(Expr::Paren {
-                expr: Box::new(expr),
-                span: pair_span,
-            })
-        }
+        Rule::paren_expr => parse_paren_expr(inner_pair, source),
         _ => Err(error_with_span(
             format!("unsupported atom: {:?}", inner_pair.as_rule()),
             span_from_pair(&inner_pair, source),

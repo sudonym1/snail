@@ -182,8 +182,11 @@ atom = _{
   | dict_literal
   | tuple_literal
   | compound_expr
-  | "(" ~ expr ~ ")"
+  | paren_expr
 }
+
+// Parenthesized expression (preserved in AST for proper validation)
+paren_expr = { "(" ~ expr ~ ")" }
 
 // Compound expression: multiple semicolon-separated expressions in parens
 compound_expr = { "(" ~ NEWLINE* ~ expr ~ (";" ~ NEWLINE* ~ expr)+ ~ NEWLINE* ~ ";"? ~ ")" }
