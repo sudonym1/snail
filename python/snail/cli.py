@@ -187,13 +187,12 @@ def _parse_args(argv: list[str]) -> _Args:
             args.args = argv[idx + 1 :]
             return args
         if token == "-" or not token.startswith("-"):
-            if code_found:
-                # Already found code, rest are args
-                args.args.extend(argv[idx:])
-                return args
-            # This is the code, continue parsing for -b/--begin and -e/--end after
-            args.args = [token]
-            code_found = True
+            if not code_found:
+                # This is the code (or the first arg when -f is used)
+                args.args = [token]
+                code_found = True
+            else:
+                args.args.append(token)
             idx += 1
             continue
         if token in ("-h", "--help"):
@@ -231,6 +230,7 @@ def _parse_args(argv: list[str]) -> _Args:
             if idx + 1 >= len(argv):
                 raise ValueError("option -f requires an argument")
             args.file = argv[idx + 1]
+            code_found = True
             idx += 2
             continue
         if token in ("-b", "--begin"):

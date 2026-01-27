@@ -536,6 +536,23 @@ def test_awk_begin_end_interleaved_order(
     assert captured.out == "start\nx\nend\n"
 
 
+def test_awk_begin_after_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("line\n")
+    result = main(
+        [
+            "--awk",
+            "{ print($0) }",
+            str(file_a),
+            "-b",
+            "print('start')",
+        ]
+    )
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out == "start\nline\n"
+
+
 def test_awk_begin_end_file_and_cli_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
