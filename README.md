@@ -45,8 +45,10 @@ semicolons are optional. You can separate statements with newlines.
 Process files line-by-line with familiar awk semantics:
 
 ```snail-awk("hello world\nfoo bar\n")
+BEGIN { print("start") }
 /hello/ { print("matched:", $0) }
 { print($1, "->", $2) }
+END { print("done") }
 ```
 
 **Built-in variables:**
@@ -61,7 +63,11 @@ Process files line-by-line with familiar awk semantics:
 | `$p` | Current file path |
 | `$m` | Last regex match object |
 
-Begin/end blocks use CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown:
+Begin/end blocks can live in the source file (`BEGIN { ... }` / `END { ... }`) or be supplied
+via CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown. CLI BEGIN blocks run
+before in-file BEGIN blocks; CLI END blocks run after in-file END blocks.
+`BEGIN` and `END` are reserved keywords in all modes.
+BEGIN/END blocks are regular Snail blocks, so awk/map-only `$` variables are not available inside them.
 ```bash
 echo -e "5\n4\n3\n2\n1" | snail --awk --begin 'total = 0' --end 'print("Sum:", total)' '/^[0-9]+/ { total = total + int($1) }'
 ```
@@ -71,8 +77,10 @@ echo -e "5\n4\n3\n2\n1" | snail --awk --begin 'total = 0' --end 'print("Sum:", t
 Process files one at a time instead of line-by-line:
 
 ```snail-map
+BEGIN { print("start") }
 print("File:", $src)
 print("Size:", len($text), "bytes")
+END { print("done") }
 ```
 
 **Built-in variables:**
@@ -83,7 +91,11 @@ print("Size:", len($text), "bytes")
 | `$fd` | Open file handle for the current file |
 | `$text` | Lazy text view of the current file contents |
 
-Begin/end blocks use CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown:
+Begin/end blocks can live in the source file (`BEGIN { ... }` / `END { ... }`) or be supplied
+via CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown. CLI BEGIN blocks run
+before in-file BEGIN blocks; CLI END blocks run after in-file END blocks.
+BEGIN/END blocks are regular Snail blocks, so awk/map-only `$` variables are not available inside them.
+`BEGIN` and `END` are reserved keywords in all modes.
 ```bash
 snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 ```

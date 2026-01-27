@@ -19,11 +19,21 @@ Map mode provides three special variables:
 - `$fd`: open file handle for the current file
 - `$text`: lazy text view of the current file contents
 
+Begin/end blocks can live in the source file:
+```snail
+BEGIN { print("start") }
+print($src)
+END { print("done") }
+```
+
 You can also run setup/teardown blocks with `--begin` and `--end`, which execute
-once before the first file and once after the last file:
+once before the first file and once after the last file. CLI BEGIN blocks run before
+in-file BEGIN blocks; CLI END blocks run after in-file END blocks:
 ```bash
 snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 ```
+`BEGIN` and `END` are reserved keywords in all modes.
+BEGIN/END blocks are regular Snail blocks, so awk/map-only variables are not available inside them.
 
 ## Modules and imports
 Snail uses Python's import semantics and exposes the same namespaces:
@@ -303,9 +313,11 @@ Invoke Snail's awk mode with `snail --awk`. Awk sources are composed of
 pattern/action pairs evaluated for each input line. A rule with only a pattern
 prints matching lines by default, and a lone block runs for every line.
 
-Begin and end blocks are specified via CLI flags:
+Begin and end blocks can live in the source file (`BEGIN { ... }` / `END { ... }`) or be
+specified via CLI flags:
 - `-b <code>` or `--begin <code>`: Code to run before processing lines (repeatable)
 - `-e <code>` or `--end <code>`: Code to run after processing lines (repeatable)
+CLI BEGIN blocks run before in-file BEGIN blocks; CLI END blocks run after in-file END blocks.
 
 Example:
 ```bash
@@ -313,7 +325,9 @@ echo "hello" | snail --awk --begin 'print("start")' --end 'print("done")' '{ pri
 # Output: start\nhello\ndone
 ```
 
-Multiple `-b`/`--begin` and `-e`/`--end` flags are processed in order. See `examples/awk.snail`
+Multiple `-b`/`--begin` and `-e`/`--end` flags are processed in order. `BEGIN` and `END`
+are reserved keywords in all modes. BEGIN/END blocks are regular Snail blocks, so
+awk/map-only variables are not available inside them. See `examples/awk.snail`
 for a runnable sample program.
 
 While processing, Snail populates awk-style variables:

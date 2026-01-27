@@ -1,12 +1,22 @@
 // Top-level program entry points
 program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 awk_program = { SOI ~ stmt_sep* ~ awk_entry_list? ~ stmt_sep* ~ EOI }
+map_program = { SOI ~ stmt_sep* ~ map_entry_list? ~ stmt_sep* ~ EOI }
 
 // AWK mode: pattern-action rules
 awk_entry_list = { awk_entry ~ (stmt_sep* ~ awk_entry)* ~ stmt_sep* }
-awk_entry = _{ awk_rule }
+awk_entry = _{ awk_begin | awk_end | awk_rule }
+awk_begin = { "BEGIN" ~ block }
+awk_end = { "END" ~ block }
 awk_rule = { block | awk_pattern ~ block? }
 awk_pattern = { expr }
+
+// Map mode: program with optional BEGIN/END blocks
+map_entry_list = { map_entry ~ (stmt_sep* ~ map_entry)* ~ stmt_sep* }
+map_entry = { map_begin_end | stmt }
+map_begin_end = _{ map_begin | map_end }
+map_begin = { "BEGIN" ~ block }
+map_end = { "END" ~ block }
 
 // Statements: separated by semicolons or newlines
 // Compound statements (ending with }) don't need trailing separators
@@ -261,6 +271,7 @@ keyword = _{
   | "return" | "break" | "continue" | "pass" | "raise" | "try" | "except"
   | "finally" | "with" | "assert" | "del" | "and" | "or" | "not" | "import" | "from" | "as"
   | "let"
+  | "BEGIN" | "END"
   | "True" | "False" | "None") ~ !ident_continue
 }
 

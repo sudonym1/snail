@@ -63,6 +63,24 @@ def test_debug_snail_ast_map(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Program" in captured.out
 
 
+def test_debug_snail_ast_map_begin_end_in_file(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert (
+        main(
+            [
+                "--debug-snail-ast",
+                "--map",
+                "BEGIN { print(1) }\nprint($src)\nEND { print(2) }",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert "begin_blocks" in captured.out
+    assert "end_blocks" in captured.out
+
+
 def test_debug_snail_ast_begin_end(capsys: pytest.CaptureFixture[str]) -> None:
     assert (
         main(
@@ -518,6 +536,38 @@ def test_awk_begin_end_interleaved_order(
     assert captured.out == "start\nx\nend\n"
 
 
+def test_awk_begin_end_file_and_cli_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("x\n"))
+    script = tmp_path / "file.snail"
+    script.write_text(
+        "BEGIN { print('file begin') }\n{ print($0) }\nEND { print('file end') }\n"
+    )
+    assert (
+        main(
+            [
+                "--awk",
+                "-b",
+                "print('cli begin')",
+                "-e",
+                "print('cli end')",
+                "-f",
+                str(script),
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "cli begin",
+        "file begin",
+        "x",
+        "file end",
+        "cli end",
+    ]
+
+
 def test_begin_end_without_mode_fails(capsys: pytest.CaptureFixture[str]) -> None:
     result = main(["--begin", "print('x')", "print('y')"])
     assert result == 2
@@ -649,13 +699,7 @@ def test_example_awk(
 ) -> None:
     """Test that examples/awk.snail runs successfully."""
     monkeypatch.setattr(sys, "stdin", io.StringIO("demo line\nother line\n"))
-    # The example uses -b/-e flags for begin/end blocks; we pass them explicitly
-    result = main([
-        "--awk",
-        "-b", "print('demo begin')",
-        "-e", "print('demo end')",
-        "-f", str(EXAMPLES_DIR / "awk.snail"),
-    ])
+    result = main(["--awk", "-f", str(EXAMPLES_DIR / "awk.snail")])
     assert result == 0, f"awk.snail failed with exit code {result}"
     captured = capsys.readouterr()
     # Verify expected output from the awk script
@@ -971,6 +1015,64 @@ def test_map_multiple_begin_end_flags(
         "e1",
         "e2",
     ]
+
+
+def test_map_begin_end_oneliner_whitespace(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("alpha")
+    result = main(["--map", "BEGIN {1} $src END {2}", str(file_a)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["1", str(file_a), "2"]
+
+
+def test_map_begin_end_file_and_cli_order(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    map_file = tmp_path / "file1"
+    map_file.write_text("readme map input\n")
+    script = tmp_path / "script.snail"
+    script.write_text(
+        "BEGIN { print('file begin') }\nprint($src)\nEND { print('file end') }\n"
+    )
+    result = main(
+        [
+            "--map",
+            "-b",
+            "print('cli begin')",
+            "-e",
+            "print('cli end')",
+            "-f",
+            str(script),
+            str(map_file),
+        ]
+    )
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "cli begin",
+        "file begin",
+        str(map_file),
+        "file end",
+        "cli end",
+    ]
+
+
+def test_map_begin_end_flags_reject_map_vars(tmp_path: Path) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("alpha")
+    with pytest.raises(SyntaxError):
+        main(
+            [
+                "--map",
+                "-b",
+                "print($src)",
+                "print($src)",
+                str(file_a),
+            ]
+        )
 
 
 def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) -> None:

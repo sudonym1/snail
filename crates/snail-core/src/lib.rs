@@ -33,15 +33,22 @@ pub fn compile_snail_source_with_auto_print(
             Ok(module)
         }
         CompileMode::Map => {
-            let program = parse_map_program(source)?;
-            let module = lower_map_program_with_auto_print(py, &program, auto_print_last)?;
+            let (program, begin_blocks, end_blocks) = parse_map_program_with_begin_end(source)?;
+            let module = lower_map_program_with_begin_end(
+                py,
+                &program,
+                &begin_blocks,
+                &end_blocks,
+                auto_print_last,
+            )?;
             Ok(module)
         }
     }
 }
 
 /// Compile an awk program with separate begin and end code blocks.
-/// Each begin/end source is parsed as a regular Snail program.
+/// In-file BEGIN/END blocks are merged with CLI blocks so CLI BEGIN runs first
+/// and CLI END runs last. CLI blocks are parsed as regular Snail programs.
 pub fn compile_awk_source_with_begin_end(
     py: Python<'_>,
     main_source: &str,
@@ -55,7 +62,8 @@ pub fn compile_awk_source_with_begin_end(
 }
 
 /// Compile a map program with separate begin and end code blocks.
-/// Each begin/end source is parsed as a map program.
+/// In-file BEGIN/END blocks are merged with CLI blocks so CLI BEGIN runs first
+/// and CLI END runs last. CLI blocks are parsed as regular Snail programs.
 pub fn compile_map_source_with_begin_end(
     py: Python<'_>,
     main_source: &str,
@@ -63,17 +71,21 @@ pub fn compile_map_source_with_begin_end(
     end_sources: &[&str],
     auto_print_last: bool,
 ) -> Result<PyObject, SnailError> {
-    let program = parse_map_program(main_source)?;
-    let mut begin_blocks = Vec::new();
+    let (program, mut begin_blocks, mut end_blocks) =
+        parse_map_program_with_begin_end(main_source)?;
+
+    let mut cli_begin_blocks = Vec::new();
     for source in begin_sources {
-        let begin_program = parse_map_program(source)?;
+        let begin_program = parse_program(source)?;
         if !begin_program.stmts.is_empty() {
-            begin_blocks.push(begin_program.stmts);
+            cli_begin_blocks.push(begin_program.stmts);
         }
     }
-    let mut end_blocks = Vec::new();
+    cli_begin_blocks.extend(begin_blocks);
+    begin_blocks = cli_begin_blocks;
+
     for source in end_sources {
-        let end_program = parse_map_program(source)?;
+        let end_program = parse_program(source)?;
         if !end_program.stmts.is_empty() {
             end_blocks.push(end_program.stmts);
         }

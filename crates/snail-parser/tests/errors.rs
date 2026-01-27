@@ -1,7 +1,10 @@
 mod common;
 
 use common::*;
-use snail_parser::{parse_awk_program, parse_awk_program_with_begin_end, parse_program};
+use snail_parser::{
+    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
+    parse_program,
+};
 
 #[test]
 fn reports_parse_error_with_location() {
@@ -203,20 +206,12 @@ fn parser_rejects_invalid_parameter_syntax() {
 // ========== AWK Mode Parser Tests ==========
 
 #[test]
-fn awk_begin_end_parsed_as_patterns() {
-    // BEGIN and END are no longer special keywords; they parse as regular pattern names
-    // Use -b/-e CLI flags for begin/end blocks instead
-    let program = parse_awk_program("BEGIN { print(1) }").expect("should parse");
+fn awk_begin_end_parsed_as_blocks() {
+    let program = parse_awk_program("BEGIN { print(1) } /foo/ { print($0) } END { print(2) }")
+        .expect("should parse");
     assert_eq!(program.rules.len(), 1);
-    assert!(program.begin_blocks.is_empty());
-    // BEGIN is parsed as pattern (identifier), not a special begin block
-    assert!(program.rules[0].pattern.is_some());
-
-    let program = parse_awk_program("END { print(1) }").expect("should parse");
-    assert_eq!(program.rules.len(), 1);
-    assert!(program.end_blocks.is_empty());
-    // END is parsed as pattern (identifier), not a special end block
-    assert!(program.rules[0].pattern.is_some());
+    assert_eq!(program.begin_blocks.len(), 1);
+    assert_eq!(program.end_blocks.len(), 1);
 }
 
 #[test]
@@ -244,6 +239,36 @@ fn awk_with_empty_begin_end() {
     assert_eq!(program.rules.len(), 1);
     assert!(program.begin_blocks.is_empty());
     assert!(program.end_blocks.is_empty());
+}
+
+#[test]
+fn awk_begin_end_rejects_awk_vars() {
+    let err = parse_awk_program("BEGIN { print($0) }").expect_err("should reject awk vars");
+    assert!(err.to_string().contains("$0"));
+}
+
+#[test]
+fn map_begin_end_parsed_as_blocks() {
+    let (program, begin_blocks, end_blocks) =
+        parse_map_program_with_begin_end("BEGIN { print(1) } print($src) END { print(2) }")
+            .expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+    assert_eq!(begin_blocks.len(), 1);
+    assert_eq!(end_blocks.len(), 1);
+}
+
+#[test]
+fn map_begin_end_rejects_map_vars() {
+    let err = parse_map_program_with_begin_end("BEGIN { print($src) }\nprint($src)")
+        .expect_err("should reject map vars in BEGIN/END");
+    assert!(err.to_string().contains("$src"));
+}
+
+#[test]
+fn map_requires_separators_between_simple_statements() {
+    let err = parse_map_program_with_begin_end("print($src) print($src)")
+        .expect_err("should reject missing separators");
+    assert!(err.to_string().contains("expected statement separator"));
 }
 
 // ========== F-String Interpolation Tests ==========

@@ -214,6 +214,7 @@ regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
 compiled_match = compiled_regex.search(text)
 # Awk mode match groups: $m.1 maps to $m[1]
+# Awk/map begin/end blocks: BEGIN { ... } / END { ... }
 
 def fallback_handler() {
     return "dunder"

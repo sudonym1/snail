@@ -5,9 +5,10 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
 use snail_core::{
-    CompileMode, ParseError, Program, compile_awk_source_with_begin_end,
+    CompileMode, ParseError, Program, Stmt, compile_awk_source_with_begin_end,
     compile_map_source_with_begin_end, compile_snail_source_with_auto_print, format_snail_error,
-    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program, parse_program,
+    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
+    parse_program,
 };
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -320,8 +321,8 @@ fn exec_py(
 #[derive(Debug)]
 struct MapAst {
     program: Program,
-    begin_blocks: Vec<Program>,
-    end_blocks: Vec<Program>,
+    begin_blocks: Vec<Vec<Stmt>>,
+    end_blocks: Vec<Vec<Stmt>>,
 }
 
 #[pyfunction(name = "parse_ast")]
@@ -351,24 +352,30 @@ fn parse_ast_py(
             Ok(format!("{:#?}", program))
         }
         CompileMode::Map => {
-            let program = parse_map_program(source).map_err(err_to_syntax)?;
-            if begin_code.is_empty() && end_code.is_empty() {
+            let (program, mut begin_blocks, mut end_blocks) =
+                parse_map_program_with_begin_end(source).map_err(err_to_syntax)?;
+
+            let mut cli_begin_blocks = Vec::new();
+            for source in &begin_code {
+                let begin_program = parse_program(source).map_err(err_to_syntax)?;
+                if !begin_program.stmts.is_empty() {
+                    cli_begin_blocks.push(begin_program.stmts);
+                }
+            }
+            cli_begin_blocks.extend(begin_blocks);
+            begin_blocks = cli_begin_blocks;
+
+            for source in &end_code {
+                let end_program = parse_program(source).map_err(err_to_syntax)?;
+                if !end_program.stmts.is_empty() {
+                    end_blocks.push(end_program.stmts);
+                }
+            }
+
+            if begin_blocks.is_empty() && end_blocks.is_empty() {
                 return Ok(format!("{:#?}", program));
             }
-            let mut begin_blocks = Vec::new();
-            for source in &begin_code {
-                let begin_program = parse_map_program(source).map_err(err_to_syntax)?;
-                if !begin_program.stmts.is_empty() {
-                    begin_blocks.push(begin_program);
-                }
-            }
-            let mut end_blocks = Vec::new();
-            for source in &end_code {
-                let end_program = parse_map_program(source).map_err(err_to_syntax)?;
-                if !end_program.stmts.is_empty() {
-                    end_blocks.push(end_program);
-                }
-            }
+
             let map_ast = MapAst {
                 program,
                 begin_blocks,
@@ -389,7 +396,7 @@ fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
         CompileMode::Awk => parse_awk_program(source)
             .map(|_| ())
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
-        CompileMode::Map => parse_map_program(source)
+        CompileMode::Map => parse_map_program_with_begin_end(source)
             .map(|_| ())
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
     }
