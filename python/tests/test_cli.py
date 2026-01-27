@@ -20,6 +20,7 @@ if importlib.util.find_spec("snail._native") is None:
     pytest.skip("snail extension not built", allow_module_level=True)
 
 from snail.cli import main
+import snail
 
 README_SNIPPET_PREAMBLE = """
 def risky(*args, fail=False) { if fail { raise Exception(fail) } else { return args } }
@@ -81,6 +82,37 @@ def test_debug_snail_ast_begin_end(capsys: pytest.CaptureFixture[str]) -> None:
     assert "begin_blocks" in captured.out
     assert "end_blocks" in captured.out
     assert "Assign" in captured.out
+
+
+def test_debug_snail_ast_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    script = tmp_path / "script.snail"
+    script.write_text("x = 1")
+    assert main(["--debug-snail-ast", "-f", str(script)]) == 0
+    captured = capsys.readouterr()
+    assert "Program" in captured.out
+
+
+def test_debug_snail_ast_reports_parse_error(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SyntaxError):
+        main(["--debug-snail-ast", "x ="])
+
+
+def test_parse_ast_api_basic() -> None:
+    result = snail.parse_ast("x = 1")
+    assert "Program" in result
+    assert "Assign" in result
+
+
+def test_parse_ast_api_map_begin_end() -> None:
+    result = snail.parse_ast(
+        "print($src)",
+        mode="map",
+        begin_code=["x = 1"],
+        end_code=["print(x)"],
+    )
+    assert "begin_blocks" in result
+    assert "end_blocks" in result
+    assert "Assign" in result
 
 
 def test_traceback_highlights_inline_snail() -> None:
