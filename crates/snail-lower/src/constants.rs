@@ -41,6 +41,7 @@ pub(crate) const SNAIL_MAP_SRC_PYVAR: &str = "__snail_src";
 pub(crate) const SNAIL_MAP_FD_PYVAR: &str = "__snail_fd";
 pub(crate) const SNAIL_MAP_TEXT_PYVAR: &str = "__snail_text";
 pub const SNAIL_LAZY_TEXT_CLASS: &str = "__SnailLazyText";
+pub const SNAIL_LAZY_FILE_CLASS: &str = "__SnailLazyFile";
 
 pub(crate) fn injected_py_name(name: &str) -> Option<&'static str> {
     match name {

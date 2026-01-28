@@ -941,6 +941,28 @@ def test_map_mode_from_args(
     assert str(file_b) in captured.out
 
 
+def test_map_mode_missing_file_src_only(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "missing.txt"
+    result = main(["--map", "print($src)", str(missing)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert str(missing) in captured.out
+
+
+def test_map_mode_missing_file_fd_access(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.txt"
+    with pytest.raises(FileNotFoundError):
+        main(["--map", "print($fd.read())", str(missing)])
+
+
+def test_map_mode_missing_file_text_access(tmp_path: Path) -> None:
+    missing = tmp_path / "missing.txt"
+    with pytest.raises(FileNotFoundError):
+        main(["--map", "print($text)", str(missing)])
+
+
 def test_map_mode_text_content(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

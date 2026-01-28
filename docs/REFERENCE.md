@@ -19,6 +19,12 @@ Map mode provides three special variables:
 - `$fd`: open file handle for the current file
 - `$text`: lazy text view of the current file contents
 
+Map mode opens files lazily: the file is only opened when `$fd` or `$text` is
+first accessed. Scripts that only use `$src` won't attempt to open files, and
+missing/unreadable paths only error once `$fd`/`$text` are used. The file handle
+is closed when the per-file `with` scope ends, so `$fd`/`$text` behave like a
+closed file if accessed afterward.
+
 Begin/end blocks can live in the source file:
 ```snail
 BEGIN { print("start") }

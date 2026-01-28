@@ -42,6 +42,7 @@ _subprocess_status = None
 _jmespath_query = None
 _js = None
 _lazy_text_class = None
+_lazy_file_class = None
 _incr_attr = None
 _incr_index = None
 _aug_attr = None
@@ -118,6 +119,15 @@ def _get_lazy_text_class():
 
         _lazy_text_class = LazyText
     return _lazy_text_class
+
+
+def _get_lazy_file_class():
+    global _lazy_file_class
+    if _lazy_file_class is None:
+        from .lazy_file import LazyFile
+
+        _lazy_file_class = LazyFile
+    return _lazy_file_class
 
 
 def _get_incr_attr():
@@ -236,3 +246,4 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_aug_index"] = _lazy_aug_index
     globals_dict["js"] = _lazy_js
     globals_dict["__SnailLazyText"] = _get_lazy_text_class()
+    globals_dict["__SnailLazyFile"] = _get_lazy_file_class()

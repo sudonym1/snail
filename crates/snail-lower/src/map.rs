@@ -156,7 +156,7 @@ fn lower_map_file_loop(
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
     // for __snail_src in __snail_paths:
-    //     with open(__snail_src, 'r') as __snail_fd:
+    //     with __SnailLazyFile(__snail_src, 'r') as __snail_fd:
     //         __snail_text = __SnailLazyText(__snail_fd)
     //         # user code
 
@@ -201,14 +201,14 @@ fn lower_map_file_loop(
         lower_block_with_auto_print(builder, &program.stmts, auto_print_last, &program.span)?;
     with_body.extend(user_code);
 
-    // open(__snail_src, 'r')
-    let open_call = builder
+    // __SnailLazyFile(__snail_src, 'r')
+    let lazy_file_call = builder
         .call_node(
             "Call",
             vec![
                 name_expr(
                     builder,
-                    "open",
+                    SNAIL_LAZY_FILE_CLASS,
                     span,
                     builder.load_ctx().map_err(py_err_to_lower)?,
                 )?,
@@ -231,12 +231,12 @@ fn lower_map_file_loop(
         )
         .map_err(py_err_to_lower)?;
 
-    // with open(...) as __snail_fd:
+    // with __SnailLazyFile(...) as __snail_fd:
     let with_item = builder
         .call_node_no_loc(
             "withitem",
             vec![
-                open_call,
+                lazy_file_call,
                 name_expr(
                     builder,
                     SNAIL_MAP_FD_PYVAR,
