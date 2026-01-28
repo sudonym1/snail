@@ -10,7 +10,6 @@ SNAIL := $(if $(shell command -v snail 2>/dev/null),snail,bash -c 'cat > /dev/nu
 all: test build install
 
 sync:
-	$(UV) run -- sha1sum CLAUDE.md AGENTS.md | $(SNAIL) -a '{assert $$1 == prev:$$1?, "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"; prev=$$1}'
 	$(UV) sync --extra dev
 
 develop: sync
@@ -24,6 +23,7 @@ test: develop
 	cargo clippy -- -D warnings
 	RUSTFLAGS="-D warnings" cargo test
 	$(UV) run -- python -m pytest python/tests
+	sha1sum CLAUDE.md AGENTS.md | $(UV) run -- $(SNAIL) -a '{assert $$1 == prev:$$1?, "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"; prev=$$1}'
 
 # Build release wheels
 build: sync
