@@ -132,6 +132,31 @@ joined = join_all(1, 2, *values, **extras)
 Default values, variadic `*args`, and `**kwargs` work as in Python. Calls accept
 positional and keyword arguments interchangeably.
 
+## Generators (`yield`)
+Snail supports Python-style generators. `yield` is an expression, so it can be
+used as a standalone statement or inside other expressions (use parentheses
+when embedding it). `yield from <expr>` delegates to another iterable. Any
+function containing `yield` becomes a generator automatically.
+
+```snail
+def counter(n) {
+    i = 0
+    while i < n {
+        yield i
+        i = i + 1
+    }
+}
+
+def chain() {
+    yield from counter(2)
+    yield 5
+}
+
+for value in chain() { print(value) }
+```
+
+`yield` and `yield from` are only valid inside function bodies.
+
 ## Classes and methods
 Classes use the same block style. Methods take `self` explicitly and interact
 with Python's attribute model:

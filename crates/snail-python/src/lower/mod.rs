@@ -7,6 +7,7 @@ mod operators;
 mod program;
 mod py_ast;
 mod stmt;
+mod validate;
 
 pub use map::{
     lower_map_program, lower_map_program_with_auto_print, lower_map_program_with_begin_end,

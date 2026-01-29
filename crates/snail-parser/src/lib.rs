@@ -510,6 +510,14 @@ fn validate_expr_for_map(expr: &Expr, source: &str) -> Result<(), ParseError> {
                 validate_expr_for_map(fallback, source)?;
             }
         }
+        Expr::Yield { value, .. } => {
+            if let Some(value) = value {
+                validate_expr_for_map(value, source)?;
+            }
+        }
+        Expr::YieldFrom { expr, .. } => {
+            validate_expr_for_map(expr, source)?;
+        }
         Expr::Compound { expressions, .. } => {
             for expr in expressions {
                 validate_expr_for_map(expr, source)?;
@@ -873,6 +881,14 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
             if let Some(fallback) = fallback {
                 validate_expr(fallback, source)?;
             }
+        }
+        Expr::Yield { value, .. } => {
+            if let Some(value) = value {
+                validate_expr(value, source)?;
+            }
+        }
+        Expr::YieldFrom { expr, .. } => {
+            validate_expr(expr, source)?;
         }
         Expr::Compound { expressions, .. } => {
             for expr in expressions {

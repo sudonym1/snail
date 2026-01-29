@@ -249,6 +249,14 @@ pub enum Expr {
         fallback: Option<Box<Expr>>,
         span: SourceSpan,
     },
+    Yield {
+        value: Option<Box<Expr>>,
+        span: SourceSpan,
+    },
+    YieldFrom {
+        expr: Box<Expr>,
+        span: SourceSpan,
+    },
     Compound {
         expressions: Vec<Expr>,
         span: SourceSpan,

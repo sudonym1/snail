@@ -739,6 +739,22 @@ pub(crate) fn lower_expr_with_exception(
                 )
                 .map_err(py_err_to_lower)
         }
+        Expr::Yield { value, span } => {
+            let value = value
+                .as_deref()
+                .map(|expr| lower_expr_with_exception(builder, expr, exception_name))
+                .transpose()?
+                .unwrap_or_else(|| builder.py().None().into_py(builder.py()));
+            builder
+                .call_node("Yield", vec![value], span)
+                .map_err(py_err_to_lower)
+        }
+        Expr::YieldFrom { expr, span } => {
+            let value = lower_expr_with_exception(builder, expr, exception_name)?;
+            builder
+                .call_node("YieldFrom", vec![value], span)
+                .map_err(py_err_to_lower)
+        }
         Expr::Compound { expressions, span } => {
             let mut lowered = Vec::new();
             for expr in expressions {
@@ -1506,6 +1522,12 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
                 count_placeholders(fallback, info);
             }
         }
+        Expr::Yield { value, .. } => {
+            if let Some(value) = value {
+                count_placeholders(value, info);
+            }
+        }
+        Expr::YieldFrom { expr, .. } => count_placeholders(expr, info),
         Expr::Compound { expressions, .. } => {
             for expr in expressions {
                 count_placeholders(expr, info);
@@ -1730,6 +1752,16 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             fallback: fallback
                 .as_ref()
                 .map(|expr| Box::new(substitute_placeholder(expr, replacement))),
+            span: span.clone(),
+        },
+        Expr::Yield { value, span } => Expr::Yield {
+            value: value
+                .as_ref()
+                .map(|expr| Box::new(substitute_placeholder(expr, replacement))),
+            span: span.clone(),
+        },
+        Expr::YieldFrom { expr, span } => Expr::YieldFrom {
+            expr: Box::new(substitute_placeholder(expr, replacement)),
             span: span.clone(),
         },
         Expr::Compound { expressions, span } => Expr::Compound {

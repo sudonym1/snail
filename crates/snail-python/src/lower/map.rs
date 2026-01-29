@@ -7,6 +7,7 @@ use super::constants::*;
 use super::helpers::{assign_name, name_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_with_auto_print;
+use super::validate::{validate_yield_usage_blocks, validate_yield_usage_program};
 
 pub fn lower_map_program(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
     lower_map_program_with_auto_print(py, program, false)
@@ -27,6 +28,9 @@ pub fn lower_map_program_with_begin_end(
     end_blocks: &[Vec<Stmt>],
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
+    validate_yield_usage_program(program)?;
+    validate_yield_usage_blocks(begin_blocks)?;
+    validate_yield_usage_blocks(end_blocks)?;
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
     let span = program.span.clone();
     let mut body = Vec::new();

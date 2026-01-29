@@ -461,6 +461,16 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             }
             *span = shift_span(span, offset, source);
         }
+        Expr::Yield { value, span } => {
+            if let Some(value) = value {
+                shift_expr_spans(value, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Expr::YieldFrom { expr, span } => {
+            shift_expr_spans(expr, offset, source);
+            *span = shift_span(span, offset, source);
+        }
         Expr::Compound { expressions, span } => {
             for expr in expressions {
                 shift_expr_spans(expr, offset, source);

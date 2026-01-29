@@ -25,6 +25,44 @@ fn parses_if_expression() {
 }
 
 #[test]
+fn parses_yield_expressions() {
+    let source = "def gen(items) { yield; yield 1; yield from items }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Def { body, .. } => {
+            assert_eq!(body.len(), 3);
+            match &body[0] {
+                Stmt::Expr { value, .. } => match value {
+                    Expr::Yield { value, .. } => assert!(value.is_none()),
+                    other => panic!("Expected yield expression, got {other:?}"),
+                },
+                other => panic!("Expected expression statement, got {other:?}"),
+            }
+            match &body[1] {
+                Stmt::Expr { value, .. } => match value {
+                    Expr::Yield { value, .. } => match value.as_deref() {
+                        Some(expr) => expect_number(expr, "1"),
+                        None => panic!("Expected yield value"),
+                    },
+                    other => panic!("Expected yield expression, got {other:?}"),
+                },
+                other => panic!("Expected expression statement, got {other:?}"),
+            }
+            match &body[2] {
+                Stmt::Expr { value, .. } => match value {
+                    Expr::YieldFrom { expr, .. } => expect_name(expr.as_ref(), "items"),
+                    other => panic!("Expected yield from expression, got {other:?}"),
+                },
+                other => panic!("Expected expression statement, got {other:?}"),
+            }
+        }
+        other => panic!("Expected function def, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_compact_exception_expression() {
     let source = "value = risky()?\nfallback = risky():$e?\n";
     let program = parse_ok(source);
