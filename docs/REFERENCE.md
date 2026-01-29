@@ -182,6 +182,10 @@ use a `b` prefix (`b"..."`, `rb"..."`, `br"..."`) and produce Python `bytes`.
 Byte strings interpolate `{}` like regular strings; interpolated byte strings
 are UTF-8 encoded.
 
+Interpolation supports Python-style conversions and format specs:
+`{expr!r}`, `{expr!s}`, `{expr!a}`, `{expr:spec}`, and `{expr!r:spec}`. Format
+specs can include nested `{expr}` segments for dynamic widths/precision.
+
 ## Context managers
 `with` uses the same protocol as Python and supports aliasing:
 ```snail

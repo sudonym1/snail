@@ -4,7 +4,8 @@ use snail_error::ParseError;
 
 use crate::Rule;
 use crate::string::{
-    join_fstring_text, parse_fstring_parts, parse_string_or_fstring, unescape_regex_text,
+    join_fstring_text, normalize_fstring_parts, parse_fstring_parts, parse_string_or_fstring,
+    unescape_regex_text,
 };
 use crate::util::{error_with_span, span_from_pair};
 
@@ -184,16 +185,7 @@ pub fn parse_regex_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, P
 }
 
 pub fn normalize_regex_parts(parts: Vec<FStringPart>) -> Result<Vec<FStringPart>, ParseError> {
-    let mut normalized = Vec::with_capacity(parts.len());
-    for part in parts {
-        match part {
-            FStringPart::Text(text) => {
-                normalized.push(FStringPart::Text(unescape_regex_text(&text)));
-            }
-            FStringPart::Expr(expr) => normalized.push(FStringPart::Expr(expr)),
-        }
-    }
-    Ok(normalized)
+    Ok(normalize_fstring_parts(parts, unescape_regex_text))
 }
 
 pub fn normalize_regex_text(text: &str) -> String {

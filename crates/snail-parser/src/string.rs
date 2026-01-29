@@ -1,6 +1,9 @@
 use pest::Parser;
 use pest::iterators::Pair;
-use snail_ast::{Argument, AssignTarget, Expr, FStringPart, SourceSpan, StringDelimiter};
+use snail_ast::{
+    Argument, AssignTarget, Expr, FStringConversion, FStringExpr, FStringPart, SourceSpan,
+    StringDelimiter,
+};
 use snail_error::ParseError;
 
 use crate::util::{
@@ -128,8 +131,8 @@ pub fn parse_fstring_parts(
                         source,
                     ));
                 }
-                let expr = parse_inline_expr(expr_text, content_offset + expr_start, source)?;
-                parts.push(FStringPart::Expr(Box::new(expr)));
+                let expr = parse_fstring_expr(expr_text, content_offset + expr_start, source)?;
+                parts.push(FStringPart::Expr(expr));
                 i = expr_end + 1;
                 text_start = i;
             }
@@ -190,12 +193,194 @@ pub fn parse_inline_expr(
     Ok(expr)
 }
 
+pub fn parse_fstring_expr(
+    expr_text: &str,
+    expr_offset: usize,
+    source: &str,
+) -> Result<FStringExpr, ParseError> {
+    let (expr_text, expr_offset, conversion, format_spec) =
+        split_fstring_expr(expr_text, expr_offset, source)?;
+    let expr = parse_inline_expr(expr_text, expr_offset, source)?;
+    let format_spec = match format_spec {
+        Some((spec_text, spec_offset)) => {
+            Some(parse_fstring_parts(spec_text, spec_offset, source)?)
+        }
+        None => None,
+    };
+    Ok(FStringExpr {
+        expr: Box::new(expr),
+        conversion,
+        format_spec,
+    })
+}
+
+type FStringExprParts<'a> = (&'a str, usize, FStringConversion, Option<(&'a str, usize)>);
+
+fn split_fstring_expr<'a>(
+    expr_text: &'a str,
+    expr_offset: usize,
+    source: &str,
+) -> Result<FStringExprParts<'a>, ParseError> {
+    let bytes = expr_text.as_bytes();
+    let mut i = 0usize;
+    let mut paren = 0usize;
+    let mut bracket = 0usize;
+    let mut brace = 0usize;
+    let mut conversion = FStringConversion::None;
+    let mut expr_end = expr_text.len();
+    let mut format_spec: Option<(&'a str, usize)> = None;
+    let mut conversion_pos: Option<usize> = None;
+
+    while i < bytes.len() {
+        match bytes[i] {
+            b'r' | b'b' => {
+                if let Some(next) = bytes.get(i + 1) {
+                    if *next == b'\'' || *next == b'"' {
+                        if let Some(end) = skip_string_literal(bytes, i) {
+                            i = end;
+                            continue;
+                        } else {
+                            return Err(error_with_span(
+                                "unterminated string in f-string expression",
+                                span_from_offset(expr_offset + i, expr_offset + i + 1, source),
+                                source,
+                            ));
+                        }
+                    } else if (*next == b'r' || *next == b'b')
+                        && bytes[i] != *next
+                        && let Some(third) = bytes.get(i + 2)
+                        && (*third == b'\'' || *third == b'"')
+                    {
+                        if let Some(end) = skip_string_literal(bytes, i) {
+                            i = end;
+                            continue;
+                        } else {
+                            return Err(error_with_span(
+                                "unterminated string in f-string expression",
+                                span_from_offset(expr_offset + i, expr_offset + i + 1, source),
+                                source,
+                            ));
+                        }
+                    }
+                }
+                i += 1;
+            }
+            b'\'' | b'"' => {
+                if let Some(end) = skip_string_literal(bytes, i) {
+                    i = end;
+                } else {
+                    return Err(error_with_span(
+                        "unterminated string in f-string expression",
+                        span_from_offset(expr_offset + i, expr_offset + i + 1, source),
+                        source,
+                    ));
+                }
+            }
+            b'(' => {
+                paren += 1;
+                i += 1;
+            }
+            b')' => {
+                paren = paren.saturating_sub(1);
+                i += 1;
+            }
+            b'[' => {
+                bracket += 1;
+                i += 1;
+            }
+            b']' => {
+                bracket = bracket.saturating_sub(1);
+                i += 1;
+            }
+            b'{' => {
+                brace += 1;
+                i += 1;
+            }
+            b'}' => {
+                brace = brace.saturating_sub(1);
+                i += 1;
+            }
+            b'!' if paren == 0 && bracket == 0 && brace == 0 => {
+                if bytes.get(i + 1) == Some(&b'=') {
+                    i += 2;
+                    continue;
+                }
+                let conv_char = bytes.get(i + 1).copied();
+                let parsed = match conv_char {
+                    Some(b'r') => FStringConversion::Repr,
+                    Some(b's') => FStringConversion::Str,
+                    Some(b'a') => FStringConversion::Ascii,
+                    _ => {
+                        return Err(error_with_span(
+                            "invalid f-string conversion (expected !r, !s, or !a)",
+                            span_from_offset(
+                                expr_offset + i,
+                                expr_offset + (i + 1).min(expr_text.len()),
+                                source,
+                            ),
+                            source,
+                        ));
+                    }
+                };
+                conversion = parsed;
+                conversion_pos = Some(i);
+                expr_end = i;
+                break;
+            }
+            b':' if paren == 0 && bracket == 0 && brace == 0 => {
+                expr_end = i;
+                format_spec = Some((&expr_text[i + 1..], expr_offset + i + 1));
+                i = bytes.len();
+            }
+            _ => i += 1,
+        }
+    }
+
+    if let Some(conv_pos) = conversion_pos {
+        let tail = &expr_text[conv_pos + 2..];
+        let tail_offset = expr_offset + conv_pos + 2;
+        let trimmed_tail = tail.trim_start();
+        let trim_start = tail.len() - trimmed_tail.len();
+        if trimmed_tail.is_empty() {
+            // No format spec.
+        } else if let Some(stripped) = trimmed_tail.strip_prefix(':') {
+            let spec_offset = tail_offset + trim_start + 1;
+            format_spec = Some((stripped, spec_offset));
+        } else {
+            return Err(error_with_span(
+                "unexpected characters after f-string conversion",
+                span_from_offset(
+                    tail_offset + trim_start,
+                    expr_offset + expr_text.len(),
+                    source,
+                ),
+                source,
+            ));
+        }
+    }
+
+    let expr_slice = &expr_text[..expr_end];
+    let trim_start = expr_slice.len() - expr_slice.trim_start().len();
+    let trim_end = expr_slice.len() - expr_slice.trim_end().len();
+    let trimmed_len = expr_slice.len().saturating_sub(trim_start + trim_end);
+    if trimmed_len == 0 {
+        return Err(error_with_span(
+            "empty f-string expression",
+            span_from_offset(expr_offset, expr_offset + expr_text.len(), source),
+            source,
+        ));
+    }
+    let trimmed_expr = &expr_slice[trim_start..trim_start + trimmed_len];
+    let trimmed_offset = expr_offset + trim_start;
+    Ok((trimmed_expr, trimmed_offset, conversion, format_spec))
+}
+
 pub fn find_fstring_expr_end(content: &str, start: usize) -> Option<usize> {
     let bytes = content.as_bytes();
     let mut i = start;
     let mut paren = 0usize;
     let mut bracket = 0usize;
-    let mut brace = 0usize;
+    let mut brace = 1usize;
     while i < bytes.len() {
         match bytes[i] {
             b'r' | b'b' => {
@@ -253,7 +438,7 @@ pub fn find_fstring_expr_end(content: &str, start: usize) -> Option<usize> {
                 i += 1;
             }
             b'}' => {
-                if paren == 0 && bracket == 0 && brace == 0 {
+                if paren == 0 && bracket == 0 && brace == 1 {
                     return Some(i);
                 }
                 brace = brace.saturating_sub(1);
@@ -307,16 +492,31 @@ pub fn normalize_string_parts(
     if raw {
         return Ok(parts);
     }
-    let mut normalized = Vec::with_capacity(parts.len());
-    for part in parts {
-        match part {
-            FStringPart::Text(text) => {
-                normalized.push(FStringPart::Text(unescape_string_text(&text)));
-            }
-            FStringPart::Expr(expr) => normalized.push(FStringPart::Expr(expr)),
-        }
+    Ok(normalize_fstring_parts(parts, unescape_string_text))
+}
+
+pub fn normalize_fstring_parts(
+    parts: Vec<FStringPart>,
+    unescape: fn(&str) -> String,
+) -> Vec<FStringPart> {
+    parts
+        .into_iter()
+        .map(|part| match part {
+            FStringPart::Text(text) => FStringPart::Text(unescape(&text)),
+            FStringPart::Expr(expr) => FStringPart::Expr(normalize_fstring_expr(expr, unescape)),
+        })
+        .collect()
+}
+
+fn normalize_fstring_expr(expr: FStringExpr, unescape: fn(&str) -> String) -> FStringExpr {
+    let format_spec = expr
+        .format_spec
+        .map(|parts| normalize_fstring_parts(parts, unescape));
+    FStringExpr {
+        expr: expr.expr,
+        conversion: expr.conversion,
+        format_spec,
     }
-    Ok(normalized)
 }
 
 pub fn unescape_string_text(text: &str) -> String {
@@ -382,18 +582,14 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
         }
         Expr::FString { parts, span, .. } => {
             for part in parts {
-                if let FStringPart::Expr(expr) = part {
-                    shift_expr_spans(expr, offset, source);
-                }
+                shift_fstring_part_spans(part, offset, source);
             }
             *span = shift_span(span, offset, source);
         }
         Expr::Regex { pattern, span } => {
             if let snail_ast::RegexPattern::Interpolated(parts) = pattern {
                 for part in parts {
-                    if let FStringPart::Expr(expr) = part {
-                        shift_expr_spans(expr, offset, source);
-                    }
+                    shift_fstring_part_spans(part, offset, source);
                 }
             }
             *span = shift_span(span, offset, source);
@@ -516,6 +712,17 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
                 shift_expr_spans(cond, offset, source);
             }
             *span = shift_span(span, offset, source);
+        }
+    }
+}
+
+fn shift_fstring_part_spans(part: &mut FStringPart, offset: usize, source: &str) {
+    if let FStringPart::Expr(expr) = part {
+        shift_expr_spans(&mut expr.expr, offset, source);
+        if let Some(spec) = &mut expr.format_spec {
+            for spec_part in spec {
+                shift_fstring_part_spans(spec_part, offset, source);
+            }
         }
     }
 }

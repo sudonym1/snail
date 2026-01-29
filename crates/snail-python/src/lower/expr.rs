@@ -350,13 +350,25 @@ fn lower_fstring_parts(
                 lowered.push(const_node);
             }
             FStringPart::Expr(expr) => {
-                let value = lower_expr_with_exception(builder, expr, exception_name)?;
-                let conversion = (-1i32).into_py(builder.py());
-                let format_spec = builder.py().None();
+                let value = lower_expr_with_exception(builder, &expr.expr, exception_name)?;
+                let conversion = fstring_conversion(expr.conversion).into_py(builder.py());
+                let format_spec = match &expr.format_spec {
+                    Some(parts) => {
+                        let values = lower_fstring_parts(builder, parts, exception_name)?;
+                        builder
+                            .call_node(
+                                "JoinedStr",
+                                vec![PyList::new_bound(builder.py(), values).into_py(builder.py())],
+                                &dummy_span(),
+                            )
+                            .map_err(py_err_to_lower)?
+                    }
+                    None => builder.py().None().into_py(builder.py()),
+                };
                 let formatted = builder
                     .call_node(
                         "FormattedValue",
-                        vec![value, conversion, format_spec.into_py(builder.py())],
+                        vec![value, conversion, format_spec],
                         &dummy_span(),
                     )
                     .map_err(py_err_to_lower)?;
@@ -365,6 +377,15 @@ fn lower_fstring_parts(
         }
     }
     Ok(lowered)
+}
+
+fn fstring_conversion(conversion: FStringConversion) -> i32 {
+    match conversion {
+        FStringConversion::None => -1,
+        FStringConversion::Str => 's' as i32,
+        FStringConversion::Repr => 'r' as i32,
+        FStringConversion::Ascii => 'a' as i32,
+    }
 }
 
 pub(crate) fn lower_expr_with_exception(
@@ -1468,9 +1489,7 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
         | Expr::FieldIndex { .. } => {}
         Expr::FString { parts, .. } => {
             for part in parts {
-                if let FStringPart::Expr(expr) = part {
-                    count_placeholders(expr, info);
-                }
+                count_placeholders_in_fstring_part(part, info);
             }
         }
         Expr::Unary { expr, .. } => count_placeholders(expr, info),
@@ -1605,8 +1624,17 @@ fn count_placeholders_in_assign_target(target: &AssignTarget, info: &mut Placeho
 fn count_placeholders_in_regex(pattern: &RegexPattern, info: &mut PlaceholderInfo) {
     if let RegexPattern::Interpolated(parts) = pattern {
         for part in parts {
-            if let FStringPart::Expr(expr) = part {
-                count_placeholders(expr, info);
+            count_placeholders_in_fstring_part(part, info);
+        }
+    }
+}
+
+fn count_placeholders_in_fstring_part(part: &FStringPart, info: &mut PlaceholderInfo) {
+    if let FStringPart::Expr(expr) = part {
+        count_placeholders(&expr.expr, info);
+        if let Some(spec) = &expr.format_spec {
+            for spec_part in spec {
+                count_placeholders_in_fstring_part(spec_part, info);
             }
         }
     }
@@ -1649,12 +1677,7 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
         Expr::FString { parts, bytes, span } => Expr::FString {
             parts: parts
                 .iter()
-                .map(|part| match part {
-                    FStringPart::Text(text) => FStringPart::Text(text.clone()),
-                    FStringPart::Expr(expr) => {
-                        FStringPart::Expr(Box::new(substitute_placeholder(expr, replacement)))
-                    }
-                })
+                .map(|part| substitute_placeholder_in_fstring_part(part, replacement))
                 .collect(),
             bytes: *bytes,
             span: span.clone(),
@@ -1902,14 +1925,25 @@ fn substitute_placeholder_in_regex(pattern: &RegexPattern, replacement: &Expr) -
         RegexPattern::Interpolated(parts) => RegexPattern::Interpolated(
             parts
                 .iter()
-                .map(|part| match part {
-                    FStringPart::Text(text) => FStringPart::Text(text.clone()),
-                    FStringPart::Expr(expr) => {
-                        FStringPart::Expr(Box::new(substitute_placeholder(expr, replacement)))
-                    }
-                })
+                .map(|part| substitute_placeholder_in_fstring_part(part, replacement))
                 .collect(),
         ),
+    }
+}
+
+fn substitute_placeholder_in_fstring_part(part: &FStringPart, replacement: &Expr) -> FStringPart {
+    match part {
+        FStringPart::Text(text) => FStringPart::Text(text.clone()),
+        FStringPart::Expr(expr) => FStringPart::Expr(FStringExpr {
+            expr: Box::new(substitute_placeholder(&expr.expr, replacement)),
+            conversion: expr.conversion,
+            format_spec: expr.format_spec.as_ref().map(|parts| {
+                parts
+                    .iter()
+                    .map(|part| substitute_placeholder_in_fstring_part(part, replacement))
+                    .collect()
+            }),
+        }),
     }
 }
 

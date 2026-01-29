@@ -314,6 +314,10 @@ print("auto-import Path", auto_path_cwd)
 
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
+value = 3.14159
+width = 6
+prec = 2
+print("format {value:.2f}", "nested {value:{width}.{prec}f}", "repr {info!r}")
 print("byte strings", byte_text, byte_single, raw_byte, raw_byte_alt)
 print("byte interp", byte_interp)
 assert byte_text == b"hello bytes"
