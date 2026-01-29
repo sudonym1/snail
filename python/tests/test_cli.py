@@ -121,6 +121,11 @@ def test_parse_ast_api_basic() -> None:
     assert "Assign" in result
 
 
+def test_compile_ast_emits_try_star() -> None:
+    module = snail.compile_ast("try { x } except* ValueError { y }")
+    assert isinstance(module.body[0], ast.TryStar)
+
+
 def test_parse_ast_api_map_begin_end() -> None:
     result = snail.parse_ast(
         "print($src)",
@@ -197,6 +202,23 @@ def test_compact_try_default_none(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     assert captured.out.strip() == "True"
+
+
+def test_except_star_exception_group(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "try {",
+            "    raise ExceptionGroup(\"boom\", [ValueError(\"a\"), TypeError(\"b\")])",
+            "} except* ValueError as err {",
+            "    print(\"value\", len(err.exceptions))",
+            "} except* TypeError as err {",
+            "    print(\"type\", len(err.exceptions))",
+            "}",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip().splitlines() == ["value 1", "type 1"]
 
 
 def test_file_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

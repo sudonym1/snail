@@ -119,10 +119,17 @@ pub struct WithItem {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExceptHandler {
+    pub kind: ExceptHandlerKind,
     pub type_name: Option<Expr>,
     pub name: Option<String>,
     pub body: Vec<Stmt>,
     pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExceptHandlerKind {
+    Except,
+    ExceptStar,
 }
 
 #[derive(Debug, Clone, PartialEq)]

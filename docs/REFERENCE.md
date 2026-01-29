@@ -160,6 +160,19 @@ while i < 4 {
 }
 ```
 
+Exception handling follows Python semantics. `except*` handles exception groups,
+requires an exception type, and cannot be mixed with normal `except` clauses in
+the same `try` block:
+```snail
+try {
+    raise ExceptionGroup("boom", [ValueError("a"), TypeError("b")])
+} except* ValueError as err {
+    print(len(err.exceptions))
+} except* TypeError as err {
+    print(len(err.exceptions))
+}
+```
+
 `if let` and `while let` bind destructured values in the condition, optionally
 followed by a guard after a semicolon:
 ```snail

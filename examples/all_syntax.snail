@@ -189,6 +189,14 @@ except { handled = False }
 else { ok = True }
 finally { cleanup() }
 
+try {
+    raise ExceptionGroup("boom", [ValueError("a"), TypeError("b")])
+} except* ValueError as err {
+    value_group = err
+} except* TypeError as err {
+    type_group = err
+}
+
 try { risky() }
 finally { cleanup() }
 

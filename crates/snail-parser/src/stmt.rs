@@ -1,6 +1,7 @@
 use pest::iterators::Pair;
 use snail_ast::{
-    AssignTarget, Condition, ExceptHandler, Expr, ImportItem, Parameter, Stmt, WithItem,
+    AssignTarget, Condition, ExceptHandler, ExceptHandlerKind, Expr, ImportItem, Parameter, Stmt,
+    WithItem,
 };
 use snail_error::ParseError;
 
@@ -323,12 +324,22 @@ fn parse_try(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
         .ok_or_else(|| error_with_span("missing try block", span.clone(), source))?;
     let body = parse_block(body_pair, source)?;
     let mut handlers = Vec::new();
+    let mut handler_kind = None;
     let mut else_body = None;
     let mut finally_body = None;
 
     for next in inner {
         match next.as_rule() {
-            Rule::except_clause => handlers.push(parse_except_clause(next, source)?),
+            Rule::except_clause => {
+                let handler = parse_except_clause(next, source, ExceptHandlerKind::Except)?;
+                handler_kind = record_handler_kind(handler_kind, &handler, source)?;
+                handlers.push(handler);
+            }
+            Rule::except_star_clause => {
+                let handler = parse_except_clause(next, source, ExceptHandlerKind::ExceptStar)?;
+                handler_kind = record_handler_kind(handler_kind, &handler, source)?;
+                handlers.push(handler);
+            }
             Rule::else_clause => {
                 let block = next
                     .into_inner()
@@ -409,7 +420,11 @@ fn parse_with_item(pair: Pair<'_, Rule>, source: &str) -> Result<WithItem, Parse
     })
 }
 
-fn parse_except_clause(pair: Pair<'_, Rule>, source: &str) -> Result<ExceptHandler, ParseError> {
+fn parse_except_clause(
+    pair: Pair<'_, Rule>,
+    source: &str,
+    kind: ExceptHandlerKind,
+) -> Result<ExceptHandler, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner().peekable();
     let mut type_name = None;
@@ -446,12 +461,36 @@ fn parse_except_clause(pair: Pair<'_, Rule>, source: &str) -> Result<ExceptHandl
             source,
         ));
     }
+    if matches!(kind, ExceptHandlerKind::ExceptStar) && type_name.is_none() {
+        return Err(error_with_span(
+            "except* requires an exception type",
+            span,
+            source,
+        ));
+    }
     Ok(ExceptHandler {
+        kind,
         type_name,
         name,
         body,
         span,
     })
+}
+
+fn record_handler_kind(
+    current: Option<ExceptHandlerKind>,
+    handler: &ExceptHandler,
+    source: &str,
+) -> Result<Option<ExceptHandlerKind>, ParseError> {
+    match current {
+        None => Ok(Some(handler.kind)),
+        Some(kind) if kind == handler.kind => Ok(Some(kind)),
+        Some(_) => Err(error_with_span(
+            "cannot mix except and except* in the same try block",
+            handler.span.clone(),
+            source,
+        )),
+    }
 }
 
 fn parse_import_from(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {

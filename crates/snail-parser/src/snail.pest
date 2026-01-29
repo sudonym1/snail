@@ -58,11 +58,12 @@ let_guard = { ";" ~ expr }
 def_stmt = { "def" ~ identifier ~ parameters ~ block }
 class_stmt = { "class" ~ identifier ~ block }
 
-// Exception handling: try/except/else/finally
+// Exception handling: try/except/except*/else/finally
 try_stmt = { "try" ~ block ~ (try_except_tail | try_finally_tail) }
-try_except_tail = _{ (stmt_sep* ~ except_clause)+ ~ (stmt_sep* ~ else_clause)? ~ (stmt_sep* ~ finally_clause)? }
+try_except_tail = _{ (stmt_sep* ~ (except_star_clause | except_clause))+ ~ (stmt_sep* ~ else_clause)? ~ (stmt_sep* ~ finally_clause)? }
 try_finally_tail = _{ stmt_sep* ~ finally_clause }
 except_clause = { "except" ~ (expr ~ ("as" ~ identifier)?)? ~ block }
+except_star_clause = { "except" ~ "*" ~ expr ~ ("as" ~ identifier)? ~ block }
 else_clause = { "else" ~ block }
 finally_clause = { "finally" ~ block }
 

@@ -2,8 +2,8 @@ mod common;
 
 use common::*;
 use snail_ast::{
-    Argument, AssignTarget, AugAssignOp, BinaryOp, Condition, Expr, IncrOp, Parameter, Stmt,
-    StringDelimiter,
+    Argument, AssignTarget, AugAssignOp, BinaryOp, Condition, ExceptHandlerKind, Expr, IncrOp,
+    Parameter, Stmt, StringDelimiter,
 };
 use snail_parser::parse_program;
 
@@ -1072,6 +1072,34 @@ fn parses_try_followed_by_stmt_without_separator() {
     assert_eq!(program.stmts.len(), 2);
     assert!(matches!(&program.stmts[0], Stmt::Try { .. }));
     assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
+}
+
+#[test]
+fn parses_except_star_handler() {
+    let source = "try { x } except* ValueError as err { y = err }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    match &program.stmts[0] {
+        Stmt::Try { handlers, .. } => {
+            assert_eq!(handlers.len(), 1);
+            let handler = &handlers[0];
+            assert_eq!(handler.kind, ExceptHandlerKind::ExceptStar);
+            expect_name(
+                handler.type_name.as_ref().expect("expected exception type"),
+                "ValueError",
+            );
+            assert_eq!(handler.name.as_deref(), Some("err"));
+        }
+        other => panic!("Expected try statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parser_rejects_mixed_except_and_except_star() {
+    let err = parse_program("try { x } except Exception { y } except* ValueError { z }")
+        .expect_err("should fail on mixed except handlers");
+    let message = err.to_string();
+    assert!(message.contains("except") && message.contains("except*"));
 }
 
 #[test]

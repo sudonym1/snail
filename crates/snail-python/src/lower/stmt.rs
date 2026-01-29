@@ -129,6 +129,18 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
             finally_body,
             span,
         } => {
+            let mut handler_kind = None;
+            for handler in handlers {
+                handler_kind = match handler_kind {
+                    None => Some(handler.kind),
+                    Some(kind) if kind == handler.kind => Some(kind),
+                    Some(_) => {
+                        return Err(LowerError::new(
+                            "cannot mix except and except* in the same try block",
+                        ));
+                    }
+                };
+            }
             let body = lower_block(builder, body, span)?;
             let handlers = handlers
                 .iter()
@@ -144,9 +156,14 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                 .map(|items| lower_block(builder, items, span))
                 .transpose()?
                 .unwrap_or_default();
+            let node_name = if matches!(handler_kind, Some(ExceptHandlerKind::ExceptStar)) {
+                "TryStar"
+            } else {
+                "Try"
+            };
             builder
                 .call_node(
-                    "Try",
+                    node_name,
                     vec![
                         PyList::new_bound(builder.py(), body).into_py(builder.py()),
                         PyList::new_bound(builder.py(), handlers).into_py(builder.py()),
