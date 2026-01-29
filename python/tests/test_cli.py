@@ -691,6 +691,22 @@ def test_byte_string_br_prefix(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "2"
 
 
+def test_fstring_conversion_and_format_spec(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test f-string conversions and format specs."""
+    script = 'value = "hi"\nprint("{value!r:>6}")'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.rstrip("\n") == "  'hi'"
+
+
+def test_fstring_nested_format_spec(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test nested format spec interpolation."""
+    script = "value = 3.14159\nwidth = 6\nprec = 2\nprint(\"{value:{width}.{prec}f}\")"
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.rstrip("\n") == "  3.14"
+
+
 # --- Tests for example files ---
 
 EXAMPLES_DIR = ROOT / "examples"

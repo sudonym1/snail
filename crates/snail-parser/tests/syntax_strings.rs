@@ -1,7 +1,7 @@
 mod common;
 
 use common::*;
-use snail_ast::{Expr, FStringPart, StringDelimiter};
+use snail_ast::{Expr, FStringConversion, FStringPart, StringDelimiter};
 
 // ============================================================================
 // Byte string tests
@@ -78,7 +78,11 @@ fn parses_interpolated_byte_string() {
                 other => panic!("Expected text part, got {other:?}"),
             }
             match &parts[1] {
-                FStringPart::Expr(expr) => expect_name(expr, "name"),
+                FStringPart::Expr(expr) => {
+                    expect_name(&expr.expr, "name");
+                    assert_eq!(expr.conversion, FStringConversion::None);
+                    assert!(expr.format_spec.is_none());
+                }
                 other => panic!("Expected expression part, got {other:?}"),
             }
         }
@@ -177,12 +181,93 @@ fn parses_regular_string_with_interpolation() {
                 other => panic!("Expected text part, got {other:?}"),
             }
             match &parts[1] {
-                FStringPart::Expr(expr) => expect_name(expr, "y"),
+                FStringPart::Expr(expr) => {
+                    expect_name(&expr.expr, "y");
+                    assert_eq!(expr.conversion, FStringConversion::None);
+                    assert!(expr.format_spec.is_none());
+                }
                 other => panic!("Expected expression part, got {other:?}"),
             }
             match &parts[2] {
                 FStringPart::Text(text) => assert_eq!(text, " more"),
                 other => panic!("Expected text part, got {other:?}"),
+            }
+        }
+        other => panic!("Expected FString, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_fstring_conversion_and_format_spec() {
+    let source = r#"x = "value {y!r:>8}""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::FString { parts, .. } => {
+            assert_eq!(parts.len(), 2);
+            match &parts[0] {
+                FStringPart::Text(text) => assert_eq!(text, "value "),
+                other => panic!("Expected text part, got {other:?}"),
+            }
+            match &parts[1] {
+                FStringPart::Expr(expr) => {
+                    expect_name(&expr.expr, "y");
+                    assert_eq!(expr.conversion, FStringConversion::Repr);
+                    let spec = expr.format_spec.as_ref().expect("format spec");
+                    assert_eq!(spec.len(), 1);
+                    match &spec[0] {
+                        FStringPart::Text(text) => assert_eq!(text, ">8"),
+                        other => panic!("Expected text spec part, got {other:?}"),
+                    }
+                }
+                other => panic!("Expected expression part, got {other:?}"),
+            }
+        }
+        other => panic!("Expected FString, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_fstring_nested_format_spec() {
+    let source = r#"x = "{value:{width}.{prec}f}""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::FString { parts, .. } => {
+            assert_eq!(parts.len(), 1);
+            match &parts[0] {
+                FStringPart::Expr(expr) => {
+                    expect_name(&expr.expr, "value");
+                    let spec = expr.format_spec.as_ref().expect("format spec");
+                    assert_eq!(spec.len(), 4);
+                    match &spec[0] {
+                        FStringPart::Expr(spec_expr) => {
+                            expect_name(&spec_expr.expr, "width");
+                            assert_eq!(spec_expr.conversion, FStringConversion::None);
+                        }
+                        other => panic!("Expected width expression, got {other:?}"),
+                    }
+                    match &spec[1] {
+                        FStringPart::Text(text) => assert_eq!(text, "."),
+                        other => panic!("Expected dot text, got {other:?}"),
+                    }
+                    match &spec[2] {
+                        FStringPart::Expr(spec_expr) => {
+                            expect_name(&spec_expr.expr, "prec");
+                            assert_eq!(spec_expr.conversion, FStringConversion::None);
+                        }
+                        other => panic!("Expected prec expression, got {other:?}"),
+                    }
+                    match &spec[3] {
+                        FStringPart::Text(text) => assert_eq!(text, "f"),
+                        other => panic!("Expected trailing text, got {other:?}"),
+                    }
+                }
+                other => panic!("Expected expression part, got {other:?}"),
             }
         }
         other => panic!("Expected FString, got {other:?}"),

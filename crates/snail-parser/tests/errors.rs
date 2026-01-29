@@ -296,6 +296,20 @@ fn rejects_invalid_operator_in_fstring() {
 }
 
 #[test]
+fn rejects_invalid_fstring_conversion() {
+    let err = parse_err(r#"s = "{x!q}""#);
+    let message = err.to_string();
+    assert!(message.contains("conversion"));
+}
+
+#[test]
+fn rejects_trailing_chars_after_fstring_conversion() {
+    let err = parse_err(r#"s = "{x!r abc}""#);
+    let message = err.to_string();
+    assert!(message.contains("conversion"));
+}
+
+#[test]
 fn valid_fstring_expressions_still_work() {
     parse_ok(r#"s = "{x}""#);
     parse_ok(r#"s = "{x()}""#);

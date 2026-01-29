@@ -335,10 +335,36 @@ pub enum Expr {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FStringConversion {
+    #[default]
+    None,
+    Str,
+    Repr,
+    Ascii,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FStringExpr {
+    pub expr: Box<Expr>,
+    pub conversion: FStringConversion,
+    pub format_spec: Option<Vec<FStringPart>>,
+}
+
+impl FStringExpr {
+    pub fn new(expr: Box<Expr>) -> Self {
+        Self {
+            expr,
+            conversion: FStringConversion::None,
+            format_spec: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum FStringPart {
     Text(String),
-    Expr(Box<Expr>),
+    Expr(FStringExpr),
 }
 
 #[derive(Debug, Clone, PartialEq)]
