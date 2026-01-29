@@ -115,6 +115,8 @@
   "]"
   "{"
   "}"
+  "%{"
+  "#{"
 ] @punctuation.bracket
 
 ; Functions and classes
@@ -147,4 +149,3 @@
 
 ; Attributes
 (attribute (identifier) @property)
-

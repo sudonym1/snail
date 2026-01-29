@@ -660,9 +660,9 @@ fn parser_rejects_compact_try_on_attr_and_index_aug_assign() {
 
 #[test]
 fn parses_list_and_dict_literals_and_comprehensions() {
-    let source = "nums = [1, 2, 3]\npairs = {\"a\": 1, \"b\": 2}\nevens = [n for n in nums if n % 2 == 0]\nlookup = {n: n * 2 for n in nums if n > 1}\n";
+    let source = "nums = [1, 2, 3]\npairs = %{\"a\": 1, \"b\": 2}\nempty = %{}\nevens = [n for n in nums if n % 2 == 0]\nlookup = %{n: n * 2 for n in nums if n > 1}\n";
     let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 4);
+    assert_eq!(program.stmts.len(), 5);
 
     let (_, value) = expect_assign(&program.stmts[0]);
     match value {
@@ -689,6 +689,12 @@ fn parses_list_and_dict_literals_and_comprehensions() {
 
     let (_, value) = expect_assign(&program.stmts[2]);
     match value {
+        Expr::Dict { entries, .. } => assert!(entries.is_empty()),
+        other => panic!("Expected empty dict literal, got {other:?}"),
+    }
+
+    let (_, value) = expect_assign(&program.stmts[3]);
+    match value {
         Expr::ListComp {
             element,
             target,
@@ -704,7 +710,7 @@ fn parses_list_and_dict_literals_and_comprehensions() {
         other => panic!("Expected list comprehension, got {other:?}"),
     }
 
-    let (_, value) = expect_assign(&program.stmts[3]);
+    let (_, value) = expect_assign(&program.stmts[4]);
     match value {
         Expr::DictComp {
             key,
@@ -790,7 +796,7 @@ fn parser_rejects_missing_condition() {
 
 #[test]
 fn parser_reports_error_on_missing_colon_in_dict() {
-    let err = parse_program("d = {\"key\" 1}").expect_err("should fail on missing colon");
+    let err = parse_program("d = %{\"key\" 1}").expect_err("should fail on missing colon");
     let message = err.to_string();
     assert!(message.contains("expected") || message.contains(":"));
 }

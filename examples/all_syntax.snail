@@ -66,7 +66,7 @@ def cleanup() {
 
 data = list(range(5))
 nums = [1, 2, 3, 4]
-pairs = {"a": 1, "b": 2}
+pairs = %{"a": 1, "b": 2}
 ids = #{1, 2, 3}
 empty_ids = #{}
 pair = (1, 2)
@@ -76,7 +76,7 @@ coords = (3, 4)
 x, y = coords
 first_val, *rest_vals = [1, 2, 3]
 evens = [n for n in nums if n % 2 == 0]
-lookup = {n: n * 2 for n in nums if n > 1}
+lookup = %{n: n * 2 for n in nums if n > 1}
 raw_text = r"raw\\ntext"
 multi_text = """line one
 line two"""
@@ -237,7 +237,7 @@ compound_swallowed = (risky_fallback(); counter.inc(5))?
 with SimpleCtx() as message { ctx_msg = message }
 
 total = compute(data)
-extras = {"bonus": 5}
+extras = %{"bonus": 5}
 values = [3, 4]
 joined = join_all(1, 2, *values, **extras)
 assert total == 6, "total"

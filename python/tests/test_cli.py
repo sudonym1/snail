@@ -285,6 +285,20 @@ def test_set_literals(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "3\nTrue\n0\n"
 
 
+def test_dict_literals(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            'pairs = %{"a": 1, "b": 2}',
+            "empty = %{}",
+            'print(pairs["a"])',
+            "print(len(empty))",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "1\n0\n"
+
+
 def test_while_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [
