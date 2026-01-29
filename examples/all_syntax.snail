@@ -3,15 +3,19 @@ import math, sys as sysmod
 from math import sqrt as root
 from __future__ import braces
 
+# Import variants from a real module so the example exercises them at runtime.
+sysmod.path.insert(0, "examples")
+from snail_import_demo import (
+    ANSWER as demo_answer,
+    greet as demo_greet,
+)
+from snail_import_demo import *
+print("import demo", demo_answer, demo_greet("snail"), NAME)
+
+# Relative imports are supported when running inside a package context.
 if False {
-    # Import variants (guarded to avoid runtime errors in this example script).
     from . import local_mod
     from ..pkg import name as alias
-    from math import *
-    from math import (
-        sin,
-        cos,
-    )
 }
 
 class Counter {
