@@ -229,6 +229,43 @@ def test_top_level_yield_rejected() -> None:
     assert "function" in message
 
 
+def test_def_expr_basic(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "adder = def(x, y) { x + y }",
+            "print(adder(2, 3))",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "5"
+
+
+def test_def_expr_block_body(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "twice = def(x) { y = x + 1; y * 2 }",
+            "print(twice(3))",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "8"
+
+
+def test_def_expr_closure(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def make_adder(n) { return def(x) { x + n } }",
+            "add_five = make_adder(5)",
+            "print(add_five(7))",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "12"
+
+
 def test_file_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     script = tmp_path / "script.snail"
     script.write_text("import sys\nprint(sys.argv[1])\n")

@@ -1,8 +1,9 @@
 use pest::Parser;
 use pest::iterators::Pair;
 use snail_ast::{
-    Argument, AssignTarget, Expr, FStringConversion, FStringExpr, FStringPart, SourceSpan,
-    StringDelimiter,
+    Argument, AssignTarget, Condition, ExceptHandler, Expr, FStringConversion, FStringExpr,
+    FStringPart, ImportFromItems, ImportItem, Parameter, SourceSpan, Stmt, StringDelimiter,
+    WithItem,
 };
 use snail_error::ParseError;
 
@@ -668,6 +669,15 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             shift_expr_spans(expr, offset, source);
             *span = shift_span(span, offset, source);
         }
+        Expr::Lambda { params, body, span } => {
+            for param in params {
+                shift_param_spans(param, offset, source);
+            }
+            for stmt in body {
+                shift_stmt_spans(stmt, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
         Expr::Compound { expressions, span } => {
             for expr in expressions {
                 shift_expr_spans(expr, offset, source);
@@ -734,6 +744,224 @@ fn shift_fstring_part_spans(part: &mut FStringPart, offset: usize, source: &str)
             for spec_part in spec {
                 shift_fstring_part_spans(spec_part, offset, source);
             }
+        }
+    }
+}
+
+fn shift_block_spans(block: &mut [Stmt], offset: usize, source: &str) {
+    for stmt in block {
+        shift_stmt_spans(stmt, offset, source);
+    }
+}
+
+fn shift_stmt_spans(stmt: &mut Stmt, offset: usize, source: &str) {
+    match stmt {
+        Stmt::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            span,
+        } => {
+            shift_condition_spans(cond, offset, source);
+            shift_block_spans(body, offset, source);
+            for (cond, block) in elifs {
+                shift_condition_spans(cond, offset, source);
+                shift_block_spans(block, offset, source);
+            }
+            if let Some(block) = else_body {
+                shift_block_spans(block, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::While {
+            cond,
+            body,
+            else_body,
+            span,
+        } => {
+            shift_condition_spans(cond, offset, source);
+            shift_block_spans(body, offset, source);
+            if let Some(block) = else_body {
+                shift_block_spans(block, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::For {
+            target,
+            iter,
+            body,
+            else_body,
+            span,
+        } => {
+            shift_assign_target_spans(target, offset, source);
+            shift_expr_spans(iter, offset, source);
+            shift_block_spans(body, offset, source);
+            if let Some(block) = else_body {
+                shift_block_spans(block, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Def {
+            params, body, span, ..
+        } => {
+            for param in params {
+                shift_param_spans(param, offset, source);
+            }
+            shift_block_spans(body, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Class { body, span, .. } => {
+            shift_block_spans(body, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            span,
+        } => {
+            shift_block_spans(body, offset, source);
+            for handler in handlers {
+                shift_except_handler_spans(handler, offset, source);
+            }
+            if let Some(block) = else_body {
+                shift_block_spans(block, offset, source);
+            }
+            if let Some(block) = finally_body {
+                shift_block_spans(block, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::With { items, body, span } => {
+            for item in items {
+                shift_with_item_spans(item, offset, source);
+            }
+            shift_block_spans(body, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Return { value, span } => {
+            if let Some(value) = value {
+                shift_expr_spans(value, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Raise { value, from, span } => {
+            if let Some(value) = value {
+                shift_expr_spans(value, offset, source);
+            }
+            if let Some(from) = from {
+                shift_expr_spans(from, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Assert {
+            test,
+            message,
+            span,
+        } => {
+            shift_expr_spans(test, offset, source);
+            if let Some(message) = message {
+                shift_expr_spans(message, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Delete { targets, span } => {
+            for target in targets {
+                shift_assign_target_spans(target, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Break { span } | Stmt::Continue { span } | Stmt::Pass { span } => {
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Import { items, span } => {
+            for item in items {
+                shift_import_item_spans(item, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::ImportFrom { items, span, .. } => {
+            match items {
+                ImportFromItems::Names(names) => {
+                    for item in names {
+                        shift_import_item_spans(item, offset, source);
+                    }
+                }
+                ImportFromItems::Star { span: star_span } => {
+                    *star_span = shift_span(star_span, offset, source);
+                }
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Assign {
+            targets,
+            value,
+            span,
+        } => {
+            for target in targets {
+                shift_assign_target_spans(target, offset, source);
+            }
+            shift_expr_spans(value, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Expr { value, span, .. } => {
+            shift_expr_spans(value, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+    }
+}
+
+fn shift_condition_spans(cond: &mut Condition, offset: usize, source: &str) {
+    match cond {
+        Condition::Expr(expr) => shift_expr_spans(expr, offset, source),
+        Condition::Let {
+            target,
+            value,
+            guard,
+            span,
+        } => {
+            shift_assign_target_spans(target, offset, source);
+            shift_expr_spans(value, offset, source);
+            if let Some(guard) = guard {
+                shift_expr_spans(guard, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+    }
+}
+
+fn shift_with_item_spans(item: &mut WithItem, offset: usize, source: &str) {
+    shift_expr_spans(&mut item.context, offset, source);
+    if let Some(target) = &mut item.target {
+        shift_assign_target_spans(target, offset, source);
+    }
+    item.span = shift_span(&item.span, offset, source);
+}
+
+fn shift_except_handler_spans(handler: &mut ExceptHandler, offset: usize, source: &str) {
+    if let Some(type_name) = &mut handler.type_name {
+        shift_expr_spans(type_name, offset, source);
+    }
+    shift_block_spans(&mut handler.body, offset, source);
+    handler.span = shift_span(&handler.span, offset, source);
+}
+
+fn shift_import_item_spans(item: &mut ImportItem, offset: usize, source: &str) {
+    item.span = shift_span(&item.span, offset, source);
+}
+
+fn shift_param_spans(param: &mut Parameter, offset: usize, source: &str) {
+    match param {
+        Parameter::Regular { default, span, .. } => {
+            if let Some(default) = default {
+                shift_expr_spans(default, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
+        Parameter::VarArgs { span, .. } | Parameter::KwArgs { span, .. } => {
+            *span = shift_span(span, offset, source);
         }
     }
 }

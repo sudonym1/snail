@@ -154,6 +154,7 @@ pub fn expr_span(expr: &snail_ast::Expr) -> &SourceSpan {
         | snail_ast::Expr::TryExpr { span, .. }
         | snail_ast::Expr::Yield { span, .. }
         | snail_ast::Expr::YieldFrom { span, .. }
+        | snail_ast::Expr::Lambda { span, .. }
         | snail_ast::Expr::Compound { span, .. }
         | snail_ast::Expr::Regex { span, .. }
         | snail_ast::Expr::RegexMatch { span, .. }

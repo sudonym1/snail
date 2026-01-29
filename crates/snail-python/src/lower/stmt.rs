@@ -4,7 +4,9 @@ use snail_ast::*;
 use snail_error::LowerError;
 
 use super::constants::{SNAIL_LET_KEEP, SNAIL_LET_OK, SNAIL_LET_VALUE};
-use super::expr::{lower_assign_target, lower_delete_target, lower_expr};
+use super::expr::{
+    lower_assign_target, lower_delete_target, lower_expr, lower_expr_with_exception,
+};
 use super::helpers::{assign_name, name_expr};
 use super::operators::lower_compare_op;
 use super::py_ast::{AstBuilder, py_err_to_lower};
@@ -89,7 +91,7 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
             body,
             span,
         } => {
-            let args = lower_parameters(builder, params)?;
+            let args = lower_parameters(builder, params, None)?;
             let body = lower_block(builder, body, span)?;
             builder
                 .call_node(
@@ -751,9 +753,10 @@ fn bool_constant(
         .map_err(py_err_to_lower)
 }
 
-fn lower_parameters(
+pub(crate) fn lower_parameters(
     builder: &AstBuilder<'_>,
     params: &[Parameter],
+    exception_name: Option<&str>,
 ) -> Result<PyObject, LowerError> {
     let mut args = Vec::new();
     let mut defaults = Vec::new();
@@ -778,7 +781,11 @@ fn lower_parameters(
                     .map_err(py_err_to_lower)?;
                 args.push(arg);
                 if let Some(default_expr) = default {
-                    defaults.push(lower_expr(builder, default_expr)?);
+                    defaults.push(lower_expr_with_exception(
+                        builder,
+                        default_expr,
+                        exception_name,
+                    )?);
                 }
             }
             Parameter::VarArgs { name, .. } => {

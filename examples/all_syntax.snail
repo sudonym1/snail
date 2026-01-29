@@ -95,6 +95,10 @@ def chained_count() {
     yield from count_up(2)
     yield 99
 }
+adder = def(x, y) { x + y }
+scaled = def(value) { doubled = value * 2; doubled + 1 }
+adder_result = adder(2, 3)
+scaled_result = scaled(4)
 
 data = list(range(5))
 nums = [1, 2, 3, 4]
@@ -292,6 +296,9 @@ print("evens", evens)
 print("lookup", lookup)
 print("with", ctx_msg)
 print("joined", joined)
+print("gen_values", gen_values)
+print("adder_result", adder_result)
+print("scaled_result", scaled_result)
 print("gen_values", gen_values)
 print("loop_done", loop_done)
 print("for_done", for_done)

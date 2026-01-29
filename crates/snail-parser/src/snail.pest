@@ -189,6 +189,7 @@ slice_end = { expr }
 // Atomic expressions: literals, variables, collections, etc.
 atom = _{
   literal
+  | def_expr
   | regex
   | subprocess
   | structured_accessor
@@ -206,6 +207,8 @@ atom = _{
   | compound_expr
   | paren_expr
 }
+
+def_expr = { "def" ~ parameters? ~ block }
 
 // Parenthesized expression (preserved in AST for proper validation)
 paren_expr = { "(" ~ expr ~ ")" }

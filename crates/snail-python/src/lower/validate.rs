@@ -265,6 +265,13 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
                 check_expr(fallback, in_function)?;
             }
         }
+        Expr::Lambda { params, body, .. } => {
+            for param in params {
+                check_param(param)?;
+            }
+            // Lambdas lower to Python lambdas; disallow yield in their bodies.
+            check_stmts(body, false)?;
+        }
         Expr::Compound { expressions, .. } => {
             for expr in expressions {
                 check_expr(expr, in_function)?;

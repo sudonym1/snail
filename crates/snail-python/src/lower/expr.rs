@@ -10,6 +10,7 @@ use super::operators::{
     lower_unary_op,
 };
 use super::py_ast::{AstBuilder, py_err_to_lower};
+use super::stmt::lower_parameters;
 
 pub(crate) fn lower_expr(builder: &AstBuilder<'_>, expr: &Expr) -> Result<PyObject, LowerError> {
     lower_expr_with_exception(builder, expr, None)
@@ -776,6 +777,9 @@ pub(crate) fn lower_expr_with_exception(
                 .call_node("YieldFrom", vec![value], span)
                 .map_err(py_err_to_lower)
         }
+        Expr::Lambda { params, body, span } => {
+            lower_lambda_expr(builder, params, body, span, exception_name)
+        }
         Expr::Compound { expressions, span } => {
             let mut lowered = Vec::new();
             for expr in expressions {
@@ -1434,6 +1438,87 @@ fn lower_subprocess_parts(
     Ok(lowered_parts)
 }
 
+fn lower_lambda_expr(
+    builder: &AstBuilder<'_>,
+    params: &[Parameter],
+    body: &[Stmt],
+    span: &SourceSpan,
+    exception_name: Option<&str>,
+) -> Result<PyObject, LowerError> {
+    let args = lower_parameters(builder, params, exception_name)?;
+    let body_expr = lower_lambda_body_expr(builder, body, span, exception_name)?;
+    builder
+        .call_node("Lambda", vec![args, body_expr], span)
+        .map_err(py_err_to_lower)
+}
+
+fn lower_lambda_body_expr(
+    builder: &AstBuilder<'_>,
+    body: &[Stmt],
+    span: &SourceSpan,
+    exception_name: Option<&str>,
+) -> Result<PyObject, LowerError> {
+    let mut lowered = Vec::new();
+    for stmt in body {
+        match stmt {
+            Stmt::Expr { value, .. } => {
+                lowered.push(lower_expr_with_exception(builder, value, exception_name)?);
+            }
+            _ => {
+                return Err(LowerError::new(
+                    "def expression bodies must contain only expression statements",
+                ));
+            }
+        }
+    }
+
+    if lowered.is_empty() {
+        return builder
+            .call_node(
+                "Constant",
+                vec![builder.py().None().into_py(builder.py())],
+                span,
+            )
+            .map_err(py_err_to_lower);
+    }
+
+    if lowered.len() == 1 {
+        return Ok(lowered.pop().unwrap());
+    }
+
+    let tuple_expr = builder
+        .call_node(
+            "Tuple",
+            vec![
+                PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    let index_expr = builder
+        .call_node(
+            "UnaryOp",
+            vec![
+                lower_unary_op(builder, UnaryOp::Minus)?,
+                number_expr(builder, "1", span)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    builder
+        .call_node(
+            "Subscript",
+            vec![
+                tuple_expr,
+                index_expr,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
 fn lower_call_arguments(
     builder: &AstBuilder<'_>,
     args: &[Argument],
@@ -1560,6 +1645,20 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
             }
         }
         Expr::YieldFrom { expr, .. } => count_placeholders(expr, info),
+        Expr::Lambda { params, body, .. } => {
+            for param in params {
+                if let Parameter::Regular { default, .. } = param
+                    && let Some(default) = default
+                {
+                    count_placeholders(default, info);
+                }
+            }
+            for stmt in body {
+                if let Stmt::Expr { value, .. } = stmt {
+                    count_placeholders(value, info);
+                }
+            }
+        }
         Expr::Compound { expressions, .. } => {
             for expr in expressions {
                 count_placeholders(expr, info);
@@ -1798,6 +1897,48 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
         },
         Expr::YieldFrom { expr, span } => Expr::YieldFrom {
             expr: Box::new(substitute_placeholder(expr, replacement)),
+            span: span.clone(),
+        },
+        Expr::Lambda { params, body, span } => Expr::Lambda {
+            params: params
+                .iter()
+                .map(|param| match param {
+                    Parameter::Regular {
+                        name,
+                        default,
+                        span,
+                    } => Parameter::Regular {
+                        name: name.clone(),
+                        default: default
+                            .as_ref()
+                            .map(|expr| substitute_placeholder(expr, replacement)),
+                        span: span.clone(),
+                    },
+                    Parameter::VarArgs { name, span } => Parameter::VarArgs {
+                        name: name.clone(),
+                        span: span.clone(),
+                    },
+                    Parameter::KwArgs { name, span } => Parameter::KwArgs {
+                        name: name.clone(),
+                        span: span.clone(),
+                    },
+                })
+                .collect(),
+            body: body
+                .iter()
+                .map(|stmt| match stmt {
+                    Stmt::Expr {
+                        value,
+                        semicolon_terminated,
+                        span,
+                    } => Stmt::Expr {
+                        value: substitute_placeholder(value, replacement),
+                        semicolon_terminated: *semicolon_terminated,
+                        span: span.clone(),
+                    },
+                    _ => stmt.clone(),
+                })
+                .collect(),
             span: span.clone(),
         },
         Expr::Compound { expressions, span } => Expr::Compound {

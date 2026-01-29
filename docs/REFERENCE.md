@@ -143,6 +143,19 @@ joined = join_all(1, 2, *values, **extras)
 Default values, variadic `*args`, and `**kwargs` work as in Python. Calls accept
 positional and keyword arguments interchangeably.
 
+## Anonymous defs
+Anonymous functions use the `def` keyword with the same parameter rules as
+named functions. Parentheses are optional when there are no parameters:
+```snail
+adder = def(x, y=1) { x + y }
+scale = def(value) { doubled = value * 2; doubled + 1 }
+constant = def { 42 }
+print(adder(2, 3), scale(4), constant())
+```
+The body is a Snail block. The value of the anonymous def is the value of the
+last expression in the block (or `None` if the block has no expression). Use
+`return` to exit early when needed.
+
 ## Generators (`yield`)
 Snail supports Python-style generators. `yield` is an expression, so it can be
 used as a standalone statement or inside other expressions (use parentheses
