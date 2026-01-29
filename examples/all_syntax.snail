@@ -1,7 +1,10 @@
 # Example Snail program exercising all supported syntax.
+# Each section includes comments to highlight the syntax being demonstrated.
+from __future__ import braces
+
+# ---- Imports (regular, aliased, from-import, and relative imports) ----
 import math, sys as sysmod
 from math import sqrt as root
-from __future__ import braces
 
 # Import variants from a real module so the example exercises them at runtime.
 sysmod.path.insert(0, "examples")
@@ -22,6 +25,7 @@ from .. import relmod as parent_relmod
 from . import submod
 print("relative import", relmod.REL_VALUE, parent_relmod.REL_VALUE, submod.SUB_VALUE)
 
+# ---- Classes, methods, and context managers ----
 class Counter {
     def __init__(self, start) {
         self.start = start
@@ -42,6 +46,7 @@ class SimpleCtx {
     }
 }
 
+# ---- Function definitions, implicit returns, and argument forms ----
 def compute(nums) {
     total = 0
     for n in nums {
@@ -60,10 +65,12 @@ def named_args(head, tail) {
     print("named args", head, tail)
 }
 
-named_args(head=1,  tail=2)
+named_args(head=1, tail=2)
+# Statement terminator with semicolon
+named_args(1, 2);
 
-named_args(1,2);
-
+# Implicit return (last expression) vs. explicit suppression with semicolon
+# (implicit return is used by auto-printing in the CLI)
 def add(a, b) {
     a + b
 }
@@ -75,6 +82,8 @@ def add_suppressed(a, b) {
 print("implicit return", add(1, 2))
 print("implicit return suppressed", add_suppressed(1, 2))
 
+# Default args, *args, **kwargs
+# (note: space after * is allowed in Snail)
 def join_all(head, tail=0, * rest, **extras) {
     total = head + tail
     for n in rest {
@@ -94,6 +103,8 @@ def cleanup() {
     pass
 }
 
+# Generators and yield-from
+
 def count_up(limit) {
     i = 0
     while i < limit {
@@ -106,13 +117,16 @@ def chained_count() {
     yield from count_up(2)
     yield 99
 }
+
+# Function expressions (inline def)
 adder = def(x, y) { x + y }
 scaled = def(value) { doubled = value * 2; doubled + 1 }
 adder_result = adder(2, 3)
 scaled_result = scaled(4)
 
-data = list(range(5))
+# ---- Collections, destructuring, and comprehension ----
 nums = [1, 2, 3, 4]
+data = list(range(5))
 pairs = %{"a": 1, "b": 2}
 ids = #{1, 2, 3}
 empty_ids = #{}
@@ -124,12 +138,20 @@ x, y = coords
 first_val, *rest_vals = [1, 2, 3]
 evens = [n for n in nums if n % 2 == 0]
 lookup = %{n: n * 2 for n in nums if n > 1}
+
+# Slicing
+first = data[0]
+mid = data[1:3]
+head = data[:2]
+tail = data[2:]
+
+# ---- String and byte literal variants + interpolation ----
 raw_text = r"raw\\ntext"
 multi_text = """line one
 line two"""
 raw_multi = r"""raw\\nline
 raw line two"""
-# Byte strings
+# Byte strings (including raw and triple-quoted forms)
 byte_text = b"hello bytes"
 byte_single = b'single quoted bytes'
 raw_byte = rb"\n is literal"
@@ -139,10 +161,15 @@ line bytes"""
 # Byte strings WITH interpolation (unlike Python!)
 byte_name = "world"
 byte_interp = b"hello {byte_name}"
+# String interpolation, escaped braces
 user_name = "snail"
 greeting = "hello {user_name}"
 brace_text = "brace {{ok}}"
+
+# ---- Subprocess and pipeline syntax ----
 cmd_name = "snail"
+# $(...) captures stdout
+# @(...) returns status (raise on non-zero, with ? to swallow)
 echoed = $(echo {cmd_name})
 try {
     echoed = $(false)? # it is required to provide a default value for this form.
@@ -152,11 +179,13 @@ try {
 assert echoed == "default"
 status_ok = @(echo ready)
 status_fail = @(false)?
-# Subprocess pipelines
+
+# Subprocess pipelines and placeholder arguments
 piped = "test" | $(cat)
 assert piped == "test"
 chained = "a\nb" | $(grep a) | $(cat)
 assert chained == "a"
+
 def greet(name, suffix) { return "Hello {name}{suffix}" }
 placeholder_first = "World" | greet(_, "!")
 assert placeholder_first == "Hello World!"
@@ -164,10 +193,8 @@ placeholder_second = "World" | greet("Hello ", _)
 assert placeholder_second == "Hello Hello World"
 placeholder_named = "World" | greet("Hello ", suffix=_)
 assert placeholder_named == "Hello Hello World"
-first = data[0]
-mid = data[1:3]
-head = data[:2]
-tail = data[2:]
+
+# ---- Operators, ternary, and precedence ----
 missing = None
 flag = not False and True or False
 is_none = missing is None
@@ -176,19 +203,23 @@ fallback = "yes" if flag else "no"
 power = -2 ** 3
 mix = (1 + 2) * 3 - 4 / 2 + 5 % 2 + 7 // 2
 
+# ---- Pre/post increment/decrement and augmented assignment ----
 counter_val = 0
 pre_counter = ++counter_val
 post_counter = counter_val++
 aug_counter = (counter_val += 3)
+
 counter_obj = Counter(0)
 pre_attr = ++counter_obj.start
 post_attr = counter_obj.start++
 aug_attr = (counter_obj.start += 2)
+
 scratch = [10]
 pre_idx = ++scratch[0]
 post_idx = scratch[0]++
 aug_idx = (scratch[0] += 4)
 
+# ---- Control flow (if/elif/else, loops, continue/break/pass) ----
 counter = Counter(10)
 value = counter.inc(5)
 root_val = root(16)
@@ -210,10 +241,12 @@ while i < 4 {
     loop_done = True
 }
 
+# Regex pattern binding + guard in if-let
 if let [user, domain] = "user@example.com" in /^([\w.]+)@([\w.]+)$/; user {
     print(domain)
 }
 
+# while-let loop (binding optional value)
 def next_pair(items, idx) {
     if idx < len(items) { return items[idx] }
     return None
@@ -232,6 +265,7 @@ for n in nums {
     for_done = True
 }
 
+# ---- try/except/else/finally, raise, and exception chaining ----
 try { raise ValueError("boom") }
 except ValueError as err { handled = True }
 except { handled = False }
@@ -251,6 +285,7 @@ def boom() {
     raise ValueError("boom")
 }
 
+# ---- Compact try operator (expr?) with fallback and $e ----
 safe_value = risky()?
 safe_fallback = risky():$e?
 safe_details = risky():$e.args[0]?
@@ -258,6 +293,8 @@ tight_sum = 1 + boom():5?
 tight_arg = boom():$e?.args[0]
 tight_name = boom():$e?.__class__.__name__
 tight_fallback_boundary = boom():0? + 1
+
+# ---- Regex literals and matching ----
 text = "abc123"
 regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
@@ -265,6 +302,7 @@ compiled_match = compiled_regex.search(text)
 # Awk mode match groups: $m.1 maps to $m[1]
 # Awk/map begin/end blocks: BEGIN { ... } / END { ... }
 
+# ---- Exception fallback hooks and compound expressions ----
 def fallback_handler() {
     return "dunder"
 }
@@ -277,21 +315,57 @@ def risky_fallback() {
 
 prefer_lambda = risky_fallback():"lambda"?
 dunder_only = risky_fallback()?
+# Compound expression (stmt1; stmt2; expr)
 compound_value = (counter.inc(1); counter.inc(2); counter.inc(3))
 compound_recovered = (risky_fallback(); counter.inc(4)):"rescued"?
 compound_swallowed = (risky_fallback(); counter.inc(5))?
 
+# ---- with statement ----
 with SimpleCtx() as message { ctx_msg = message }
 
+# ---- Calls, unpacking, and iteration ----
 total = compute(data)
 extras = %{"bonus": 5}
 values = [3, 4]
 joined = join_all(1, 2, *values, **extras)
+
+# for-in loop over generator
 gen_values = []
 for v in chained_count() {
     gen_values.append(v)
 }
+
+# ---- Structured pipeline accessor with JSON ----
+# js() parses immediately and returns a queryable object
+json_obj = js(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}')
+first_name = json_obj | $[users[0].name]
+assert first_name == "Alice"
+
+# Can also inline the js() call
+names = js(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}') | $[users[*].name]
+assert names == ["Alice", "Bob"]
+
+# Simple extraction
+simple = js(r'{"foo": 12}') | $[foo]
+assert simple == 12
+
+print("structured pipeline", first_name, names, simple)
+
+# ---- Auto-imports ----
+# Auto-import: sys, os, and Path are available without explicit import
+# (sys is also explicitly imported above as sysmod for demonstration)
+auto_sys_version = sys.version_info.major
+auto_os_name = os.name
+auto_path_cwd = Path(".").resolve()
+print("auto-import sys.version_info.major", auto_sys_version)
+print("auto-import os.name", auto_os_name)
+print("auto-import Path", auto_path_cwd)
+
+# ---- Output / asserts ----
 assert total == 6, "total"
+assert byte_text == b"hello bytes"
+assert byte_interp == b"hello world"
+assert len(raw_byte) == 13  # rb"\n is literal" = 13 chars as bytes
 print("first", first)
 print("value", value)
 print("root", root_val)
@@ -310,7 +384,6 @@ print("joined", joined)
 print("gen_values", gen_values)
 print("adder_result", adder_result)
 print("scaled_result", scaled_result)
-print("gen_values", gen_values)
 print("loop_done", loop_done)
 print("for_done", for_done)
 print("pair", pair)
@@ -333,41 +406,21 @@ print("dunder_only", dunder_only)
 print("compound_value", compound_value)
 print("compound_recovered", compound_recovered)
 print("compound_swallowed", compound_swallowed)
+
+# del statement
+# (demonstrates deleting a name)
 temp_value = 42
 del temp_value
 
+# Pipeline to callables
 class Doubler {
     def __call__(self, x) {
         return x * 2
     }
 }
+
 pipeline_result = 21 | Doubler()
 print("pipeline_result", pipeline_result)
-
-# Structured pipeline accessor with JSON
-# js() parses immediately and returns a queryable object
-json_obj = js(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}')
-first_name = json_obj | $[users[0].name]
-assert first_name == "Alice"
-
-# Can also inline the js() call
-names = js(r'{"users": [{"name": "Alice"}, {"name": "Bob"}]}') | $[users[*].name]
-assert names == ["Alice", "Bob"]
-
-# Simple extraction
-simple = js(r'{"foo": 12}') | $[foo]
-assert simple == 12
-
-print("structured pipeline", first_name, names, simple)
-
-# Auto-import: sys, os, and Path are available without explicit import
-# (sys is also explicitly imported above as sysmod for demonstration)
-auto_sys_version = sys.version_info.major
-auto_os_name = os.name
-auto_path_cwd = Path(".").resolve()
-print("auto-import sys.version_info.major", auto_sys_version)
-print("auto-import os.name", auto_os_name)
-print("auto-import Path", auto_path_cwd)
 
 info = "default to f-strings"
 print("strings {info}", raw_text, multi_text, raw_multi)
@@ -377,9 +430,6 @@ prec = 2
 print("format {value:.2f}", "nested {value:{width}.{prec}f}", "repr {info!r}")
 print("byte strings", byte_text, byte_single, raw_byte, raw_byte_alt)
 print("byte interp", byte_interp)
-assert byte_text == b"hello bytes"
-assert byte_interp == b"hello world"
-assert len(raw_byte) == 13  # rb"\n is literal" = 13 chars as bytes
 print(sysmod.version)
 
 # The implicit return of the last non-semicolon expression is pretty printed
