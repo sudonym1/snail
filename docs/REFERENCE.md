@@ -8,6 +8,10 @@ blocks for curly braces. The examples here mirror the runnable tour in
 - Run a one-liner: `snail "print('hi')"`
 - Execute a file: `snail -f path/to/script.snail`
 
+By default, Snail pretty-prints the implicit return value of the last
+non-semicolon expression statement in a program. Use `-P`/`--no-print` to
+disable auto-printing.
+
 ## Map mode
 Map mode processes input files one at a time:
 ```bash
@@ -129,6 +133,9 @@ def join_all(head, tail=0, *rest, **extras) {
 
 joined = join_all(1, 2, *values, **extras)
 ```
+Functions implicitly return the final non-semicolon expression statement.
+Use `return` for early exits and for `if`/`else` branches, or add a trailing
+semicolon to suppress the implicit return.
 Default values, variadic `*args`, and `**kwargs` work as in Python. Calls accept
 positional and keyword arguments interchangeably.
 

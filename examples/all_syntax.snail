@@ -45,6 +45,17 @@ named_args(head=1,  tail=2)
 
 named_args(1,2);
 
+def add(a, b) {
+    a + b
+}
+
+def add_suppressed(a, b) {
+    a + b;
+}
+
+print("implicit return", add(1, 2))
+print("implicit return suppressed", add_suppressed(1, 2))
+
 def join_all(head, tail=0, * rest, **extras) {
     total = head + tail
     for n in rest {
@@ -321,5 +332,6 @@ assert byte_interp == b"hello world"
 assert len(raw_byte) == 13  # rb"\n is literal" = 13 chars as bytes
 print(sysmod.version)
 
-# The last expression is always pretty printed to stdout, unless -P is specified
+# The implicit return of the last non-semicolon expression is pretty printed
+# to stdout, unless -P is specified
 "automatically printed"

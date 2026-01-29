@@ -120,7 +120,10 @@ def _print_help(file=None) -> None:
         "  -e, --end <code>         end block code (awk/map mode, repeatable)",
         file=file,
     )
-    print("  -P, --no-print          disable auto-print of last expression", file=file)
+    print(
+        "  -P, --no-print          disable auto-print of implicit return value",
+        file=file,
+    )
     print("  -I, --no-auto-import    disable auto-imports", file=file)
     print("  --debug                 parse and compile, then print, do not run", file=file)
     print("  --debug-snail-ast       parse and print Snail AST, do not run", file=file)
