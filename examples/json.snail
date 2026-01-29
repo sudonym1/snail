@@ -1,5 +1,7 @@
+# JSON parsing example using raw triple-quoted strings.
 import json
 
+# Raw multi-line string preserves newlines/backslashes.
 d = json.loads(r"""
 {
   "hook_event_name": "Status",
@@ -38,4 +40,5 @@ d = json.loads(r"""
   }
 }""")
 
+# Indexing nested JSON structures.
 assert d["context_window"]["total_input_tokens"] == 15234

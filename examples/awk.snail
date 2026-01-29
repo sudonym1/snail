@@ -1,7 +1,20 @@
 #!/usr/bin/env -S snail --awk -f
+# Awk mode example (pattern/action rules with BEGIN/END blocks).
+
+# BEGIN block runs once before input is processed.
 BEGIN { print("demo begin") }
+
+# $0 is the current line.
 $0.startswith("d") { print("matched:", $0) }
+
+# Regex pattern against $0; match groups available via $m.N.
 /de(mo)/ { print("regex:", $m.1) }
+
+# Bare block runs for every line; $fn is per-file line number.
 { print($fn); print($0) }
+
+# $f is a list of fields split on whitespace.
 $f[0] == "test" { print("first field:", $f[0]) }
+
+# END block runs once after all input is processed.
 END { print("demo end") }
