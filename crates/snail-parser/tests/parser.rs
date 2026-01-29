@@ -362,8 +362,8 @@ fn parses_compound_expression() {
 }
 
 #[test]
-fn parses_lambda_no_params() {
-    let source = "f = lambda() { 1 }\n";
+fn parses_def_expr_no_params() {
+    let source = "f = def { 1 }\n";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
@@ -378,13 +378,13 @@ fn parses_lambda_no_params() {
                 other => panic!("Expected expression statement, got {other:?}"),
             }
         }
-        other => panic!("Expected lambda expression, got {other:?}"),
+        other => panic!("Expected def expression, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lambda_with_params_and_defaults() {
-    let source = "f = lambda(x, y=2, *rest, **kw) { x }\n";
+fn parses_def_expr_with_params_and_defaults() {
+    let source = "f = def(x, y=2, *rest, **kw) { x }\n";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
@@ -418,13 +418,13 @@ fn parses_lambda_with_params_and_defaults() {
             }
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected lambda expression, got {other:?}"),
+        other => panic!("Expected def expression, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lambda_nested_and_called() {
-    let source = "outer = lambda(x) { lambda(y) { x + y } }\nvalue = lambda(x) { x + 1 }(2)\n";
+fn parses_def_expr_nested_and_called() {
+    let source = "outer = def(x) { def(y) { x + y } }\nvalue = def(x) { x + 1 }(2)\n";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
 
@@ -434,11 +434,11 @@ fn parses_lambda_nested_and_called() {
         Expr::Lambda { body, .. } => match &body[0] {
             Stmt::Expr { value, .. } => match value {
                 Expr::Lambda { .. } => {}
-                other => panic!("Expected nested lambda, got {other:?}"),
+                other => panic!("Expected nested def expression, got {other:?}"),
             },
             other => panic!("Expected expression statement, got {other:?}"),
         },
-        other => panic!("Expected lambda expression, got {other:?}"),
+        other => panic!("Expected def expression, got {other:?}"),
     }
 
     let (targets, value) = expect_assign(&program.stmts[1]);
@@ -448,7 +448,7 @@ fn parses_lambda_nested_and_called() {
             assert_eq!(args.len(), 1);
             match func.as_ref() {
                 Expr::Lambda { .. } => {}
-                other => panic!("Expected lambda callee, got {other:?}"),
+                other => panic!("Expected def expression callee, got {other:?}"),
             }
         }
         other => panic!("Expected call expression, got {other:?}"),

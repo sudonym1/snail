@@ -64,8 +64,8 @@ def cleanup() {
     pass
 }
 
-adder = lambda(x, y) { x + y }
-scaled = lambda(value) { doubled = value * 2; doubled + 1 }
+adder = def(x, y) { x + y }
+scaled = def(value) { doubled = value * 2; doubled + 1 }
 adder_result = adder(2, 3)
 scaled_result = scaled(4)
 

@@ -1416,7 +1416,7 @@ fn lower_lambda_body_expr(
             }
             _ => {
                 return Err(LowerError::new(
-                    "lambda bodies must contain only expression statements",
+                    "def expression bodies must contain only expression statements",
                 ));
             }
         }

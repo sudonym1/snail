@@ -178,7 +178,7 @@ slice_end = { expr }
 // Atomic expressions: literals, variables, collections, etc.
 atom = _{
   literal
-  | lambda_expr
+  | def_expr
   | regex
   | subprocess
   | structured_accessor
@@ -196,7 +196,7 @@ atom = _{
   | paren_expr
 }
 
-lambda_expr = { "lambda" ~ parameters ~ block }
+def_expr = { "def" ~ parameters? ~ block }
 
 // Parenthesized expression (preserved in AST for proper validation)
 paren_expr = { "(" ~ expr ~ ")" }
@@ -273,7 +273,7 @@ keyword = _{
   ("if" | "else" | "elif" | "while" | "for" | "in" | "def" | "class"
   | "return" | "break" | "continue" | "pass" | "raise" | "try" | "except"
   | "finally" | "with" | "assert" | "del" | "and" | "or" | "not" | "import" | "from" | "as"
-  | "let" | "lambda"
+  | "let"
   | "BEGIN" | "END"
   | "True" | "False" | "None") ~ !ident_continue
 }
