@@ -21,14 +21,11 @@ cargo build
 # Build/install the Python extension in the uv environment
 uv run -- python -m maturin develop
 
-# Run all Rust tests (parser, lowering, awk mode; excludes proptests by default)
+# Run all Rust tests (parser, lowering, awk mode)
 cargo test
 
 # Run Python CLI tests
 uv run -- python -m pytest python/tests
-
-# Run tests including property-based tests (proptests)
-cargo test --features run-proptests
 
 # Run tests for a specific module
 cargo test parser
@@ -51,24 +48,11 @@ cargo fmt --check
 # Lint with clippy
 cargo clippy -- -D warnings
 
-# Build with all features (including proptests)
-cargo build --features run-proptests
 ```
 
 ## Planning Requirements (GitHub Issues)
 
 **CRITICAL**: When creating a medium or large plan, you must create a GitHub issue using the `gh` CLI instead of adding files under `plans/`. The issue must include enough detail to execute later with no additional context (assumptions, steps, commands, and verification).
-
-## Property-Based Testing (Proptests)
-
-The `snail-proptest` crate contains property-based tests using the proptest framework. These tests are **skipped by default** during `cargo test` to keep development iteration fast.
-
-- **Default behavior**: `cargo test` excludes proptest tests
-- **To run proptests**: Use `cargo test --features run-proptests`
-- **Feature flag**: `run-proptests` conditionally compiles test files in `crates/snail-proptest/tests/`
-- **Pre-commit requirement**: Must build with feature flag (`cargo build --features run-proptests`) before committing
-
-Proptests are useful for finding edge cases and regressions, but are slower than regular tests. The feature flag allows developers to run them when needed while keeping normal test runs fast.
 
 ## ⚠️ MANDATORY: CI Requirements Before Committing/Pushing
 
@@ -79,7 +63,6 @@ Proptests are useful for finding edge cases and regressions, but are slower than
 
 - **Formatting**: Run `cargo fmt` during iteration; `make test` runs `cargo fmt --check`.
 - **Rust build**: Run `RUSTFLAGS="-D warnings" cargo build` when touching Rust code; `make test` runs it.
-- **Proptests build**: Run `cargo build --features run-proptests` when changing lowering/proptests; `make test` runs it.
 - **Linting**: Run `cargo clippy -- -D warnings` before final verification; `make test` runs it.
 - **Rust tests**: Run targeted `cargo test <name>` as needed; `make test` runs `cargo test`.
 - **Python CLI tests**: Run `uv run -- python -m pytest python/tests` when touching the CLI; `make test` runs it.
@@ -193,7 +176,6 @@ Snail → Parser → AST → Lowering → Python AST → in-process exec
 ## Testing Strategy
 
 - **Parser tests** (`crates/snail-parser/tests/parser.rs`): Validate AST structure from source
-- **Lowering tests** (`crates/snail-proptest/tests/properties.rs`): Verify lowering invariants
 - **Python CLI tests** (`python/tests/test_cli.py`): End-to-end execution via CLI, command-line interface behavior
 
 **Note on virtual environments:** Python tools run inside the uv-managed environment; prefer `uv run -- ...` for Python commands.

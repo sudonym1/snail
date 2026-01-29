@@ -39,10 +39,6 @@ When lowering awk programs, generates a complete Python AST that:
 
 - **snail-python**: Owns the lowering implementation and pyo3 bindings
 
-## Used By
-
-- **snail-proptest**: Calls lowering functions in property tests
-
 ## Design
 
 The lowering process preserves Python semantics exactly - only syntax differs. `SourceSpan` information is used to populate Python AST location metadata for accurate error reporting.

@@ -302,6 +302,3 @@ cd snail
 make test
 make install
 ```
-
-
-**Note on Proptests**: The `snail-proptest` crate contains property-based tests that are skipped by default to keep development iteration fast.

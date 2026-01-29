@@ -19,7 +19,6 @@ develop: sync
 test: develop
 	cargo fmt --check
 	RUSTFLAGS="-D warnings" cargo build
-	RUSTFLAGS="-D warnings" cargo build --features run-proptests
 	cargo clippy -- -D warnings
 	RUSTFLAGS="-D warnings" cargo test
 	$(UV) run -- python -m pytest python/tests
