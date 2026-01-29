@@ -87,6 +87,8 @@ expected without conflict.
   fallback operator.
 - Tuple literals plus slicing use Python syntax: `(1, 2)`,
   `data[1:3]`, `data[:2]`, and `data[2:]`.
+- Collection literals use Python-inspired forms: lists `[1, 2]`, dicts
+  `{"a": 1}`, and sets `#{1, 2}`. The empty set literal is `#{}`.
 
 ## Pipeline operator
 Snail repurposes the `|` operator for generic data pipelining through

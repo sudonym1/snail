@@ -935,6 +935,19 @@ pub(crate) fn lower_expr_with_exception(
                 )
                 .map_err(py_err_to_lower)
         }
+        Expr::Set { elements, span } => {
+            let mut lowered = Vec::with_capacity(elements.len());
+            for element in elements {
+                lowered.push(lower_expr_with_exception(builder, element, exception_name)?);
+            }
+            builder
+                .call_node(
+                    "Set",
+                    vec![PyList::new_bound(builder.py(), lowered).into_py(builder.py())],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
         Expr::Dict { entries, span } => {
             let mut keys = Vec::with_capacity(entries.len());
             let mut values = Vec::with_capacity(entries.len());
@@ -1540,7 +1553,7 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
             count_placeholders(index, info);
         }
         Expr::Paren { expr, .. } => count_placeholders(expr, info),
-        Expr::List { elements, .. } | Expr::Tuple { elements, .. } => {
+        Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
             for expr in elements {
                 count_placeholders(expr, info);
             }
@@ -1792,6 +1805,13 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             span: span.clone(),
         },
         Expr::Tuple { elements, span } => Expr::Tuple {
+            elements: elements
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::Set { elements, span } => Expr::Set {
             elements: elements
                 .iter()
                 .map(|expr| substitute_placeholder(expr, replacement))

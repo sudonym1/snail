@@ -164,6 +164,7 @@ pub fn expr_span(expr: &snail_ast::Expr) -> &SourceSpan {
         | snail_ast::Expr::FieldIndex { span, .. }
         | snail_ast::Expr::List { span, .. }
         | snail_ast::Expr::Tuple { span, .. }
+        | snail_ast::Expr::Set { span, .. }
         | snail_ast::Expr::Dict { span, .. }
         | snail_ast::Expr::ListComp { span, .. }
         | snail_ast::Expr::DictComp { span, .. }

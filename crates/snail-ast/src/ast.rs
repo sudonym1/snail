@@ -302,6 +302,10 @@ pub enum Expr {
         elements: Vec<Expr>,
         span: SourceSpan,
     },
+    Set {
+        elements: Vec<Expr>,
+        span: SourceSpan,
+    },
     Dict {
         entries: Vec<(Expr, Expr)>,
         span: SourceSpan,

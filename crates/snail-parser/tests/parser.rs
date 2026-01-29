@@ -727,6 +727,30 @@ fn parses_list_and_dict_literals_and_comprehensions() {
     }
 }
 
+#[test]
+fn parses_set_literals() {
+    let source = "items = #{1, 2, 3}\nempty = #{}\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Set { elements, .. } => {
+            assert_eq!(elements.len(), 3);
+            expect_number(&elements[0], "1");
+            expect_number(&elements[1], "2");
+            expect_number(&elements[2], "3");
+        }
+        other => panic!("Expected set literal, got {other:?}"),
+    }
+
+    let (_, value) = expect_assign(&program.stmts[1]);
+    match value {
+        Expr::Set { elements, .. } => assert!(elements.is_empty()),
+        other => panic!("Expected empty set literal, got {other:?}"),
+    }
+}
+
 // ========== Error Path Tests ==========
 
 #[test]
