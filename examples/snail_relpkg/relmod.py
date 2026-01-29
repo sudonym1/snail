@@ -1,0 +1,1 @@
+REL_VALUE = 7

@@ -12,11 +12,15 @@ from snail_import_demo import (
 from snail_import_demo import *
 print("import demo", demo_answer, demo_greet("snail"), NAME)
 
-# Relative imports are supported when running inside a package context.
-if False {
-    from . import local_mod
-    from ..pkg import name as alias
-}
+# Relative imports (exercise a real package under examples).
+import snail_relpkg
+import snail_relpkg.subpkg
+__package__ = "snail_relpkg"
+from . import relmod
+__package__ = "snail_relpkg.subpkg"
+from .. import relmod as parent_relmod
+from . import submod
+print("relative import", relmod.REL_VALUE, parent_relmod.REL_VALUE, submod.SUB_VALUE)
 
 class Counter {
     def __init__(self, start) {
