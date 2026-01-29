@@ -117,8 +117,7 @@ The repository is organized as a Cargo workspace with the following crates:
 - **`snail-parser`**: Pest-based parser that converts Snail source to AST
 - **`snail-lower`**: Lowers Snail AST to Python `ast` nodes via pyo3
 - **`snail-error`**: Error types (ParseError, LowerError, SnailError)
-- **`snail-core`**: High-level compilation API (compile_snail_source, etc.)
-- **`snail-python`**: Pyo3 module used by the Python package and CLI
+- **`snail-python`**: Compilation API plus the pyo3 module used by the Python package and CLI
 
 ## High-Level Architecture
 
@@ -151,9 +150,8 @@ Snail → Parser → AST → Lowering → Python AST → in-process exec
 4. **Python AST**:
    - Uses Python's built-in `ast` nodes constructed in Rust via pyo3
 
-5. **Compilation API** (`crates/snail-core/`):
-   - `compile_snail_source()`: compiles Snail source to a Python AST module
-   - `compile_snail_source_with_auto_print()`: compiles with optional auto-print of last expression
+5. **Compilation API** (`crates/snail-python/`):
+   - `compile_snail_source_with_auto_print()`: compiles Snail source to a Python AST module, with optional auto-print of the last expression
    - Used by the Python module to execute code in-process
 
 6. **Python CLI** (`python/snail/cli.py`):

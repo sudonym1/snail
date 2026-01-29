@@ -6,8 +6,10 @@ build = "build.rs"
 
 [lib]
 name = "snail_python"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = "0.21", features = ["extension-module", "abi3-py310"] }
-snail-core = { path = "../snail-core" }
+snail-ast = { path = "../snail-ast" }
+snail-error = { path = "../snail-error" }
+snail-parser = { path = "../snail-parser" }

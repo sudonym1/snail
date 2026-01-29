@@ -32,7 +32,7 @@ The `snail.pest` file defines all of Snail's syntax rules including:
 
 ## Used By
 
-- **snail-core**: Calls `parse_program()` or `parse_awk_program()` as the first compilation stage
+- **snail-python**: Calls `parse_program()` or `parse_awk_program()` as the first compilation stage
 - Tests validate AST structure from various Snail source inputs
 
 ## Design

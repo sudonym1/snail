@@ -488,17 +488,6 @@ name = "snail-ast"
 version = "0.6.3"
 
 [[package]]
-name = "snail-core"
-version = "0.6.3"
-dependencies = [
- "pyo3",
- "snail-ast",
- "snail-error",
- "snail-lower",
- "snail-parser",
-]
-
-[[package]]
 name = "snail-error"
 version = "0.6.3"
 dependencies = [
@@ -509,9 +498,7 @@ dependencies = [
 name = "snail-lower"
 version = "0.6.3"
 dependencies = [
- "pyo3",
- "snail-ast",
- "snail-error",
+ "snail-python",
 ]
 
 [[package]]
@@ -529,9 +516,7 @@ name = "snail-proptest"
 version = "0.6.3"
 dependencies = [
  "proptest",
- "pyo3",
  "snail-ast",
- "snail-core",
  "snail-error",
  "snail-lower",
  "snail-parser",
@@ -543,7 +528,9 @@ name = "snail-python"
 version = "0.6.3"
 dependencies = [
  "pyo3",
- "snail-core",
+ "snail-ast",
+ "snail-error",
+ "snail-parser",
 ]
 
 [[package]]

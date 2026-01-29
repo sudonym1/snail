@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use snail_ast::{AugAssignOp, BinaryOp, CompareOp, UnaryOp};
 use snail_error::LowerError;
 
-use crate::py_ast::{AstBuilder, py_err_to_lower};
+use super::py_ast::{AstBuilder, py_err_to_lower};
 
 pub(crate) fn lower_unary_op(
     builder: &AstBuilder<'_>,

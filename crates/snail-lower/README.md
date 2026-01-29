@@ -1,22 +1,18 @@
 # snail-lower
 
-AST transformation layer that lowers Snail AST to Python `ast` nodes via pyo3.
+Compatibility shim that re-exports lowering APIs from `snail-python`.
 
 ## Purpose
 
-This crate is the semantic transformation core of the Snail compiler. It takes Snail AST nodes and transforms them into equivalent Python `ast` nodes, handling all Snail-specific features by generating appropriate Python AST patterns and helper function calls.
+This crate preserves the historical `snail-lower` API surface for downstream
+tests and tools, while keeping the actual lowering implementation inside
+`snail-python` (the only crate that depends directly on pyo3).
 
 ## Key Components
 
 - **lower_program()**: Transforms a regular `Program` to a Python `ast.Module`
 - **lower_awk_program()**: Transforms an `AwkProgram` to a Python `ast.Module` with awk runtime
 - **lower_awk_program_with_auto_print()**: Awk lowering with optional auto-print
-- Helper constants for generated Python code:
-  - `SNAIL_TRY_HELPER`: Name for the `?` operator helper function
-  - `SNAIL_SUBPROCESS_CAPTURE_CLASS`: Class for `$(cmd)` subprocess capture
-  - `SNAIL_SUBPROCESS_STATUS_CLASS`: Class for `@(cmd)` subprocess status
-  - `SNAIL_REGEX_SEARCH/COMPILE`: Regex helper functions
-  - `SNAIL_STRUCTURED_ACCESSOR_CLASS`: Class for structured data queries
 
 ## Snail Feature Transformations
 
@@ -41,14 +37,11 @@ When lowering awk programs, generates a complete Python AST that:
 
 ## Dependencies
 
-- **snail-ast**: Consumes Snail `Program` and `AwkProgram`
-- **pyo3**: Constructs Python `ast` nodes
-- **snail-error**: Returns `LowerError` on transformation failures
+- **snail-python**: Owns the lowering implementation and pyo3 bindings
 
 ## Used By
 
-- **snail-core**: Calls lowering functions as part of the compilation pipeline
-- Tests validate transformation correctness
+- **snail-proptest**: Calls lowering functions in property tests
 
 ## Design
 

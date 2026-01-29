@@ -4,6 +4,4 @@ version = "0.6.3"
 edition = "2024"
 
 [dependencies]
-snail-ast = { path = "../snail-ast" }
-snail-error = { path = "../snail-error" }
-pyo3 = { version = "0.21", features = ["abi3-py310"] }
+snail-python = { path = "../snail-python" }

@@ -3,11 +3,11 @@ use pyo3::types::PyList;
 use snail_ast::*;
 use snail_error::LowerError;
 
-use crate::constants::*;
-use crate::expr::{lower_expr, lower_regex_match};
-use crate::helpers::{assign_name, name_expr, number_expr, string_expr};
-use crate::py_ast::{AstBuilder, py_err_to_lower};
-use crate::stmt::lower_block_with_auto_print;
+use super::constants::*;
+use super::expr::{lower_expr, lower_regex_match};
+use super::helpers::{assign_name, name_expr, number_expr, string_expr};
+use super::py_ast::{AstBuilder, py_err_to_lower};
+use super::stmt::lower_block_with_auto_print;
 
 pub(crate) fn lower_awk_file_loop_with_auto_print(
     builder: &AstBuilder<'_>,

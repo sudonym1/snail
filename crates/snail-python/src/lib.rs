@@ -1,33 +1,32 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
+mod compiler;
+mod linecache;
+mod lower;
+mod profiling;
+
+pub use lower::{
+    lower_awk_program, lower_awk_program_with_auto_print, lower_map_program,
+    lower_map_program_with_auto_print, lower_map_program_with_begin_end, lower_program,
+    lower_program_with_auto_print,
+};
+pub use pyo3::prelude::{PyObject, Python};
+
+use compiler::{compile_awk_source_with_begin_end, compile_map_source_with_begin_end};
+use compiler::{compile_snail_source_with_auto_print, merge_map_cli_blocks};
+use linecache::{display_filename, register_linecache, strip_display_prefix};
+use profiling::{log_profile, profile_enabled};
 use pyo3::Bound;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
-use snail_core::{
-    CompileMode, ParseError, Program, Stmt, compile_awk_source_with_begin_end,
-    compile_map_source_with_begin_end, compile_snail_source_with_auto_print, format_snail_error,
+use pyo3::types::{PyDict, PyList, PyModule};
+use snail_ast::CompileMode;
+use snail_error::{ParseError, format_snail_error};
+use snail_parser::{
     parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
     parse_program,
 };
-use std::sync::OnceLock;
 use std::time::Instant;
-
-const SNAIL_TRACE_PREFIX: &str = "snail:";
-
-fn profile_enabled() -> bool {
-    static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| std::env::var_os("SNAIL_PROFILE_NATIVE").is_some())
-}
-
-fn log_profile(label: &str, elapsed: std::time::Duration) {
-    if profile_enabled() {
-        eprintln!(
-            "[snail][native] {label}: {:.3} ms",
-            elapsed.as_secs_f64() * 1000.0
-        );
-    }
-}
 
 fn parse_mode(mode: &str) -> PyResult<CompileMode> {
     match mode {
@@ -38,53 +37,6 @@ fn parse_mode(mode: &str) -> PyResult<CompileMode> {
             "unknown mode: {mode} (expected 'snail', 'awk', or 'map')"
         ))),
     }
-}
-
-fn display_filename(filename: &str) -> String {
-    if filename.starts_with(SNAIL_TRACE_PREFIX) {
-        filename.to_string()
-    } else {
-        format!("{SNAIL_TRACE_PREFIX}{filename}")
-    }
-}
-
-fn strip_display_prefix(filename: &str) -> &str {
-    filename
-        .strip_prefix(SNAIL_TRACE_PREFIX)
-        .unwrap_or(filename)
-}
-
-fn split_source_lines(source: &str) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut start = 0;
-    for (idx, ch) in source.char_indices() {
-        if ch == '\n' {
-            let end = idx + 1;
-            lines.push(source[start..end].to_string());
-            start = end;
-        }
-    }
-    if start < source.len() {
-        lines.push(source[start..].to_string());
-    }
-    lines
-}
-
-fn register_linecache(py: Python<'_>, filename: &str, source: &str) -> PyResult<()> {
-    let linecache = py.import_bound("linecache")?;
-    let cache = linecache.getattr("cache")?;
-    let lines = split_source_lines(source);
-    let entry = PyTuple::new_bound(
-        py,
-        vec![
-            source.len().into_py(py),
-            py.None().into_py(py),
-            PyList::new_bound(py, lines).into_py(py),
-            filename.into_py(py),
-        ],
-    );
-    cache.set_item(filename, entry)?;
-    Ok(())
 }
 
 fn build_info_dict(py: Python<'_>) -> PyResult<PyObject> {
@@ -320,9 +272,9 @@ fn exec_py(
 #[allow(dead_code)]
 #[derive(Debug)]
 struct MapAst {
-    program: Program,
-    begin_blocks: Vec<Vec<Stmt>>,
-    end_blocks: Vec<Vec<Stmt>>,
+    program: snail_ast::Program,
+    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
+    end_blocks: Vec<Vec<snail_ast::Stmt>>,
 }
 
 #[pyfunction(name = "parse_ast")]
@@ -352,25 +304,11 @@ fn parse_ast_py(
             Ok(format!("{:#?}", program))
         }
         CompileMode::Map => {
-            let (program, mut begin_blocks, mut end_blocks) =
+            let (program, begin_blocks, end_blocks) =
                 parse_map_program_with_begin_end(source).map_err(err_to_syntax)?;
-
-            let mut cli_begin_blocks = Vec::new();
-            for source in &begin_code {
-                let begin_program = parse_program(source).map_err(err_to_syntax)?;
-                if !begin_program.stmts.is_empty() {
-                    cli_begin_blocks.push(begin_program.stmts);
-                }
-            }
-            cli_begin_blocks.extend(begin_blocks);
-            begin_blocks = cli_begin_blocks;
-
-            for source in &end_code {
-                let end_program = parse_program(source).map_err(err_to_syntax)?;
-                if !end_program.stmts.is_empty() {
-                    end_blocks.push(end_program.stmts);
-                }
-            }
+            let (begin_blocks, end_blocks) =
+                merge_map_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
+                    .map_err(err_to_syntax)?;
 
             if begin_blocks.is_empty() && end_blocks.is_empty() {
                 return Ok(format!("{:#?}", program));

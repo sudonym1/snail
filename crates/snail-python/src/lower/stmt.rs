@@ -3,11 +3,11 @@ use pyo3::types::PyList;
 use snail_ast::*;
 use snail_error::LowerError;
 
-use crate::constants::{SNAIL_LET_KEEP, SNAIL_LET_OK, SNAIL_LET_VALUE};
-use crate::expr::{lower_assign_target, lower_delete_target, lower_expr};
-use crate::helpers::{assign_name, name_expr};
-use crate::operators::lower_compare_op;
-use crate::py_ast::{AstBuilder, py_err_to_lower};
+use super::constants::{SNAIL_LET_KEEP, SNAIL_LET_OK, SNAIL_LET_VALUE};
+use super::expr::{lower_assign_target, lower_delete_target, lower_expr};
+use super::helpers::{assign_name, name_expr};
+use super::operators::lower_compare_op;
+use super::py_ast::{AstBuilder, py_err_to_lower};
 
 pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObject, LowerError> {
     match stmt {
