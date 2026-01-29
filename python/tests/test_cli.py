@@ -186,6 +186,50 @@ def test_inline_print(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "hi\n"
 
 
+def test_implicit_return_function(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def add(a, b) {",
+            "    a + b",
+            "}",
+            "print(add(1, 2))",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "3"
+
+
+def test_implicit_return_if_else_requires_return(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "def pick(flag) {",
+            "    if flag { 1 } else { 2 }",
+            "}",
+            "print(pick(True))",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "None"
+
+
+def test_auto_print_uses_returned_value(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def add(a, b) {",
+            "    a + b",
+            "}",
+            "add(1, 2)",
+        ]
+    )
+    assert main([script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "3"
+
+
 def test_compact_try_default_none(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [

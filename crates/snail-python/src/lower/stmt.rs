@@ -11,6 +11,13 @@ use super::helpers::{assign_name, name_expr};
 use super::operators::lower_compare_op;
 use super::py_ast::{AstBuilder, py_err_to_lower};
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum TailBehavior {
+    None,
+    AutoPrint,
+    ImplicitReturn,
+}
+
 pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObject, LowerError> {
     match stmt {
         Stmt::If {
@@ -92,7 +99,7 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
             span,
         } => {
             let args = lower_parameters(builder, params, None)?;
-            let body = lower_block(builder, body, span)?;
+            let body = lower_block_with_implicit_return(builder, body, span)?;
             builder
                 .call_node(
                     "FunctionDef",
@@ -338,7 +345,7 @@ pub(crate) fn lower_block(
     block: &[Stmt],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    lower_block_with_auto_print(builder, block, false, span)
+    lower_block_with_tail(builder, block, TailBehavior::None, span)
 }
 
 pub(crate) fn lower_block_with_auto_print(
@@ -347,21 +354,62 @@ pub(crate) fn lower_block_with_auto_print(
     auto_print: bool,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
+    let tail = if auto_print {
+        TailBehavior::AutoPrint
+    } else {
+        TailBehavior::None
+    };
+    lower_block_with_tail(builder, block, tail, span)
+}
+
+pub(crate) fn lower_block_with_implicit_return(
+    builder: &AstBuilder<'_>,
+    block: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    lower_block_with_tail(builder, block, TailBehavior::ImplicitReturn, span)
+}
+
+fn lower_block_with_tail(
+    builder: &AstBuilder<'_>,
+    block: &[Stmt],
+    tail: TailBehavior,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
     for (idx, stmt) in block.iter().enumerate() {
         let is_last = idx == block.len().saturating_sub(1);
-        if auto_print
-            && is_last
-            && let Stmt::Expr {
-                value,
-                semicolon_terminated,
-                span,
-            } = stmt
-            && !semicolon_terminated
-        {
-            let expr = lower_expr(builder, value)?;
-            stmts.extend(build_auto_print_block(builder, expr, span)?);
-            continue;
+        if is_last {
+            match (tail, stmt) {
+                (
+                    TailBehavior::AutoPrint,
+                    Stmt::Expr {
+                        value,
+                        semicolon_terminated,
+                        span,
+                    },
+                ) if !semicolon_terminated => {
+                    let expr = lower_expr(builder, value)?;
+                    stmts.extend(build_auto_print_block(builder, expr, span)?);
+                    continue;
+                }
+                (
+                    TailBehavior::ImplicitReturn,
+                    Stmt::Expr {
+                        value,
+                        semicolon_terminated,
+                        span,
+                    },
+                ) if !semicolon_terminated => {
+                    let expr = lower_expr(builder, value)?;
+                    let return_stmt = builder
+                        .call_node("Return", vec![expr], span)
+                        .map_err(py_err_to_lower)?;
+                    stmts.push(return_stmt);
+                    continue;
+                }
+                _ => {}
+            }
         }
         match stmt {
             Stmt::If {
