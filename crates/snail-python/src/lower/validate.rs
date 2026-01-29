@@ -231,13 +231,7 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
         | Expr::None { .. }
         | Expr::StructuredAccessor { .. }
         | Expr::FieldIndex { .. } => {}
-        Expr::FString { parts, .. } => {
-            for part in parts {
-                if let FStringPart::Expr(expr) = part {
-                    check_expr(expr, in_function)?;
-                }
-            }
-        }
+        Expr::FString { parts, .. } => check_fstring_parts(parts, in_function)?,
         Expr::Unary { expr, .. } => check_expr(expr, in_function)?,
         Expr::Binary { left, right, .. } => {
             check_expr(left, in_function)?;
@@ -305,7 +299,7 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
             check_expr(index, in_function)?;
         }
         Expr::Paren { expr, .. } => check_expr(expr, in_function)?,
-        Expr::List { elements, .. } | Expr::Tuple { elements, .. } => {
+        Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
             for expr in elements {
                 check_expr(expr, in_function)?;
             }
@@ -353,11 +347,24 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
 
 fn check_regex_pattern(pattern: &RegexPattern, in_function: bool) -> Result<(), LowerError> {
     if let RegexPattern::Interpolated(parts) = pattern {
-        for part in parts {
-            if let FStringPart::Expr(expr) = part {
-                check_expr(expr, in_function)?;
-            }
+        check_fstring_parts(parts, in_function)?;
+    }
+    Ok(())
+}
+
+fn check_fstring_parts(parts: &[FStringPart], in_function: bool) -> Result<(), LowerError> {
+    for part in parts {
+        if let FStringPart::Expr(expr) = part {
+            check_fstring_expr(expr, in_function)?;
         }
+    }
+    Ok(())
+}
+
+fn check_fstring_expr(expr: &FStringExpr, in_function: bool) -> Result<(), LowerError> {
+    check_expr(&expr.expr, in_function)?;
+    if let Some(format_spec) = &expr.format_spec {
+        check_fstring_parts(format_spec, in_function)?;
     }
     Ok(())
 }
