@@ -10,6 +10,7 @@
   (try_stmt)
   (with_stmt)
   (list_literal)
+  (set_literal)
   (dict_literal)
   (tuple_literal)
 ] @indent.begin
@@ -26,4 +27,3 @@
   "except"
   "finally"
 ] @indent.branch
-

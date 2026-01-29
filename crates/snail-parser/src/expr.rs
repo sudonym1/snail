@@ -5,8 +5,8 @@ use snail_error::ParseError;
 use crate::Rule;
 use crate::literal::{
     parse_dict_comp, parse_dict_literal, parse_list_comp, parse_list_literal, parse_literal,
-    parse_regex_literal, parse_slice, parse_structured_accessor, parse_subprocess,
-    parse_tuple_literal,
+    parse_regex_literal, parse_set_literal, parse_slice, parse_structured_accessor,
+    parse_subprocess, parse_tuple_literal,
 };
 use crate::stmt::parse_assign_target_ref_expr;
 use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
@@ -57,6 +57,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
             span: span_from_pair(&pair, source),
         }),
         Rule::list_literal => parse_list_literal(pair, source),
+        Rule::set_literal => parse_set_literal(pair, source),
         Rule::dict_literal => parse_dict_literal(pair, source),
         Rule::tuple_literal => parse_tuple_literal(pair, source),
         Rule::list_comp => parse_list_comp(pair, source),
@@ -714,6 +715,7 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
             span: span_from_pair(&inner_pair, source),
         }),
         Rule::list_literal => parse_list_literal(inner_pair, source),
+        Rule::set_literal => parse_set_literal(inner_pair, source),
         Rule::dict_literal => parse_dict_literal(inner_pair, source),
         Rule::tuple_literal => parse_tuple_literal(inner_pair, source),
         Rule::list_comp => parse_list_comp(inner_pair, source),

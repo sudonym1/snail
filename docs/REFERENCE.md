@@ -94,6 +94,10 @@ expected without conflict.
   fallback operator.
 - Tuple literals plus slicing use Python syntax: `(1, 2)`,
   `data[1:3]`, `data[:2]`, and `data[2:]`.
+- Collection literals use Python-inspired forms: lists `[1, 2]`, dicts
+  `%{"a": 1}`, and sets `#{1, 2}`. The empty dict literal is `%{}` and the
+  empty set literal is `#{}`.
+  `{...}` is always a block, not a literal.
 
 ## Pipeline operator
 Snail repurposes the `|` operator for generic data pipelining through
@@ -176,10 +180,11 @@ if let [user, domain] = pair; domain {
 ```
 
 ## Comprehensions
-List and dict comprehensions match Python's structure:
+List comprehensions match Python's structure, and dict comprehensions use the
+same `key: value` form inside `%{...}`:
 ```snail
 evens = [n for n in nums if n % 2 == 0]
-lookup = {n: n * 2 for n in nums if n > 1}
+lookup = %{n: n * 2 for n in nums if n > 1}
 ```
 
 ## Strings

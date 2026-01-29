@@ -20,7 +20,7 @@ syn case match
 " =============================================================================
 " COMMENTS
 " =============================================================================
-syn match snailComment "#.*$" contains=snailTodo,@Spell
+syn match snailComment "#\\%({\\)\\@!.*$" contains=snailTodo,@Spell
 syn keyword snailTodo TODO FIXME XXX NOTE HACK BUG contained
 
 " =============================================================================

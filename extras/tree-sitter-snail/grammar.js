@@ -22,6 +22,9 @@ const PREC = {
   CALL: 12,            // function call, attribute, index
 };
 
+const SET_START = token(prec(1, '#{'));
+const DICT_START = token(prec(1, '%{'));
+
 module.exports = grammar({
   name: 'snail',
 
@@ -493,6 +496,7 @@ module.exports = grammar({
       $.identifier,
       $.list_comp,
       $.list_literal,
+      $.set_literal,
       $.dict_comp,
       $.dict_literal,
       $.tuple_literal,
@@ -585,8 +589,17 @@ module.exports = grammar({
       ']',
     ),
 
+    set_literal: $ => seq(
+      SET_START,
+      optional(seq(
+        $._expr,
+        repeat(seq(',', $._expr)),
+      )),
+      '}',
+    ),
+
     dict_comp: $ => seq(
-      '{',
+      DICT_START,
       $._expr,
       ':',
       $._expr,
@@ -595,7 +608,7 @@ module.exports = grammar({
     ),
 
     dict_literal: $ => seq(
-      '{',
+      DICT_START,
       optional(seq(
         $.dict_entry,
         repeat(seq(',', $.dict_entry)),
