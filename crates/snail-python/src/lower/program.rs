@@ -3,10 +3,10 @@ use pyo3::types::PyList;
 use snail_ast::*;
 use snail_error::LowerError;
 
-use crate::awk::lower_awk_file_loop_with_auto_print;
-use crate::helpers::{assign_name, name_expr, number_expr, string_expr};
-use crate::py_ast::{AstBuilder, py_err_to_lower};
-use crate::stmt::lower_block_with_auto_print;
+use super::awk::lower_awk_file_loop_with_auto_print;
+use super::helpers::{assign_name, name_expr, number_expr, string_expr};
+use super::py_ast::{AstBuilder, py_err_to_lower};
+use super::stmt::lower_block_with_auto_print;
 
 pub fn lower_program(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
     lower_program_with_auto_print(py, program, false)

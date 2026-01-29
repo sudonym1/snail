@@ -3,13 +3,13 @@ use pyo3::types::PyList;
 use snail_ast::*;
 use snail_error::LowerError;
 
-use crate::constants::*;
-use crate::helpers::{byte_string_expr, name_expr, number_expr, regex_pattern_expr, string_expr};
-use crate::operators::{
+use super::constants::*;
+use super::helpers::{byte_string_expr, name_expr, number_expr, regex_pattern_expr, string_expr};
+use super::operators::{
     aug_op_to_string, lower_aug_assign_op, lower_binary_op, lower_bool_op, lower_compare_op,
     lower_unary_op,
 };
-use crate::py_ast::{AstBuilder, py_err_to_lower};
+use super::py_ast::{AstBuilder, py_err_to_lower};
 
 pub(crate) fn lower_expr(builder: &AstBuilder<'_>, expr: &Expr) -> Result<PyObject, LowerError> {
     lower_expr_with_exception(builder, expr, None)

@@ -1,7 +1,7 @@
 #![cfg(feature = "run-proptests")]
 
 use proptest::prelude::*;
-use pyo3::prelude::*;
+use snail_lower::{PyObject, Python};
 use snail_proptest::arbitrary::*;
 
 fn assert_python_compiles(py: Python<'_>, module: &PyObject) {

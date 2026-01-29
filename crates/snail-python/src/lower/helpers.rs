@@ -3,7 +3,7 @@ use pyo3::types::PyList;
 use snail_ast::{SourceSpan, StringDelimiter};
 use snail_error::LowerError;
 
-use crate::py_ast::{AstBuilder, py_err_to_lower, set_location};
+use super::py_ast::{AstBuilder, py_err_to_lower, set_location};
 
 pub(crate) fn assign_name(
     builder: &AstBuilder<'_>,

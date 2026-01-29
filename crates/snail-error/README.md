@@ -22,7 +22,6 @@ This crate provides unified error handling across all stages of Snail compilatio
 
 - **snail-parser**: Returns `ParseError` when parsing fails
 - **snail-lower**: Returns `LowerError` when transformation fails
-- **snail-core**: Uses `SnailError` as the unified Result type for compilation
 - **snail-python**: Uses `format_snail_error()` to display errors to users
 
 ## Error Format
