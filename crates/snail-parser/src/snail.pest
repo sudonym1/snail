@@ -90,9 +90,16 @@ pass_stmt = { "pass" }
 
 // Import statements: from/import and import
 import_stmt = _{ import_from | import_names }
-import_from = { "from" ~ dotted_name ~ "import" ~ import_items }
+import_from = { "from" ~ import_from_module ~ "import" ~ import_from_items }
 import_names = { "import" ~ import_items }
+import_from_module = { relative_module | dotted_name }
+relative_module = { relative_dots ~ dotted_name? }
+relative_dots = { "."+ }
+import_from_items = { import_star | import_paren_items | import_items }
 import_items = { import_item ~ ("," ~ import_item)* }
+import_items_multiline = { import_item ~ (NEWLINE* ~ "," ~ NEWLINE* ~ import_item)* }
+import_paren_items = { "(" ~ NEWLINE* ~ import_items_multiline ~ NEWLINE* ~ ","? ~ NEWLINE* ~ ")" }
+import_star = { "*" }
 import_item = { dotted_name ~ ("as" ~ identifier)? }
 dotted_name = { identifier ~ ("." ~ identifier)* }
 

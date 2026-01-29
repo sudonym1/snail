@@ -94,8 +94,9 @@ pub enum Stmt {
         span: SourceSpan,
     },
     ImportFrom {
-        module: Vec<String>,
-        items: Vec<ImportItem>,
+        level: usize,
+        module: Option<Vec<String>>,
+        items: ImportFromItems,
         span: SourceSpan,
     },
     Assign {
@@ -130,6 +131,12 @@ pub struct ImportItem {
     pub name: Vec<String>,
     pub alias: Option<String>,
     pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ImportFromItems {
+    Names(Vec<ImportItem>),
+    Star { span: SourceSpan },
 }
 
 #[derive(Debug, Clone, PartialEq)]

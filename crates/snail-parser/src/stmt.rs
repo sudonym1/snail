@@ -1,6 +1,7 @@
 use pest::iterators::Pair;
 use snail_ast::{
-    AssignTarget, Condition, ExceptHandler, Expr, ImportItem, Parameter, Stmt, WithItem,
+    AssignTarget, Condition, ExceptHandler, Expr, ImportFromItems, ImportItem, Parameter, Stmt,
+    WithItem,
 };
 use snail_error::ParseError;
 
@@ -457,16 +458,16 @@ fn parse_except_clause(pair: Pair<'_, Rule>, source: &str) -> Result<ExceptHandl
 fn parse_import_from(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
-    let module = parse_dotted_name(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing module name", span.clone(), source))?,
-    );
+    let module_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing module name", span.clone(), source))?;
+    let (level, module) = parse_import_from_module(module_pair, source)?;
     let items_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing import items", span.clone(), source))?;
-    let items = parse_import_items(items_pair, source)?;
+    let items = parse_import_from_items(items_pair, source)?;
     Ok(Stmt::ImportFrom {
+        level,
         module,
         items,
         span,
@@ -481,6 +482,80 @@ fn parse_import_names(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseE
         .ok_or_else(|| error_with_span("missing import items", span.clone(), source))?;
     let items = parse_import_items(items_pair, source)?;
     Ok(Stmt::Import { items, span })
+}
+
+fn parse_import_from_module(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<(usize, Option<Vec<String>>), ParseError> {
+    match pair.as_rule() {
+        Rule::import_from_module => {
+            let span = span_from_pair(&pair, source);
+            let mut inner = pair.into_inner();
+            let module_pair = inner
+                .next()
+                .ok_or_else(|| error_with_span("missing module name", span, source))?;
+            parse_import_from_module(module_pair, source)
+        }
+        Rule::relative_module => {
+            let span = span_from_pair(&pair, source);
+            let mut inner = pair.into_inner();
+            let dots_pair = inner.next().ok_or_else(|| {
+                error_with_span("missing relative import dots", span.clone(), source)
+            })?;
+            let level = dots_pair.as_str().chars().filter(|ch| *ch == '.').count();
+            let module = inner.next().map(parse_dotted_name);
+            Ok((level, module))
+        }
+        Rule::dotted_name => Ok((0, Some(parse_dotted_name(pair)))),
+        _ => Err(error_with_span(
+            format!("unsupported import module: {:?}", pair.as_rule()),
+            span_from_pair(&pair, source),
+            source,
+        )),
+    }
+}
+
+fn parse_import_from_items(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<ImportFromItems, ParseError> {
+    match pair.as_rule() {
+        Rule::import_from_items => {
+            let span = span_from_pair(&pair, source);
+            let mut inner = pair.into_inner();
+            let items_pair = inner
+                .next()
+                .ok_or_else(|| error_with_span("missing import items", span, source))?;
+            parse_import_from_items(items_pair, source)
+        }
+        Rule::import_star => Ok(ImportFromItems::Star {
+            span: span_from_pair(&pair, source),
+        }),
+        Rule::import_items | Rule::import_items_multiline => {
+            Ok(ImportFromItems::Names(parse_import_items(pair, source)?))
+        }
+        Rule::import_paren_items => {
+            let span = span_from_pair(&pair, source);
+            let mut inner = pair.into_inner();
+            let items_pair = inner
+                .find(|inner| {
+                    matches!(
+                        inner.as_rule(),
+                        Rule::import_items | Rule::import_items_multiline
+                    )
+                })
+                .ok_or_else(|| error_with_span("missing import items", span, source))?;
+            Ok(ImportFromItems::Names(parse_import_items(
+                items_pair, source,
+            )?))
+        }
+        _ => Err(error_with_span(
+            format!("unsupported import items: {:?}", pair.as_rule()),
+            span_from_pair(&pair, source),
+            source,
+        )),
+    }
 }
 
 fn parse_import_items(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<ImportItem>, ParseError> {

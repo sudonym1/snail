@@ -3,6 +3,17 @@ import math, sys as sysmod
 from math import sqrt as root
 from __future__ import braces
 
+if False {
+    # Import variants (guarded to avoid runtime errors in this example script).
+    from . import local_mod
+    from ..pkg import name as alias
+    from math import *
+    from math import (
+        sin,
+        cos,
+    )
+}
+
 class Counter {
     def __init__(self, start) {
         self.start = start

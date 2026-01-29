@@ -46,7 +46,14 @@ Snail uses Python's import semantics and exposes the same namespaces:
 ```snail
 import math, sys as sysmod
 from math import sqrt as root
+from math import (sin, cos)
+from math import *
+from . import local_mod
+from ..pkg import name as alias
 ```
+Parenthesized import lists can span multiple lines and include a trailing comma,
+just like Python. Relative imports follow Python's rules and require running
+inside a package context.
 
 ### Auto-import
 Common standard library modules are available without explicit imports:

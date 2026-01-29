@@ -250,40 +250,48 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                 .map_err(py_err_to_lower)
         }
         Stmt::ImportFrom {
+            level,
             module,
             items,
             span,
         } => {
-            let filtered_items: Vec<&ImportItem> = if module.len() == 1 && module[0] == "__future__"
-            {
-                items
-                    .iter()
-                    .filter(|item| !(item.name.len() == 1 && item.name[0] == "braces"))
-                    .collect()
-            } else {
-                items.iter().collect()
+            let module_is_future = *level == 0
+                && module
+                    .as_ref()
+                    .is_some_and(|module| module.len() == 1 && module[0] == "__future__");
+            let names = match items {
+                ImportFromItems::Names(items) => {
+                    let filtered_items: Vec<&ImportItem> = if module_is_future {
+                        items
+                            .iter()
+                            .filter(|item| !(item.name.len() == 1 && item.name[0] == "braces"))
+                            .collect()
+                    } else {
+                        items.iter().collect()
+                    };
+                    if filtered_items.is_empty() {
+                        return builder
+                            .call_node("Pass", Vec::new(), span)
+                            .map_err(py_err_to_lower);
+                    }
+                    filtered_items
+                        .iter()
+                        .map(|item| lower_import_name(builder, item))
+                        .collect::<Result<Vec<_>, _>>()?
+                }
+                ImportFromItems::Star { .. } => vec![lower_import_star(builder)?],
             };
-            if filtered_items.is_empty() {
-                return builder
-                    .call_node("Pass", Vec::new(), span)
-                    .map_err(py_err_to_lower);
-            }
-            let names = filtered_items
-                .iter()
-                .map(|item| lower_import_name(builder, item))
-                .collect::<Result<Vec<_>, _>>()?;
-            let module_name = if module.is_empty() {
-                builder.py().None().into_py(builder.py())
-            } else {
-                module.join(".").into_py(builder.py())
-            };
+            let module_name = module
+                .as_ref()
+                .map(|module| module.join(".").into_py(builder.py()))
+                .unwrap_or_else(|| builder.py().None().into_py(builder.py()));
             builder
                 .call_node(
                     "ImportFrom",
                     vec![
                         module_name,
                         PyList::new_bound(builder.py(), names).into_py(builder.py()),
-                        0u8.into_py(builder.py()),
+                        (*level as u32).into_py(builder.py()),
                     ],
                     span,
                 )
@@ -867,6 +875,13 @@ fn lower_import_name(builder: &AstBuilder<'_>, item: &ImportItem) -> Result<PyOb
         .unwrap_or_else(|| builder.py().None().into_py(builder.py()));
     builder
         .call_node_no_loc("alias", vec![name.into_py(builder.py()), asname])
+        .map_err(py_err_to_lower)
+}
+
+fn lower_import_star(builder: &AstBuilder<'_>) -> Result<PyObject, LowerError> {
+    let asname = builder.py().None().into_py(builder.py());
+    builder
+        .call_node_no_loc("alias", vec!["*".into_py(builder.py()), asname])
         .map_err(py_err_to_lower)
 }
 

@@ -2,8 +2,8 @@ mod common;
 
 use common::*;
 use snail_ast::{
-    Argument, AssignTarget, AugAssignOp, BinaryOp, Condition, Expr, IncrOp, Parameter, Stmt,
-    StringDelimiter,
+    Argument, AssignTarget, AugAssignOp, BinaryOp, Condition, Expr, ImportFromItems, IncrOp,
+    Parameter, Stmt, StringDelimiter,
 };
 use snail_parser::parse_program;
 
@@ -380,11 +380,110 @@ fn parses_imports() {
     }
 
     match &program.stmts[1] {
-        Stmt::ImportFrom { module, items, .. } => {
-            assert_eq!(module, &vec!["collections"]);
-            assert_eq!(items.len(), 2);
-            assert_eq!(items[0].name, vec!["deque"]);
-            assert_eq!(items[1].alias, Some("dd".to_string()));
+        Stmt::ImportFrom {
+            level,
+            module,
+            items,
+            ..
+        } => {
+            assert_eq!(*level, 0);
+            assert_eq!(module.as_ref(), Some(&vec!["collections".to_string()]));
+            match items {
+                ImportFromItems::Names(items) => {
+                    assert_eq!(items.len(), 2);
+                    assert_eq!(items[0].name, vec!["deque"]);
+                    assert_eq!(items[1].alias, Some("dd".to_string()));
+                }
+                other => panic!("Expected name list, got {other:?}"),
+            }
+        }
+        other => panic!("Expected from-import statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_import_from_variants() {
+    let source = "from . import local\nfrom ..pkg import name as alias\nfrom pkg import *\nfrom pkg import (\n  a,\n  b as bee,\n)\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 4);
+
+    match &program.stmts[0] {
+        Stmt::ImportFrom {
+            level,
+            module,
+            items,
+            ..
+        } => {
+            assert_eq!(*level, 1);
+            assert!(module.is_none());
+            match items {
+                ImportFromItems::Names(items) => {
+                    assert_eq!(items.len(), 1);
+                    assert_eq!(items[0].name, vec!["local"]);
+                    assert_eq!(items[0].alias, None);
+                }
+                other => panic!("Expected name list, got {other:?}"),
+            }
+        }
+        other => panic!("Expected from-import statement, got {other:?}"),
+    }
+
+    match &program.stmts[1] {
+        Stmt::ImportFrom {
+            level,
+            module,
+            items,
+            ..
+        } => {
+            assert_eq!(*level, 2);
+            assert_eq!(module.as_ref(), Some(&vec!["pkg".to_string()]));
+            match items {
+                ImportFromItems::Names(items) => {
+                    assert_eq!(items.len(), 1);
+                    assert_eq!(items[0].name, vec!["name"]);
+                    assert_eq!(items[0].alias, Some("alias".to_string()));
+                }
+                other => panic!("Expected name list, got {other:?}"),
+            }
+        }
+        other => panic!("Expected from-import statement, got {other:?}"),
+    }
+
+    match &program.stmts[2] {
+        Stmt::ImportFrom {
+            level,
+            module,
+            items,
+            ..
+        } => {
+            assert_eq!(*level, 0);
+            assert_eq!(module.as_ref(), Some(&vec!["pkg".to_string()]));
+            match items {
+                ImportFromItems::Star { .. } => {}
+                other => panic!("Expected star import, got {other:?}"),
+            }
+        }
+        other => panic!("Expected from-import statement, got {other:?}"),
+    }
+
+    match &program.stmts[3] {
+        Stmt::ImportFrom {
+            level,
+            module,
+            items,
+            ..
+        } => {
+            assert_eq!(*level, 0);
+            assert_eq!(module.as_ref(), Some(&vec!["pkg".to_string()]));
+            match items {
+                ImportFromItems::Names(items) => {
+                    assert_eq!(items.len(), 2);
+                    assert_eq!(items[0].name, vec!["a"]);
+                    assert_eq!(items[1].name, vec!["b"]);
+                    assert_eq!(items[1].alias, Some("bee".to_string()));
+                }
+                other => panic!("Expected name list, got {other:?}"),
+            }
         }
         other => panic!("Expected from-import statement, got {other:?}"),
     }
