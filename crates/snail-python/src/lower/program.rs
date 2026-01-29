@@ -7,6 +7,7 @@ use super::awk::lower_awk_file_loop_with_auto_print;
 use super::helpers::{assign_name, name_expr, number_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_with_auto_print;
+use super::validate::{validate_yield_usage_awk, validate_yield_usage_program};
 
 pub fn lower_program(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
     lower_program_with_auto_print(py, program, false)
@@ -17,6 +18,7 @@ pub fn lower_program_with_auto_print(
     program: &Program,
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
+    validate_yield_usage_program(program)?;
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
     let body =
         lower_block_with_auto_print(&builder, &program.stmts, auto_print_last, &program.span)?;
@@ -32,6 +34,7 @@ pub fn lower_awk_program_with_auto_print(
     program: &AwkProgram,
     auto_print: bool,
 ) -> Result<PyObject, LowerError> {
+    validate_yield_usage_awk(program)?;
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
     let span = program.span.clone();
     let mut body = Vec::new();

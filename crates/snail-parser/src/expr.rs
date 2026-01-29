@@ -15,6 +15,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
     match pair.as_rule() {
         Rule::expr
         | Rule::aug_assign_expr
+        | Rule::yield_expr
         | Rule::if_expr
         | Rule::or_expr
         | Rule::and_expr
@@ -78,6 +79,7 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
     match pair.as_rule() {
         Rule::expr => parse_expr_rule(pair.into_inner().next().unwrap(), source),
         Rule::aug_assign_expr => parse_aug_assign_expr(pair, source),
+        Rule::yield_expr => parse_yield_expr(pair, source),
         Rule::if_expr => parse_if_expr(pair, source),
         Rule::or_expr => fold_left_binary(pair, source, BinaryOp::Or),
         Rule::and_expr => fold_left_binary(pair, source, BinaryOp::And),
@@ -102,6 +104,33 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
             span_from_pair(&pair, source),
             source,
         )),
+    }
+}
+
+fn parse_yield_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let Some(first) = inner.next() else {
+        return Ok(Expr::Yield { value: None, span });
+    };
+    match first.as_rule() {
+        Rule::yield_from => {
+            let expr_pair = first.into_inner().next().ok_or_else(|| {
+                error_with_span("missing yield from expression", span.clone(), source)
+            })?;
+            let expr = parse_expr_pair(expr_pair, source)?;
+            Ok(Expr::YieldFrom {
+                expr: Box::new(expr),
+                span,
+            })
+        }
+        _ => {
+            let expr = parse_expr_pair(first, source)?;
+            Ok(Expr::Yield {
+                value: Some(Box::new(expr)),
+                span,
+            })
+        }
     }
 }
 

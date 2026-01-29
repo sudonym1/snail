@@ -83,6 +83,19 @@ def cleanup() {
     pass
 }
 
+def count_up(limit) {
+    i = 0
+    while i < limit {
+        yield i
+        i = i + 1
+    }
+}
+
+def chained_count() {
+    yield from count_up(2)
+    yield 99
+}
+
 data = list(range(5))
 nums = [1, 2, 3, 4]
 pairs = %{"a": 1, "b": 2}
@@ -259,6 +272,10 @@ total = compute(data)
 extras = %{"bonus": 5}
 values = [3, 4]
 joined = join_all(1, 2, *values, **extras)
+gen_values = []
+for v in chained_count() {
+    gen_values.append(v)
+}
 assert total == 6, "total"
 print("first", first)
 print("value", value)
@@ -275,6 +292,7 @@ print("evens", evens)
 print("lookup", lookup)
 print("with", ctx_msg)
 print("joined", joined)
+print("gen_values", gen_values)
 print("loop_done", loop_done)
 print("for_done", for_done)
 print("pair", pair)

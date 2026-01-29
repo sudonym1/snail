@@ -118,7 +118,11 @@ assign_tuple = { "(" ~ assign_target_tuple ~ ")" }
 expr_stmt = { expr }
 
 // Expressions: precedence from lowest (aug assignment) to highest (power)
-expr = { aug_assign_expr | if_expr }
+expr = { aug_assign_expr | yield_expr | if_expr }
+
+yield_expr = { "yield" ~ (yield_from | yield_value)? }
+yield_from = { "from" ~ if_expr }
+yield_value = _{ if_expr }
 
 aug_assign_expr = { aug_target ~ aug_op ~ expr }
 aug_target = { assign_target_ref }
@@ -279,6 +283,7 @@ keyword = _{
   ("if" | "else" | "elif" | "while" | "for" | "in" | "def" | "class"
   | "return" | "break" | "continue" | "pass" | "raise" | "try" | "except"
   | "finally" | "with" | "assert" | "del" | "and" | "or" | "not" | "import" | "from" | "as"
+  | "yield"
   | "let"
   | "BEGIN" | "END"
   | "True" | "False" | "None") ~ !ident_continue

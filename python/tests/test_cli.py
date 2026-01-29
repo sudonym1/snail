@@ -199,6 +199,36 @@ def test_compact_try_default_none(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "True"
 
 
+def test_generator_yield(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def counter(n) {",
+            "    i = 0",
+            "    while i < n {",
+            "        yield i",
+            "        i = i + 1",
+            "    }",
+            "}",
+            "def chain() {",
+            "    yield from counter(2)",
+            "    yield 5",
+            "}",
+            "for value in chain() { print(value) }",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["0", "1", "5"]
+
+
+def test_top_level_yield_rejected() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["yield 1"])
+    message = str(excinfo.value)
+    assert "yield" in message
+    assert "function" in message
+
+
 def test_file_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     script = tmp_path / "script.snail"
     script.write_text("import sys\nprint(sys.argv[1])\n")
