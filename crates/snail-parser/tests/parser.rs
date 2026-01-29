@@ -362,6 +362,100 @@ fn parses_compound_expression() {
 }
 
 #[test]
+fn parses_lambda_no_params() {
+    let source = "f = lambda() { 1 }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (targets, value) = expect_assign(&program.stmts[0]);
+    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "f"));
+    match value {
+        Expr::Lambda { params, body, .. } => {
+            assert!(params.is_empty());
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::Expr { value, .. } => expect_number(value, "1"),
+                other => panic!("Expected expression statement, got {other:?}"),
+            }
+        }
+        other => panic!("Expected lambda expression, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_with_params_and_defaults() {
+    let source = "f = lambda(x, y=2, *rest, **kw) { x }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (targets, value) = expect_assign(&program.stmts[0]);
+    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "f"));
+    match value {
+        Expr::Lambda { params, body, .. } => {
+            assert_eq!(params.len(), 4);
+            match &params[0] {
+                Parameter::Regular { name, default, .. } => {
+                    assert_eq!(name, "x");
+                    assert!(default.is_none());
+                }
+                other => panic!("Expected regular param, got {other:?}"),
+            }
+            match &params[1] {
+                Parameter::Regular { name, default, .. } => {
+                    assert_eq!(name, "y");
+                    let default = default.as_ref().expect("expected default");
+                    expect_number(default, "2");
+                }
+                other => panic!("Expected regular param with default, got {other:?}"),
+            }
+            match &params[2] {
+                Parameter::VarArgs { name, .. } => assert_eq!(name, "rest"),
+                other => panic!("Expected *args param, got {other:?}"),
+            }
+            match &params[3] {
+                Parameter::KwArgs { name, .. } => assert_eq!(name, "kw"),
+                other => panic!("Expected **kwargs param, got {other:?}"),
+            }
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected lambda expression, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_nested_and_called() {
+    let source = "outer = lambda(x) { lambda(y) { x + y } }\nvalue = lambda(x) { x + 1 }(2)\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+
+    let (targets, value) = expect_assign(&program.stmts[0]);
+    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "outer"));
+    match value {
+        Expr::Lambda { body, .. } => match &body[0] {
+            Stmt::Expr { value, .. } => match value {
+                Expr::Lambda { .. } => {}
+                other => panic!("Expected nested lambda, got {other:?}"),
+            },
+            other => panic!("Expected expression statement, got {other:?}"),
+        },
+        other => panic!("Expected lambda expression, got {other:?}"),
+    }
+
+    let (targets, value) = expect_assign(&program.stmts[1]);
+    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "value"));
+    match value {
+        Expr::Call { func, args, .. } => {
+            assert_eq!(args.len(), 1);
+            match func.as_ref() {
+                Expr::Lambda { .. } => {}
+                other => panic!("Expected lambda callee, got {other:?}"),
+            }
+        }
+        other => panic!("Expected call expression, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_imports() {
     let source =
         "import sys, os as operating_system\nfrom collections import deque, defaultdict as dd\n";

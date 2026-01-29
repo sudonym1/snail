@@ -510,6 +510,12 @@ fn validate_expr_for_map(expr: &Expr, source: &str) -> Result<(), ParseError> {
                 validate_expr_for_map(fallback, source)?;
             }
         }
+        Expr::Lambda { params, body, .. } => {
+            for param in params {
+                validate_param_for_map(param, source)?;
+            }
+            validate_block_for_map(body, source)?;
+        }
         Expr::Compound { expressions, .. } => {
             for expr in expressions {
                 validate_expr_for_map(expr, source)?;
@@ -873,6 +879,12 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
             if let Some(fallback) = fallback {
                 validate_expr(fallback, source)?;
             }
+        }
+        Expr::Lambda { params, body, .. } => {
+            for param in params {
+                validate_param(param, source)?;
+            }
+            validate_block(body, source)?;
         }
         Expr::Compound { expressions, .. } => {
             for expr in expressions {

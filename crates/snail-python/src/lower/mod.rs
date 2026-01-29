@@ -1,5 +1,6 @@
 mod awk;
 mod constants;
+mod desugar;
 mod expr;
 mod helpers;
 mod map;

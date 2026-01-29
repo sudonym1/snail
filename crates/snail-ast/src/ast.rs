@@ -249,6 +249,11 @@ pub enum Expr {
         fallback: Option<Box<Expr>>,
         span: SourceSpan,
     },
+    Lambda {
+        params: Vec<Parameter>,
+        body: Vec<Stmt>,
+        span: SourceSpan,
+    },
     Compound {
         expressions: Vec<Expr>,
         span: SourceSpan,

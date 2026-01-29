@@ -64,6 +64,11 @@ def cleanup() {
     pass
 }
 
+adder = lambda(x, y) { x + y }
+scaled = lambda(value) { doubled = value * 2; doubled + 1 }
+adder_result = adder(2, 3)
+scaled_result = scaled(4)
+
 data = list(range(5))
 nums = [1, 2, 3, 4]
 pairs = {"a": 1, "b": 2}
@@ -254,6 +259,8 @@ print("evens", evens)
 print("lookup", lookup)
 print("with", ctx_msg)
 print("joined", joined)
+print("adder_result", adder_result)
+print("scaled_result", scaled_result)
 print("loop_done", loop_done)
 print("for_done", for_done)
 print("pair", pair)

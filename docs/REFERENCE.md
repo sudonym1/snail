@@ -132,6 +132,18 @@ joined = join_all(1, 2, *values, **extras)
 Default values, variadic `*args`, and `**kwargs` work as in Python. Calls accept
 positional and keyword arguments interchangeably.
 
+## Lambdas
+Anonymous functions use the `lambda` keyword with the same parameter rules as
+`def`:
+```snail
+adder = lambda(x, y=1) { x + y }
+scale = lambda(value) { doubled = value * 2; doubled + 1 }
+print(adder(2, 3), scale(4))
+```
+The lambda body is a Snail block. The value of the lambda is the value of the
+last expression in the block (or `None` if the block has no expression). Use
+`return` to exit early when needed.
+
 ## Classes and methods
 Classes use the same block style. Methods take `self` explicitly and interact
 with Python's attribute model:

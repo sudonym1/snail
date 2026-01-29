@@ -4,6 +4,7 @@ use snail_ast::*;
 use snail_error::LowerError;
 
 use super::constants::*;
+use super::desugar::LambdaHoister;
 use super::helpers::{assign_name, name_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_with_auto_print;
@@ -27,6 +28,16 @@ pub fn lower_map_program_with_begin_end(
     end_blocks: &[Vec<Stmt>],
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
+    let mut hoister = LambdaHoister::new();
+    let begin_blocks: Vec<Vec<Stmt>> = begin_blocks
+        .iter()
+        .map(|block| hoister.desugar_block(block))
+        .collect();
+    let program = hoister.desugar_program(program);
+    let end_blocks: Vec<Vec<Stmt>> = end_blocks
+        .iter()
+        .map(|block| hoister.desugar_block(block))
+        .collect();
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
     let span = program.span.clone();
     let mut body = Vec::new();
@@ -90,17 +101,19 @@ pub fn lower_map_program_with_begin_end(
 
     // Begin blocks
     for block in begin_blocks {
-        let lowered = lower_block_with_auto_print(&builder, block, auto_print_last, &span)?;
+        let lowered =
+            lower_block_with_auto_print(&builder, block.as_slice(), auto_print_last, &span)?;
         body.extend(lowered);
     }
 
     // Generate file loop
-    let file_loop = lower_map_file_loop(&builder, program, &span, auto_print_last)?;
+    let file_loop = lower_map_file_loop(&builder, &program, &span, auto_print_last)?;
     body.push(file_loop);
 
     // End blocks
     for block in end_blocks {
-        let lowered = lower_block_with_auto_print(&builder, block, auto_print_last, &span)?;
+        let lowered =
+            lower_block_with_auto_print(&builder, block.as_slice(), auto_print_last, &span)?;
         body.extend(lowered);
     }
 

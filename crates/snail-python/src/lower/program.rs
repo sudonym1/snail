@@ -4,6 +4,7 @@ use snail_ast::*;
 use snail_error::LowerError;
 
 use super::awk::lower_awk_file_loop_with_auto_print;
+use super::desugar::LambdaHoister;
 use super::helpers::{assign_name, name_expr, number_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_with_auto_print;
@@ -17,6 +18,8 @@ pub fn lower_program_with_auto_print(
     program: &Program,
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
+    let mut hoister = LambdaHoister::new();
+    let program = hoister.desugar_program(program);
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
     let body =
         lower_block_with_auto_print(&builder, &program.stmts, auto_print_last, &program.span)?;
@@ -32,6 +35,8 @@ pub fn lower_awk_program_with_auto_print(
     program: &AwkProgram,
     auto_print: bool,
 ) -> Result<PyObject, LowerError> {
+    let mut hoister = LambdaHoister::new();
+    let program = hoister.desugar_awk_program(program);
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
     let span = program.span.clone();
     let mut body = Vec::new();
@@ -146,7 +151,7 @@ pub fn lower_awk_program_with_auto_print(
         )
         .map_err(py_err_to_lower)?;
 
-    let file_loop = lower_awk_file_loop_with_auto_print(&builder, program, &span, auto_print)?;
+    let file_loop = lower_awk_file_loop_with_auto_print(&builder, &program, &span, auto_print)?;
     let for_loop = builder
         .call_node(
             "For",

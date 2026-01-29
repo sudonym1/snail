@@ -8,7 +8,7 @@ use crate::literal::{
     parse_regex_literal, parse_slice, parse_structured_accessor, parse_subprocess,
     parse_tuple_literal,
 };
-use crate::stmt::parse_assign_target_ref_expr;
+use crate::stmt::{parse_assign_target_ref_expr, parse_block, parse_parameters};
 use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
 
 pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -33,6 +33,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         | Rule::try_fallback_primary
         | Rule::compound_expr => parse_expr_rule(pair, source),
         Rule::literal => parse_literal(pair, source),
+        Rule::lambda_expr => parse_lambda_expr(pair, source),
         Rule::exception_var => Ok(Expr::Name {
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
@@ -681,6 +682,20 @@ fn parse_paren_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
     })
 }
 
+fn parse_lambda_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let params_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing lambda parameters", span.clone(), source))?;
+    let params = parse_parameters(params_pair, source)?;
+    let body_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing lambda body", span.clone(), source))?;
+    let body = parse_block(body_pair, source)?;
+    Ok(Expr::Lambda { params, body, span })
+}
+
 fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
@@ -720,6 +735,7 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         Rule::dict_comp => parse_dict_comp(inner_pair, source),
         Rule::regex => parse_regex_literal(inner_pair, source),
         Rule::subprocess => parse_subprocess(inner_pair, source),
+        Rule::lambda_expr => parse_lambda_expr(inner_pair, source),
         Rule::paren_expr => parse_paren_expr(inner_pair, source),
         _ => Err(error_with_span(
             format!("unsupported atom: {:?}", inner_pair.as_rule()),

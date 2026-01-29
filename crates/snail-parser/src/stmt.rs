@@ -762,7 +762,10 @@ fn check_trailing_semicolon(source: &str, end_pos: usize) -> bool {
     source[end_pos..].chars().find(|c| !c.is_whitespace()) == Some(';')
 }
 
-fn parse_parameters(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Parameter>, ParseError> {
+pub(crate) fn parse_parameters(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<Vec<Parameter>, ParseError> {
     let mut params = Vec::new();
     for inner in pair.into_inner() {
         match inner.as_rule() {
