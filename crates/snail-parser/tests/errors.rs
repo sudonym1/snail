@@ -97,7 +97,7 @@ fn parser_rejects_braced_expression() {
 fn parser_rejects_incomplete_function_def() {
     let err = parse_err("def foo");
     let message = err.to_string();
-    assert!(message.contains("expected") || message.contains("("));
+    assert!(message.contains("expected") || message.contains("(") || message.contains("{"));
     assert!(err.span.is_some());
 }
 

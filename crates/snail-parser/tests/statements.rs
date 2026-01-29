@@ -395,3 +395,16 @@ fn parses_empty_function_body() {
         other => panic!("Expected function def, got {other:?}"),
     }
 }
+
+#[test]
+fn parses_empty_function_body_without_params() {
+    let program = parse_ok("def foo { }");
+    assert_eq!(program.stmts.len(), 1);
+    match &program.stmts[0] {
+        Stmt::Def { params, body, .. } => {
+            assert!(params.is_empty());
+            assert!(body.is_empty());
+        }
+        other => panic!("Expected function def, got {other:?}"),
+    }
+}

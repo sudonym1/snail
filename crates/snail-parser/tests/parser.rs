@@ -998,7 +998,7 @@ fn parser_reports_error_on_missing_colon_in_dict() {
 fn parser_rejects_incomplete_function_def() {
     let err = parse_program("def foo").expect_err("should fail on incomplete def");
     let message = err.to_string();
-    assert!(message.contains("expected") || message.contains("("));
+    assert!(message.contains("expected") || message.contains("(") || message.contains("{"));
 }
 
 #[test]

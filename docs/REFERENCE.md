@@ -144,6 +144,11 @@ def join_all(head, tail=0, *rest, **extras) {
 
 joined = join_all(1, 2, *values, **extras)
 ```
+Parentheses are optional when a named function takes no parameters:
+```snail
+def tick { print("tick") }
+tick()
+```
 Functions implicitly return the final non-semicolon expression statement.
 Use `return` for early exits and for `if`/`else` branches, or add a trailing
 semicolon to suppress the implicit return.

@@ -220,16 +220,20 @@ fn parse_def(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
         .ok_or_else(|| error_with_span("missing def name", span.clone(), source))?
         .as_str()
         .to_string();
-    let params_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing parameter list", span.clone(), source))?;
-    let params = parse_parameters(params_pair, source)?;
-    let body = parse_block(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing def block", span.clone(), source))?,
-        source,
-    )?;
+    let (params, body_pair) = match inner.next() {
+        Some(pair) if pair.as_rule() == Rule::parameters => {
+            let params = parse_parameters(pair, source)?;
+            let body_pair = inner
+                .next()
+                .ok_or_else(|| error_with_span("missing def block", span.clone(), source))?;
+            (params, body_pair)
+        }
+        Some(pair) if pair.as_rule() == Rule::block => (Vec::new(), pair),
+        Some(_) | None => {
+            return Err(error_with_span("missing def block", span.clone(), source));
+        }
+    };
+    let body = parse_block(body_pair, source)?;
     Ok(Stmt::Def {
         name,
         params,

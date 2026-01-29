@@ -55,7 +55,7 @@ let_cond = { "let" ~ assign_target_list ~ "=" ~ expr ~ let_guard? }
 let_guard = { ";" ~ expr }
 
 // Function and class definitions
-def_stmt = { "def" ~ identifier ~ parameters ~ block }
+def_stmt = { "def" ~ identifier ~ parameters? ~ block }
 class_stmt = { "class" ~ identifier ~ block }
 
 // Exception handling: try/except/else/finally

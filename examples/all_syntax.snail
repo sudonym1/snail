@@ -86,7 +86,7 @@ def join_all(head, tail=0, * rest, **extras) {
     return total
 }
 
-def risky() {
+def risky {
     return 1
 }
 
