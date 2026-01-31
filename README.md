@@ -14,10 +14,10 @@ way into something good, but its certainly not there yet.
 
 ## Installing Snail
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and then run:
-
 ```bash
-uv tool install -p 3.12 snail-lang
+pip install snail-lang
+-or-
+uv tool install snail-lang
 ```
 
 That installs the `snail` CLI for your user; try it with `snail "print('hello')"` once the install completes.
