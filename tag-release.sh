@@ -20,6 +20,7 @@ update_package_version pyproject.toml
 for cargo_file in crates/*/Cargo.toml extras/tree-sitter-snail/Cargo.toml; do
   update_package_version "${cargo_file}"
 done
+sed -i "s/^pkgver=.*$/pkgver=${release_version}/" extras/arch/PKGBUILD
 
 # Ensure CLI pulls the PyPI name for version metadata.
 grep -q 'version("snail-lang")' python/snail/__init__.py
