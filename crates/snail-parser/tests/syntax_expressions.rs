@@ -294,6 +294,15 @@ fn parses_structured_accessor_with_pipeline() {
 }
 
 #[test]
+fn parses_env_var() {
+    let program = parse_ok("value = $env");
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    expect_name(value, "$env");
+}
+
+#[test]
 fn parses_empty_structured_accessor() {
     let program = parse_ok("result = $[]");
     assert_eq!(program.stmts.len(), 1);

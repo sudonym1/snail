@@ -320,6 +320,12 @@ compound_value = (counter.inc(1); counter.inc(2); counter.inc(3))
 compound_recovered = (risky_fallback(); counter.inc(4)):"rescued"?
 compound_swallowed = (risky_fallback(); counter.inc(5))?
 
+# ---- Environment variables ----
+os.environ["SNAIL_DEMO"] = "ok"
+env_attr = $env.SNAIL_DEMO
+env_index = $env["SNAIL_DEMO"]
+env_missing = $env.SNAIL_MISSING?
+
 # ---- with statement ----
 with SimpleCtx() as message { ctx_msg = message }
 

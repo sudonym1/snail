@@ -82,6 +82,19 @@ snail -I "print(sys.version)"  # NameError: name 'sys' is not defined
 User assignments shadow auto-imported names, so `sys = "custom"` works as
 expected without conflict.
 
+## Environment variables
+Snail exposes the process environment as `$env`, a map-like wrapper around
+`os.environ`:
+```snail
+os.environ["SNAIL_DEMO"] = "ok"
+print($env.SNAIL_DEMO)
+print($env["SNAIL_DEMO"])
+print(repr($env.MISSING?))  # ''
+```
+
+Missing keys raise exceptions by default; using `?` invokes `$env`'s
+`__fallback__` to return an empty string.
+
 ## Statements and expressions
 - Assignments mirror Python (`value = 1`). Multiple statements can be separated
   with semicolons.

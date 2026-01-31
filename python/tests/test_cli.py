@@ -1315,3 +1315,31 @@ def test_example_map(
     captured = capsys.readouterr()
     assert str(file_a) in captured.out
     assert "bytes" in captured.out
+# --- Tests for $env ---
+
+
+def test_env_map_reads(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("SNAIL_ENV_TEST", "snail")
+    script = "print($env.SNAIL_ENV_TEST)\nprint($env['SNAIL_ENV_TEST'])"
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "snail\nsnail\n"
+
+
+def test_env_map_missing_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SNAIL_ENV_MISSING", raising=False)
+    with pytest.raises(KeyError):
+        snail.exec("print($env.SNAIL_ENV_MISSING)", auto_print=False)
+
+
+def test_env_map_missing_fallback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("SNAIL_ENV_MISSING", raising=False)
+    assert main(["-P", "print(repr($env.SNAIL_ENV_MISSING?))"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "''\n"
+
+

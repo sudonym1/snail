@@ -63,6 +63,7 @@ END { print("done") }
 | `$p` | Current file path |
 | `$m` | Last regex match object |
 
+
 Begin/end blocks can live in the source file (`BEGIN { ... }` / `END { ... }`) or be supplied
 via CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown. CLI BEGIN blocks run
 before in-file BEGIN blocks; CLI END blocks run after in-file END blocks.
@@ -99,6 +100,13 @@ BEGIN/END blocks are regular Snail blocks, so awk/map-only `$` variables are not
 ```bash
 snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 ```
+
+### Built-in Variables (All Modes)
+
+| Variable | Description |
+|----------|-------------|
+| `$e` | Exception object in `expr:fallback?` |
+| `$env` | Environment map (wrapper around `os.environ`) |
 
 ### Compact Error Handling
 
@@ -250,6 +258,9 @@ snail 'if let [_, user, domain] = "user@example.com" in /^[\w.]+@([\w.]+)$/ { pr
 
 # Awk mode: print line numbers for matches
 rg -n "TODO" README.md | snail --awk '/TODO/ { print("{$n}: {$0}") }'
+
+# Environment variables
+snail 'print($env.PATH)'
 ```
 
 ## 📚 Documentation

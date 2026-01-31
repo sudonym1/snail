@@ -37,9 +37,11 @@ pub(crate) const SNAIL_AWK_MATCH_PYVAR: &str = "__snail_match";
 pub(crate) const SNAIL_MAP_SRC: &str = "$src";
 pub(crate) const SNAIL_MAP_FD: &str = "$fd";
 pub(crate) const SNAIL_MAP_TEXT: &str = "$text";
+pub(crate) const SNAIL_ENV: &str = "$env";
 pub(crate) const SNAIL_MAP_SRC_PYVAR: &str = "__snail_src";
 pub(crate) const SNAIL_MAP_FD_PYVAR: &str = "__snail_fd";
 pub(crate) const SNAIL_MAP_TEXT_PYVAR: &str = "__snail_text";
+pub(crate) const SNAIL_ENV_PYVAR: &str = "__snail_env";
 pub const SNAIL_LAZY_TEXT_CLASS: &str = "__SnailLazyText";
 pub const SNAIL_LAZY_FILE_CLASS: &str = "__SnailLazyFile";
 
@@ -55,6 +57,7 @@ pub(crate) fn injected_py_name(name: &str) -> Option<&'static str> {
         SNAIL_MAP_SRC => Some(SNAIL_MAP_SRC_PYVAR),
         SNAIL_MAP_FD => Some(SNAIL_MAP_FD_PYVAR),
         SNAIL_MAP_TEXT => Some(SNAIL_MAP_TEXT_PYVAR),
+        SNAIL_ENV => Some(SNAIL_ENV_PYVAR),
         _ => None,
     }
 }

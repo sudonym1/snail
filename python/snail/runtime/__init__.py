@@ -48,6 +48,7 @@ _incr_attr = None
 _incr_index = None
 _aug_attr = None
 _aug_index = None
+_env_map = None
 
 
 def _get_compact_try():
@@ -129,6 +130,15 @@ def _get_lazy_file_class():
 
         _lazy_file_class = LazyFile
     return _lazy_file_class
+
+
+def _get_env_map():
+    global _env_map
+    if _env_map is None:
+        from .env import EnvMap
+
+        _env_map = EnvMap()
+    return _env_map
 
 
 def _get_incr_attr():
@@ -245,6 +255,7 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_incr_index"] = _lazy_incr_index
     globals_dict["__snail_aug_attr"] = _lazy_aug_attr
     globals_dict["__snail_aug_index"] = _lazy_aug_index
+    globals_dict["__snail_env"] = _get_env_map()
     globals_dict["js"] = _lazy_js
     globals_dict["__SnailLazyText"] = _get_lazy_text_class()
     globals_dict["__SnailLazyFile"] = _get_lazy_file_class()
