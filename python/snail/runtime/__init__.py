@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import importlib
+from typing import Optional
 
 __all__ = ["install_helpers", "AutoImportDict", "AUTO_IMPORT_NAMES"]
 
 # Names that can be auto-imported when first referenced.
 # Maps name -> (module, attribute) where attribute is None for whole-module imports.
-AUTO_IMPORT_NAMES: dict[str, tuple[str, str | None]] = {
+AUTO_IMPORT_NAMES: dict[str, tuple[str, Optional[str]]] = {
     # Whole module imports: import X
     "sys": ("sys", None),
     "os": ("os", None),

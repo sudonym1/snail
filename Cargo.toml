@@ -10,3 +10,9 @@ members = [
 
 [workspace.package]
 edition = "2024"
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = "deny"

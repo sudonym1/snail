@@ -7,9 +7,10 @@ name = "snail-lang"
 version = "0.7.0"
 description = "Snail programming language interpreter"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 license = { file = "LICENSE" }
 dependencies = [
+    "astunparse>=1.6.3; python_version < '3.9'",
     "jmespath>=1.0.1",
 ]
 

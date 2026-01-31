@@ -9,6 +9,7 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -880,7 +881,7 @@ def test_example_awk(
     assert "demo end" in captured.out
 
 
-def _snail_block_to_source(block: str) -> str | None:
+def _snail_block_to_source(block: str) -> Optional[str]:
     lines = block.splitlines()
     if lines and lines[0].startswith("#!"):
         lines = lines[1:]
@@ -890,7 +891,7 @@ def _snail_block_to_source(block: str) -> str | None:
     return source
 
 
-def _parse_snail_header(header: str) -> tuple[str, str | None]:
+def _parse_snail_header(header: str) -> tuple[str, Optional[str]]:
     if header == "snail":
         return ("snail", None)
     if header == "snail-map":
@@ -912,9 +913,9 @@ def _parse_snail_header(header: str) -> tuple[str, str | None]:
     raise ValueError(f"unsupported README fence: {header}")
 
 
-def _collect_readme_snail_sources(path: Path) -> list[tuple[str, int, str, str | None]]:
+def _collect_readme_snail_sources(path: Path) -> list[tuple[str, int, str, Optional[str]]]:
     content = path.read_text()
-    sources: list[tuple[str, int, str, str | None]] = []
+    sources: list[tuple[str, int, str, Optional[str]]] = []
 
     fence_re = re.compile(
         r"```(?P<header>snail(?:-awk(?:\([^)]*\))?|-map)?)\n(?P<body>.*?)\n```",
@@ -1028,7 +1029,7 @@ def test_readme_snail_blocks_parse(
     lang: str,
     line_no: int,
     source: str,
-    stdin_input: str | None,
+    stdin_input: Optional[str],
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:

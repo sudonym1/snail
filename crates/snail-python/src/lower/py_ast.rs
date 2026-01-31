@@ -6,13 +6,19 @@ use snail_error::LowerError;
 pub struct AstBuilder<'py> {
     py: Python<'py>,
     ast: Bound<'py, PyModule>,
+    needs_index_wrapper: bool,
 }
 
 impl<'py> AstBuilder<'py> {
     pub fn new(py: Python<'py>) -> PyResult<Self> {
+        let version_info = py.import_bound("sys")?.getattr("version_info")?;
+        let major: u8 = version_info.get_item(0)?.extract()?;
+        let minor: u8 = version_info.get_item(1)?.extract()?;
+        let needs_index_wrapper = major == 3 && minor < 9;
         Ok(Self {
             py,
             ast: py.import_bound("ast")?,
+            needs_index_wrapper,
         })
     }
 
@@ -64,6 +70,28 @@ impl<'py> AstBuilder<'py> {
         let tuple = PyTuple::new_bound(self.py, args);
         let node = self.ast.getattr(name)?.call1(tuple)?;
         Ok(node.into_py(self.py))
+    }
+
+    pub fn wrap_index(&self, slice: PyObject, span: &SourceSpan) -> PyResult<PyObject> {
+        if self.needs_index_wrapper {
+            let slice_obj = slice.bind(self.py);
+            if let Ok(slice_type) = self.ast.getattr("Slice")
+                && slice_obj.is_instance(&slice_type)?
+            {
+                return Ok(slice);
+            }
+            if let Ok(ext_slice_type) = self.ast.getattr("ExtSlice")
+                && slice_obj.is_instance(&ext_slice_type)?
+            {
+                return Ok(slice);
+            }
+            if let Ok(index_type) = self.ast.getattr("Index") {
+                let index = index_type.call1((slice,))?;
+                set_location(&index, span)?;
+                return Ok(index.into_py(self.py));
+            }
+        }
+        Ok(slice)
     }
 }
 

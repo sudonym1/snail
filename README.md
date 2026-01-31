@@ -231,7 +231,7 @@ names = js('{{"name": "Ada"}}\n{{"name": "Lin"}}') | $[[*].name]
 ### Full Python Interoperability
 
 Snail compiles to Python AST—import any Python module, use any library, in any
-environment. Assuming that you are using Python 3.10 or later.
+environment. Assuming that you are using Python 3.8 or later.
 
 ## 🚀 Quick Start
 
@@ -282,7 +282,7 @@ machine snail adds 5 ms of overhead above the regular python3 interpreter.
 
 ### Prerequisites
 
-**Python 3.10+** (required at runtime)
+**Python 3.8+** (required at runtime)
 
 Snail runs in-process via a Pyo3 extension module, so it uses the active Python environment.
 

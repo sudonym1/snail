@@ -1,4 +1,4 @@
-.PHONY: all test build install clean sync benchmark develop
+.PHONY: all test build install clean sync benchmark develop test-rust
 
 UV ?= uv
 
@@ -9,6 +9,11 @@ SNAIL := $(if $(shell command -v snail 2>/dev/null),snail,bash -c 'cat > /dev/nu
 # Default target: test, build, and install
 all: test build install
 
+test-rust:
+	cargo fmt --check
+	CARGO_TARGET_DIR=target/ci cargo clippy
+	CARGO_TARGET_DIR=target/ci cargo test
+
 sync:
 	$(UV) sync --extra dev
 
@@ -16,11 +21,7 @@ develop: sync
 	$(UV) run -- python -m maturin develop
 
 # Run all tests
-test: develop
-	cargo fmt --check
-	RUSTFLAGS="-D warnings" cargo build
-	cargo clippy -- -D warnings
-	RUSTFLAGS="-D warnings" cargo test
+test: test-rust develop
 	$(UV) run -- python -m pytest python/tests
 	sha1sum CLAUDE.md AGENTS.md | $(UV) run -- $(SNAIL) -a '{assert $$1 == prev:$$1?, "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"; prev=$$1}'
 
