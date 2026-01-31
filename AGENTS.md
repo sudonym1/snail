@@ -197,9 +197,6 @@ When implementing a phase from the project plan:
 2. Update `examples/all_syntax.snail` with new syntax examples
 3. Add parser tests, lowering tests, and integration tests
 4. Update `docs/REFERENCE.md` if user-facing syntax changes
-5. **RUN ALL MANDATORY CI CHECKS** (see "MANDATORY: CI Requirements" section):
-   - `cargo fmt --check` (fix with `cargo fmt` if needed)
-   - `RUSTFLAGS="-D warnings" cargo build` (must pass with zero compiler warnings)
-   - `cargo clippy -- -D warnings` (must pass with zero clippy warnings)
-   - `RUSTFLAGS="-D warnings" cargo test` (all tests must pass)
+5. **RUN ALL MANDATORY CI CHECKS** (see "MANDATORY: CI Requirements" section).
+   This is just `make test`
 6. Only commit/push after ALL CI checks pass
