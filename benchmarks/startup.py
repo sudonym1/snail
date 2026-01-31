@@ -9,6 +9,7 @@ import statistics
 import subprocess
 import sys
 import time
+from typing import Optional
 
 
 def _percentile(sorted_values: list[float], percentile: float) -> float:
@@ -34,7 +35,7 @@ def _run_once(cmd: list[str], stdout, stderr, env: dict[str, str]) -> float:
     return (end - start) * 1000.0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Benchmark Snail startup time by running a command repeatedly.",
     )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Optional
 
 from . import __build_info__, compile_ast, exec
 
@@ -79,7 +80,11 @@ def _install_trimmed_excepthook() -> None:
             colorize = _colorize.can_colorize(file=sys.stderr)
         except Exception:
             colorize = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
-        for line in tb_exc.format(colorize=colorize):
+        try:
+            formatted = tb_exc.format(colorize=colorize)
+        except TypeError:
+            formatted = tb_exc.format()
+        for line in formatted:
             sys.stderr.write(line)
 
     sys.excepthook = _snail_excepthook
@@ -87,7 +92,7 @@ def _install_trimmed_excepthook() -> None:
 
 class _Args:
     def __init__(self) -> None:
-        self.file: str | None = None
+        self.file: Optional[str] = None
         self.awk = False
         self.map = False
         self.no_print = False
@@ -252,7 +257,7 @@ def _parse_args(argv: list[str]) -> _Args:
     return args
 
 
-def _format_version(version: str, build_info: dict[str, object] | None) -> str:
+def _format_version(version: str, build_info: Optional[dict[str, object]]) -> str:
     display_version = version if version.startswith("v") else f"v{version}"
     if not build_info:
         return display_version
@@ -277,7 +282,7 @@ def _get_version() -> str:
     return version
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     if argv is None:
         _install_trimmed_excepthook()
         argv = sys.argv[1:]
@@ -356,7 +361,13 @@ def main(argv: list[str] | None = None) -> int:
             end_code=namespace.end_code,
         )
         builtins.compile(python_ast, _display_filename(filename), "exec")
-        print(ast.unparse(python_ast))
+        try:
+            output = ast.unparse(python_ast)
+        except AttributeError:
+            import astunparse
+
+            output = astunparse.unparse(python_ast).rstrip("\n")
+        print(output)
         return 0
 
     return exec(

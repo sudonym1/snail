@@ -36,9 +36,7 @@ pub(crate) fn lower_assign_target(
         AssignTarget::Index { value, index, span } => {
             let value_expr = lower_expr_with_exception(builder, value, None)?;
             let index_expr = lower_expr_with_exception(builder, index, None)?;
-            builder
-                .call_node("Subscript", vec![value_expr, index_expr, store_ctx], span)
-                .map_err(py_err_to_lower)
+            subscript_expr(builder, value_expr, index_expr, store_ctx, span)
         }
         AssignTarget::Starred { target, span } => {
             let value = lower_assign_target(builder, target)?;
@@ -101,9 +99,7 @@ pub(crate) fn lower_delete_target(
         AssignTarget::Index { value, index, span } => {
             let value_expr = lower_expr_with_exception(builder, value, None)?;
             let index_expr = lower_expr_with_exception(builder, index, None)?;
-            builder
-                .call_node("Subscript", vec![value_expr, index_expr, del_ctx], span)
-                .map_err(py_err_to_lower)
+            subscript_expr(builder, value_expr, index_expr, del_ctx, span)
         }
         AssignTarget::Starred { .. } => Err(LowerError::new(
             "starred targets are not valid in del statements",
@@ -141,6 +137,19 @@ pub(crate) fn lower_delete_target(
                 .map_err(py_err_to_lower)
         }
     }
+}
+
+fn subscript_expr(
+    builder: &AstBuilder<'_>,
+    value: PyObject,
+    index: PyObject,
+    ctx: PyObject,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let slice = builder.wrap_index(index, span).map_err(py_err_to_lower)?;
+    builder
+        .call_node("Subscript", vec![value, slice, ctx], span)
+        .map_err(py_err_to_lower)
 }
 
 pub(crate) fn lower_regex_match(
@@ -450,17 +459,13 @@ pub(crate) fn lower_expr_with_exception(
                 builder.load_ctx().map_err(py_err_to_lower)?,
             )?;
             let index_expr = number_expr(builder, &python_index.to_string(), span)?;
-            builder
-                .call_node(
-                    "Subscript",
-                    vec![
-                        value,
-                        index_expr,
-                        builder.load_ctx().map_err(py_err_to_lower)?,
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
+            subscript_expr(
+                builder,
+                value,
+                index_expr,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+                span,
+            )
         }
         Expr::Number { value, span } => number_expr(builder, value, span),
         Expr::String {
@@ -805,17 +810,13 @@ pub(crate) fn lower_expr_with_exception(
                     span,
                 )
                 .map_err(py_err_to_lower)?;
-            builder
-                .call_node(
-                    "Subscript",
-                    vec![
-                        tuple_expr,
-                        index_expr,
-                        builder.load_ctx().map_err(py_err_to_lower)?,
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
+            subscript_expr(
+                builder,
+                tuple_expr,
+                index_expr,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+                span,
+            )
         }
         Expr::Regex { pattern, span } => {
             let func = name_expr(
@@ -908,17 +909,13 @@ pub(crate) fn lower_expr_with_exception(
                     .parse::<i32>()
                     .map_err(|_| LowerError::new(format!("Invalid match group index: .{attr}")))?;
                 let index_expr = number_expr(builder, &index.to_string(), span)?;
-                return builder
-                    .call_node(
-                        "Subscript",
-                        vec![
-                            value,
-                            index_expr,
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower);
+                return subscript_expr(
+                    builder,
+                    value,
+                    index_expr,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                    span,
+                );
             }
             builder
                 .call_node(
@@ -935,13 +932,13 @@ pub(crate) fn lower_expr_with_exception(
         Expr::Index { value, index, span } => {
             let value = lower_expr_with_exception(builder, value, exception_name)?;
             let index = lower_expr_with_exception(builder, index, exception_name)?;
-            builder
-                .call_node(
-                    "Subscript",
-                    vec![value, index, builder.load_ctx().map_err(py_err_to_lower)?],
-                    span,
-                )
-                .map_err(py_err_to_lower)
+            subscript_expr(
+                builder,
+                value,
+                index,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+                span,
+            )
         }
         Expr::Paren { expr, .. } => lower_expr_with_exception(builder, expr, exception_name),
         Expr::List { elements, span } => {
@@ -1344,17 +1341,13 @@ fn lower_postfix_name_incr(
             span,
         )
         .map_err(py_err_to_lower)?;
-    builder
-        .call_node(
-            "Subscript",
-            vec![
-                tuple_expr,
-                index_expr,
-                builder.load_ctx().map_err(py_err_to_lower)?,
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)
+    subscript_expr(
+        builder,
+        tuple_expr,
+        index_expr,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+        span,
+    )
 }
 
 fn incr_delta(op: IncrOp) -> &'static str {
@@ -1506,17 +1499,13 @@ fn lower_lambda_body_expr(
             span,
         )
         .map_err(py_err_to_lower)?;
-    builder
-        .call_node(
-            "Subscript",
-            vec![
-                tuple_expr,
-                index_expr,
-                builder.load_ctx().map_err(py_err_to_lower)?,
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)
+    subscript_expr(
+        builder,
+        tuple_expr,
+        index_expr,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+        span,
+    )
 }
 
 fn lower_call_arguments(

@@ -11,7 +11,6 @@ all: test build install
 
 test-rust:
 	cargo fmt --check
-	sha1sum CLAUDE.md AGENTS.md | $(UV) run -- $(SNAIL) -a '{assert $$1 == prev:$$1?, "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"; prev=$$1}'
 	CARGO_TARGET_DIR=target/ci cargo clippy
 	CARGO_TARGET_DIR=target/ci cargo test
 
@@ -24,6 +23,7 @@ develop: sync
 # Run all tests
 test: test-rust develop
 	$(UV) run -- python -m pytest python/tests
+	sha1sum CLAUDE.md AGENTS.md | $(UV) run -- $(SNAIL) -a '{assert $$1 == prev:$$1?, "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"; prev=$$1}'
 
 # Build release wheels
 build: sync

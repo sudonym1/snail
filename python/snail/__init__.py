@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ._native import __build_info__, compile, compile_ast, exec, parse, parse_ast
 
 
