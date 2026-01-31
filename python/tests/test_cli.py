@@ -10,7 +10,7 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 import pytest
 
@@ -50,6 +50,13 @@ def test_debug_snail_ast_basic(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug-snail-ast", "x = 1"]) == 0
     captured = capsys.readouterr()
     assert "Program" in captured.out
+    assert "Assign" in captured.out
+
+
+def test_debug_python_ast_basic(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--debug-python-ast", "x = 1"]) == 0
+    captured = capsys.readouterr()
+    assert "Module" in captured.out
     assert "Assign" in captured.out
 
 
@@ -104,7 +111,9 @@ def test_debug_snail_ast_begin_end(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Assign" in captured.out
 
 
-def test_debug_snail_ast_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_debug_snail_ast_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     script = tmp_path / "script.snail"
     script.write_text("x = 1")
     assert main(["--debug-snail-ast", "-f", str(script)]) == 0
@@ -112,7 +121,9 @@ def test_debug_snail_ast_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]
     assert "Program" in captured.out
 
 
-def test_debug_snail_ast_reports_parse_error(capsys: pytest.CaptureFixture[str]) -> None:
+def test_debug_snail_ast_reports_parse_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     with pytest.raises(SyntaxError):
         main(["--debug-snail-ast", "x ="])
 
@@ -139,8 +150,7 @@ def test_traceback_highlights_inline_snail() -> None:
     with pytest.raises(NameError) as excinfo:
         main(["x"])
     filenames = [
-        frame.filename
-        for frame in traceback.extract_tb(excinfo.value.__traceback__)
+        frame.filename for frame in traceback.extract_tb(excinfo.value.__traceback__)
     ]
     assert "snail:<cmd>" in filenames
 
@@ -151,8 +161,7 @@ def test_traceback_highlights_file_snail(tmp_path: Path) -> None:
     with pytest.raises(NameError) as excinfo:
         main(["-f", str(script)])
     filenames = [
-        frame.filename
-        for frame in traceback.extract_tb(excinfo.value.__traceback__)
+        frame.filename for frame in traceback.extract_tb(excinfo.value.__traceback__)
     ]
     assert f"snail:{script}" in filenames
 
@@ -163,14 +172,13 @@ def test_traceback_highlights_library_snail() -> None:
     with pytest.raises(NameError) as excinfo:
         snail.exec("x", filename="lib.snail")
     filenames = [
-        frame.filename
-        for frame in traceback.extract_tb(excinfo.value.__traceback__)
+        frame.filename for frame in traceback.extract_tb(excinfo.value.__traceback__)
     ]
     assert "snail:lib.snail" in filenames
 
 
 @pytest.fixture(autouse=True)
-def _stdin_devnull(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stdin_devnull(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     with open("/dev/null", "r") as handle:
         monkeypatch.setattr(sys, "stdin", handle)
         yield
@@ -353,7 +361,7 @@ def test_if_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [
             'pair = ["user", "example.com"]',
-            "if let [user, domain] = pair { print(domain) } else { print(\"no\") }",
+            'if let [user, domain] = pair { print(domain) } else { print("no") }',
         ]
     )
     assert main(["-P", script]) == 0
@@ -578,9 +586,7 @@ def test_version_prints_python_runtime(capsys: pytest.CaptureFixture[str]) -> No
     assert len(lines) >= 2
     python_line = lines[1]
     version = (
-        f"{sys.version_info.major}."
-        f"{sys.version_info.minor}."
-        f"{sys.version_info.micro}"
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     )
     assert python_line.startswith("Python ")
     assert version in python_line
@@ -668,14 +674,23 @@ def test_awk_multiple_begin_end_flags(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(sys, "stdin", io.StringIO("x\n"))
-    assert main([
-        "--awk",
-        "-b", "print('b1')",
-        "--begin", "print('b2')",
-        "-e", "print('e1')",
-        "--end", "print('e2')",
-        "{ print($0) }",
-    ]) == 0
+    assert (
+        main(
+            [
+                "--awk",
+                "-b",
+                "print('b1')",
+                "--begin",
+                "print('b2')",
+                "-e",
+                "print('e1')",
+                "--end",
+                "print('e2')",
+                "{ print($0) }",
+            ]
+        )
+        == 0
+    )
     captured = capsys.readouterr()
     assert captured.out == "b1\nb2\nx\ne1\ne2\n"
 
@@ -685,17 +700,26 @@ def test_awk_begin_end_interleaved_order(
 ) -> None:
     monkeypatch.setattr(sys, "stdin", io.StringIO("x\n"))
     # -b before code, -e after code
-    assert main([
-        "--awk",
-        "-b", "print('start')",
-        "{ print($0) }",
-        "-e", "print('end')",
-    ]) == 0
+    assert (
+        main(
+            [
+                "--awk",
+                "-b",
+                "print('start')",
+                "{ print($0) }",
+                "-e",
+                "print('end')",
+            ]
+        )
+        == 0
+    )
     captured = capsys.readouterr()
     assert captured.out == "start\nx\nend\n"
 
 
-def test_awk_begin_after_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_awk_begin_after_args(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     file_a = tmp_path / "a.txt"
     file_a.write_text("line\n")
     result = main(
@@ -804,6 +828,34 @@ def test_no_auto_import_path(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Path" in str(excinfo.value)
 
 
+# --- Tests for $env ---
+
+
+def test_env_map_reads(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("SNAIL_ENV_TEST", "snail")
+    script = "print($env.SNAIL_ENV_TEST)\nprint($env['SNAIL_ENV_TEST'])"
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "snail\nsnail\n"
+
+
+def test_env_map_missing_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SNAIL_ENV_MISSING", raising=False)
+    with pytest.raises(KeyError):
+        snail.exec("print($env.SNAIL_ENV_MISSING)", auto_print=False)
+
+
+def test_env_map_missing_fallback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("SNAIL_ENV_MISSING", raising=False)
+    assert main(["-P", "print(repr($env.SNAIL_ENV_MISSING?))"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "''\n"
+
+
 # --- Tests for byte strings ---
 
 
@@ -826,7 +878,7 @@ def test_byte_string_interpolation(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_raw_byte_string(capsys: pytest.CaptureFixture[str]) -> None:
     """Test raw byte strings."""
-    script = r'x = rb"\n"' + '\nprint(len(x))'
+    script = r'x = rb"\n"' + "\nprint(len(x))"
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     # rb"\n" should be 2 bytes: backslash and n
@@ -843,7 +895,7 @@ def test_byte_string_operations(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_byte_string_br_prefix(capsys: pytest.CaptureFixture[str]) -> None:
     """Test br prefix for raw byte strings."""
-    script = r'x = br"\t"' + '\nprint(len(x))'
+    script = r'x = br"\t"' + "\nprint(len(x))"
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     # br"\t" should be 2 bytes: backslash and t
@@ -860,7 +912,7 @@ def test_fstring_conversion_and_format_spec(capsys: pytest.CaptureFixture[str]) 
 
 def test_fstring_nested_format_spec(capsys: pytest.CaptureFixture[str]) -> None:
     """Test nested format spec interpolation."""
-    script = "value = 3.14159\nwidth = 6\nprec = 2\nprint(\"{value:{width}.{prec}f}\")"
+    script = 'value = 3.14159\nwidth = 6\nprec = 2\nprint("{value:{width}.{prec}f}")'
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     assert captured.out.rstrip("\n") == "  3.14"
@@ -931,7 +983,9 @@ def _parse_snail_header(header: str) -> tuple[str, Optional[str]]:
     raise ValueError(f"unsupported README fence: {header}")
 
 
-def _collect_readme_snail_sources(path: Path) -> list[tuple[str, int, str, Optional[str]]]:
+def _collect_readme_snail_sources(
+    path: Path,
+) -> list[tuple[str, int, str, Optional[str]]]:
     content = path.read_text()
     sources: list[tuple[str, int, str, Optional[str]]] = []
 
@@ -979,7 +1033,7 @@ def _collect_readme_oneliners(path: Path) -> list[tuple[int, str, list[str]]]:
 def _parse_oneliner_command(command: str) -> tuple[str, list[str]]:
     tokens = shlex.split(command)
     idx = tokens.index("snail")
-    tokens = tokens[idx+1:]
+    tokens = tokens[idx + 1 :]
     mode = "snail"
     i = 0
     while i < len(tokens):
@@ -1052,6 +1106,7 @@ def test_readme_snail_blocks_parse(
     tmp_path: Path,
 ) -> None:
     path = ROOT / "README.md"
+
     def _fake_run(cmd, shell=False, check=False, text=False, input=None, stdout=None):
         out = "" if text else b""
         return subprocess.CompletedProcess(cmd, 0, stdout=out)
@@ -1063,7 +1118,9 @@ def test_readme_snail_blocks_parse(
         assert main(["--awk", source]) == 0, f"failed at {path}:{line_no}"
     elif lang == "snail-map":
         map_file = _ensure_readme_map_file(tmp_path)
-        assert main(["--map", source, str(map_file)]) == 0, f"failed at {path}:{line_no}"
+        assert main(["--map", source, str(map_file)]) == 0, (
+            f"failed at {path}:{line_no}"
+        )
     else:
         combined = f"{README_SNIPPET_PREAMBLE}\n{source}"
         assert main([combined]) == 0, f"failed at {path}:{line_no}"
@@ -1101,9 +1158,7 @@ def test_readme_snail_oneliners(
 # Map mode tests
 
 
-def test_map_mode_from_args(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_map_mode_from_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Test map mode with files passed as CLI arguments."""
     file_a = tmp_path / "a.txt"
     file_b = tmp_path / "b.txt"
@@ -1150,9 +1205,7 @@ def test_map_mode_text_content(
     assert "11" in captured.out
 
 
-def test_map_mode_fd_access(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_map_mode_fd_access(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Test that $fd is a readable file handle."""
     file_a = tmp_path / "a.txt"
     file_a.write_text("first line\nsecond line\n")
@@ -1162,9 +1215,7 @@ def test_map_mode_fd_access(
     assert "first line" in captured.out
 
 
-def test_map_mode_lazy_text(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_map_mode_lazy_text(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Test that $text is lazy (can use $fd first, then $text is empty)."""
     file_a = tmp_path / "a.txt"
     file_a.write_text("content")
@@ -1182,16 +1233,18 @@ def test_map_begin_end_flags(
     file_b = tmp_path / "b.txt"
     file_a.write_text("alpha")
     file_b.write_text("beta")
-    result = main([
-        "--map",
-        "-b",
-        "print('start')",
-        "-e",
-        "print('done')",
-        "print($src)",
-        str(file_a),
-        str(file_b),
-    ])
+    result = main(
+        [
+            "--map",
+            "-b",
+            "print('start')",
+            "-e",
+            "print('done')",
+            "print($src)",
+            str(file_a),
+            str(file_b),
+        ]
+    )
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
@@ -1207,19 +1260,21 @@ def test_map_multiple_begin_end_flags(
 ) -> None:
     file_a = tmp_path / "a.txt"
     file_a.write_text("alpha")
-    result = main([
-        "--map",
-        "--begin",
-        "print('b1')",
-        "-b",
-        "print('b2')",
-        "print($src)",
-        "-e",
-        "print('e1')",
-        "--end",
-        "print('e2')",
-        str(file_a),
-    ])
+    result = main(
+        [
+            "--map",
+            "--begin",
+            "print('b1')",
+            "-b",
+            "print('b2')",
+            "print($src)",
+            "-e",
+            "print('e1')",
+            "--end",
+            "print('e2')",
+            str(file_a),
+        ]
+    )
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
@@ -1304,9 +1359,7 @@ def test_awk_and_map_mutually_exclusive(capsys: pytest.CaptureFixture[str]) -> N
     assert "--awk and --map cannot be used together" in captured.err
 
 
-def test_example_map(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_example_map(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Test that examples/map.snail runs successfully."""
     file_a = tmp_path / "test.txt"
     file_a.write_text("test content here\n")
@@ -1315,31 +1368,3 @@ def test_example_map(
     captured = capsys.readouterr()
     assert str(file_a) in captured.out
     assert "bytes" in captured.out
-# --- Tests for $env ---
-
-
-def test_env_map_reads(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setenv("SNAIL_ENV_TEST", "snail")
-    script = "print($env.SNAIL_ENV_TEST)\nprint($env['SNAIL_ENV_TEST'])"
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == "snail\nsnail\n"
-
-
-def test_env_map_missing_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SNAIL_ENV_MISSING", raising=False)
-    with pytest.raises(KeyError):
-        snail.exec("print($env.SNAIL_ENV_MISSING)", auto_print=False)
-
-
-def test_env_map_missing_fallback(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.delenv("SNAIL_ENV_MISSING", raising=False)
-    assert main(["-P", "print(repr($env.SNAIL_ENV_MISSING?))"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == "''\n"
-
-

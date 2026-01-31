@@ -99,6 +99,7 @@ class _Args:
         self.no_auto_import = False
         self.debug = False
         self.debug_snail_ast = False
+        self.debug_python_ast = False
         self.version = False
         self.help = False
         self.begin_code: list[str] = []
@@ -132,6 +133,7 @@ def _print_help(file=None) -> None:
     print("  -I, --no-auto-import    disable auto-imports", file=file)
     print("  --debug                 parse and compile, then print, do not run", file=file)
     print("  --debug-snail-ast       parse and print Snail AST, do not run", file=file)
+    print("  --debug-python-ast      parse and print Python AST, do not run", file=file)
     print("  -v, --version           show version and exit", file=file)
     print("  -h, --help              show this help message and exit", file=file)
 
@@ -232,6 +234,10 @@ def _parse_args(argv: list[str]) -> _Args:
             continue
         if token == "--debug-snail-ast":
             args.debug_snail_ast = True
+            idx += 1
+            continue
+        if token == "--debug-python-ast":
+            args.debug_python_ast = True
             idx += 1
             continue
         if token == "-f":
@@ -359,6 +365,24 @@ def main(argv: Optional[list[str]] = None) -> int:
             end_code=namespace.end_code,
         )
         print(snail_ast)
+        return 0
+
+    if namespace.debug_python_ast:
+        import ast
+
+        python_ast = compile_ast(
+            source,
+            mode=mode,
+            auto_print=not namespace.no_print,
+            filename=filename,
+            begin_code=namespace.begin_code,
+            end_code=namespace.end_code,
+        )
+        try:
+            output = ast.dump(python_ast, indent=2)
+        except TypeError:
+            output = ast.dump(python_ast)
+        print(output)
         return 0
 
     if namespace.debug:
