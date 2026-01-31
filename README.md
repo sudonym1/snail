@@ -313,3 +313,17 @@ cd snail
 make test
 make install
 ```
+
+### Arch Linux (PKGBUILD)
+
+An Arch package build file is available at `extras/arch/PKGBUILD`.
+
+```bash
+mkdir -p /tmp/snail-pkg
+cp extras/arch/PKGBUILD /tmp/snail-pkg/
+cd /tmp/snail-pkg
+
+# Update pkgver and sha256sums as needed, then build and install
+makepkg -si
+```
+
