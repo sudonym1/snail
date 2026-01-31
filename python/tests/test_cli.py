@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import ast
+import os
 import re
 import shlex
 import subprocess
@@ -568,6 +569,23 @@ def test_combined_short_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["-ah"]) == 0
     captured = capsys.readouterr()
     assert "usage:" in captured.out
+
+
+def test_version_prints_python_runtime(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--version"]) == 0
+    captured = capsys.readouterr()
+    lines = [line for line in captured.out.splitlines() if line.strip()]
+    assert len(lines) >= 2
+    python_line = lines[1]
+    version = (
+        f"{sys.version_info.major}."
+        f"{sys.version_info.minor}."
+        f"{sys.version_info.micro}"
+    )
+    assert python_line.startswith("Python ")
+    assert version in python_line
+    if sys.executable:
+        assert os.path.abspath(sys.executable) in python_line
 
 
 def test_value_flag_not_last_in_combination(

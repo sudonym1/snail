@@ -282,6 +282,18 @@ def _get_version() -> str:
     return version
 
 
+def _format_python_runtime() -> str:
+    version = (
+        f"{sys.version_info.major}."
+        f"{sys.version_info.minor}."
+        f"{sys.version_info.micro}"
+    )
+    executable = sys.executable or "<unknown>"
+    if executable != "<unknown>":
+        executable = os.path.abspath(executable)
+    return f"Python {version} ({executable})"
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     if argv is None:
         _install_trimmed_excepthook()
@@ -299,6 +311,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 0
     if namespace.version:
         print(_format_version(_get_version(), __build_info__))
+        print(_format_python_runtime())
         return 0
 
     # Validate --awk and --map are mutually exclusive
