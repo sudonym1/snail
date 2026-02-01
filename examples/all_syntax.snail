@@ -2,6 +2,10 @@
 # Each section includes comments to highlight the syntax being demonstrated.
 from __future__ import braces
 
+# ---- BEGIN/END blocks ----
+BEGIN { print("begin block") }
+END { print("end block") }
+
 # ---- Imports (regular, aliased, from-import, and relative imports) ----
 import math, sys as sysmod
 from math import sqrt as root

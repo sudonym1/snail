@@ -6,10 +6,7 @@ from typing import Optional
 
 from . import __build_info__, compile_ast, exec
 
-_USAGE = (
-    "snail [options] -f <file> [args]...\n"
-    "       snail [options] <code> [args]..."
-)
+_USAGE = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]..."
 _DESCRIPTION = "Snail programming language interpreter"
 _BOOLEAN_FLAGS = frozenset("amPIvh")
 _VALUE_FLAGS = frozenset("fbe")
@@ -119,11 +116,11 @@ def _print_help(file=None) -> None:
     print("  -a, --awk               awk mode", file=file)
     print("  -m, --map               map mode (process files one at a time)", file=file)
     print(
-        "  -b, --begin <code>       begin block code (awk/map mode, repeatable)",
+        "  -b, --begin <code>       begin block code (repeatable)",
         file=file,
     )
     print(
-        "  -e, --end <code>         end block code (awk/map mode, repeatable)",
+        "  -e, --end <code>         end block code (repeatable)",
         file=file,
     )
     print(
@@ -131,7 +128,9 @@ def _print_help(file=None) -> None:
         file=file,
     )
     print("  -I, --no-auto-import    disable auto-imports", file=file)
-    print("  --debug                 parse and compile, then print, do not run", file=file)
+    print(
+        "  --debug                 parse and compile, then print, do not run", file=file
+    )
     print("  --debug-snail-ast       parse and print Snail AST, do not run", file=file)
     print("  --debug-python-ast      parse and print Python AST, do not run", file=file)
     print("  -v, --version           show version and exit", file=file)
@@ -170,9 +169,7 @@ def _expand_short_options(argv: list[str]) -> list[str]:
                     expanded.append(f"-{flag}")
                     pos += 1
                     continue
-                if all(
-                    ch in _BOOLEAN_FLAGS or ch in _VALUE_FLAGS for ch in remainder
-                ):
+                if all(ch in _BOOLEAN_FLAGS or ch in _VALUE_FLAGS for ch in remainder):
                     raise ValueError(
                         f"option -{flag} requires an argument and must be last in a "
                         "combined flag group"
@@ -290,9 +287,7 @@ def _get_version() -> str:
 
 def _format_python_runtime() -> str:
     version = (
-        f"{sys.version_info.major}."
-        f"{sys.version_info.minor}."
-        f"{sys.version_info.micro}"
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     )
     executable = sys.executable or "<unknown>"
     if executable != "<unknown>":
@@ -323,14 +318,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Validate --awk and --map are mutually exclusive
     if namespace.awk and namespace.map:
         print("error: --awk and --map cannot be used together", file=sys.stderr)
-        return 2
-
-    # Validate -b/--begin and -e/--end only with --awk or --map mode
-    if (namespace.begin_code or namespace.end_code) and not (namespace.awk or namespace.map):
-        print(
-            "error: -b/--begin and -e/--end options require --awk or --map mode",
-            file=sys.stderr,
-        )
         return 2
 
     mode = "map" if namespace.map else ("awk" if namespace.awk else "snail")

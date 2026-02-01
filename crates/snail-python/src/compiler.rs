@@ -1,13 +1,13 @@
 use crate::lower::{
     lower_awk_program_with_auto_print, lower_map_program_with_begin_end,
-    lower_program_with_auto_print,
+    lower_program_with_begin_end,
 };
 use pyo3::prelude::*;
 use snail_ast::{CompileMode, Stmt};
 use snail_error::{ParseError, SnailError};
 use snail_parser::{
     parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
-    parse_program,
+    parse_program, parse_program_with_begin_end,
 };
 
 type BlockList = Vec<Vec<Stmt>>;
@@ -21,8 +21,14 @@ pub fn compile_snail_source_with_auto_print(
 ) -> Result<PyObject, SnailError> {
     match mode {
         CompileMode::Snail => {
-            let program = parse_program(source)?;
-            let module = lower_program_with_auto_print(py, &program, auto_print_last)?;
+            let (program, begin_blocks, end_blocks) = parse_program_with_begin_end(source)?;
+            let module = lower_program_with_begin_end(
+                py,
+                &program,
+                &begin_blocks,
+                &end_blocks,
+                auto_print_last,
+            )?;
             Ok(module)
         }
         CompileMode::Awk => {
@@ -42,6 +48,21 @@ pub fn compile_snail_source_with_auto_print(
             Ok(module)
         }
     }
+}
+
+pub fn compile_snail_source_with_begin_end(
+    py: Python<'_>,
+    main_source: &str,
+    begin_sources: &[&str],
+    end_sources: &[&str],
+    auto_print_last: bool,
+) -> Result<PyObject, SnailError> {
+    let (program, begin_blocks, end_blocks) = parse_program_with_begin_end(main_source)?;
+    let begin_blocks = merge_cli_begin_blocks(begin_sources, begin_blocks)?;
+    let end_blocks = merge_cli_end_blocks(end_sources, end_blocks)?;
+    let module =
+        lower_program_with_begin_end(py, &program, &begin_blocks, &end_blocks, auto_print_last)?;
+    Ok(module)
 }
 
 pub fn compile_awk_source_with_begin_end(

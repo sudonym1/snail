@@ -108,6 +108,35 @@ snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 | `$e` | Exception object in `expr:fallback?` |
 | `$env` | Environment map (wrapper around `os.environ`) |
 
+### Begin/End Blocks
+
+Regular Snail programs can include `BEGIN { ... }` and `END { ... }` blocks for
+setup and teardown. These blocks can also be supplied via CLI flags (`-b`/`--begin`,
+`-e`/`--end`) in all modes. CLI BEGIN blocks run before in-file BEGIN blocks; CLI
+END blocks run after in-file END blocks.
+BEGIN/END blocks are regular Snail blocks, so awk/map-only `$` variables are not
+available inside them.
+
+```snail
+print("running")
+BEGIN { print("start") }
+END { print("done") }
+```
+
+In regular mode, my main use case for this feature is passing unexported
+variables
+
+```bash
+my_bashvar=123
+snail -b x=$my_bashvar 'int(x) + 1'
+```
+
+This is roughly the same as using $env to access an exported variable.
+
+```bash
+my_bashvar=123 snail 'int($env.my_bashvar) + 1'
+```
+
 ### Compact Error Handling
 
 The `?` operator makes error handling terse yet expressive:
@@ -326,4 +355,3 @@ cd /tmp/snail-pkg
 # Update pkgver and sha256sums as needed, then build and install
 makepkg -si
 ```
-

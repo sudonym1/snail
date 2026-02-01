@@ -1,7 +1,14 @@
 // Top-level program entry points
-program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
+program = { SOI ~ stmt_sep* ~ program_entry_list? ~ stmt_sep* ~ EOI }
 awk_program = { SOI ~ stmt_sep* ~ awk_entry_list? ~ stmt_sep* ~ EOI }
 map_program = { SOI ~ stmt_sep* ~ map_entry_list? ~ stmt_sep* ~ EOI }
+
+// Regular mode: program with optional BEGIN/END blocks
+program_entry_list = { program_entry ~ (stmt_sep* ~ program_entry)* ~ stmt_sep* }
+program_entry = { program_begin_end | stmt }
+program_begin_end = _{ program_begin | program_end }
+program_begin = { "BEGIN" ~ block }
+program_end = { "END" ~ block }
 
 // AWK mode: pattern-action rules
 awk_entry_list = { awk_entry ~ (stmt_sep* ~ awk_entry)* ~ stmt_sep* }

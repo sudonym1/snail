@@ -8,12 +8,15 @@ mod profiling;
 pub use lower::{
     lower_awk_program, lower_awk_program_with_auto_print, lower_map_program,
     lower_map_program_with_auto_print, lower_map_program_with_begin_end, lower_program,
-    lower_program_with_auto_print,
+    lower_program_with_auto_print, lower_program_with_begin_end,
 };
 pub use pyo3::prelude::{PyObject, Python};
 
-use compiler::{compile_awk_source_with_begin_end, compile_map_source_with_begin_end};
-use compiler::{compile_snail_source_with_auto_print, merge_map_cli_blocks};
+use compiler::{
+    compile_awk_source_with_begin_end, compile_map_source_with_begin_end,
+    compile_snail_source_with_auto_print, compile_snail_source_with_begin_end,
+    merge_map_cli_blocks,
+};
 use linecache::{display_filename, register_linecache, strip_display_prefix};
 use profiling::{log_profile, profile_enabled};
 use pyo3::Bound;
@@ -24,7 +27,7 @@ use snail_ast::CompileMode;
 use snail_error::{ParseError, format_snail_error};
 use snail_parser::{
     parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
-    parse_program,
+    parse_program_with_begin_end,
 };
 use std::time::Instant;
 
@@ -66,7 +69,7 @@ fn compile_source(
     let total_start = Instant::now();
     let compile_start = Instant::now();
 
-    // If mode is awk/map and we have begin/end code, use the specialized function
+    // If we have begin/end code, use the specialized function
     let module = if !begin_code.is_empty() || !end_code.is_empty() {
         let begin_refs: Vec<&str> = begin_code.iter().map(|s| s.as_str()).collect();
         let end_refs: Vec<&str> = end_code.iter().map(|s| s.as_str()).collect();
@@ -79,8 +82,10 @@ fn compile_source(
                 compile_map_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
                     .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
             }
-            _ => compile_snail_source_with_auto_print(py, source, mode, auto_print)
-                .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?,
+            CompileMode::Snail => {
+                compile_snail_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
+                    .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
+            }
         }
     } else {
         compile_snail_source_with_auto_print(py, source, mode, auto_print)
@@ -277,6 +282,14 @@ struct MapAst {
     end_blocks: Vec<Vec<snail_ast::Stmt>>,
 }
 
+#[allow(dead_code)]
+#[derive(Debug)]
+struct SnailAst {
+    program: snail_ast::Program,
+    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
+    end_blocks: Vec<Vec<snail_ast::Stmt>>,
+}
+
 #[pyfunction(name = "parse_ast")]
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
 fn parse_ast_py(
@@ -289,9 +302,24 @@ fn parse_ast_py(
     let err_to_syntax =
         |err: ParseError| PySyntaxError::new_err(format_snail_error(&err.into(), filename));
     match parse_mode(mode)? {
-        CompileMode::Snail => parse_program(source)
-            .map(|program| format!("{:#?}", program))
-            .map_err(err_to_syntax),
+        CompileMode::Snail => {
+            let (program, begin_blocks, end_blocks) =
+                parse_program_with_begin_end(source).map_err(err_to_syntax)?;
+            let (begin_blocks, end_blocks) =
+                merge_map_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
+                    .map_err(err_to_syntax)?;
+
+            if begin_blocks.is_empty() && end_blocks.is_empty() {
+                return Ok(format!("{:#?}", program));
+            }
+
+            let snail_ast = SnailAst {
+                program,
+                begin_blocks,
+                end_blocks,
+            };
+            Ok(format!("{:#?}", snail_ast))
+        }
         CompileMode::Awk => {
             let program = if begin_code.is_empty() && end_code.is_empty() {
                 parse_awk_program(source).map_err(err_to_syntax)?
@@ -328,7 +356,7 @@ fn parse_ast_py(
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>"))]
 fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
     match parse_mode(mode)? {
-        CompileMode::Snail => parse_program(source)
+        CompileMode::Snail => parse_program_with_begin_end(source)
             .map(|_| ())
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
         CompileMode::Awk => parse_awk_program(source)

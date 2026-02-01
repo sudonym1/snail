@@ -15,5 +15,5 @@ pub use map::{
 };
 pub use program::{
     lower_awk_program, lower_awk_program_with_auto_print, lower_program,
-    lower_program_with_auto_print,
+    lower_program_with_auto_print, lower_program_with_begin_end,
 };

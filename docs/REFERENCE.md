@@ -12,6 +12,17 @@ By default, Snail pretty-prints the implicit return value of the last
 non-semicolon expression statement in a program. Use `-P`/`--no-print` to
 disable auto-printing.
 
+BEGIN/END blocks run once before/after the main program in regular mode:
+```snail
+BEGIN { print("start") }
+print("body")
+END { print("done") }
+```
+
+You can also provide setup/teardown code via `--begin` and `--end` in any mode.
+CLI BEGIN blocks run before in-file BEGIN blocks; CLI END blocks run after
+in-file END blocks.
+
 ## Map mode
 Map mode processes input files one at a time:
 ```bash

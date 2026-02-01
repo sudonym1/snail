@@ -8,7 +8,9 @@ use super::desugar::LambdaHoister;
 use super::helpers::{assign_name, name_expr, number_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_with_auto_print;
-use super::validate::{validate_yield_usage_awk, validate_yield_usage_program};
+use super::validate::{
+    validate_yield_usage_awk, validate_yield_usage_blocks, validate_yield_usage_program,
+};
 
 pub fn lower_program(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
     lower_program_with_auto_print(py, program, false)
@@ -19,13 +21,49 @@ pub fn lower_program_with_auto_print(
     program: &Program,
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
+    lower_program_with_begin_end(py, program, &[], &[], auto_print_last)
+}
+
+pub fn lower_program_with_begin_end(
+    py: Python<'_>,
+    program: &Program,
+    begin_blocks: &[Vec<Stmt>],
+    end_blocks: &[Vec<Stmt>],
+    auto_print_last: bool,
+) -> Result<PyObject, LowerError> {
     let mut hoister = LambdaHoister::new();
+    let begin_blocks: Vec<Vec<Stmt>> = begin_blocks
+        .iter()
+        .map(|block| hoister.desugar_block(block))
+        .collect();
     let program = hoister.desugar_program(program);
+    let end_blocks: Vec<Vec<Stmt>> = end_blocks
+        .iter()
+        .map(|block| hoister.desugar_block(block))
+        .collect();
     validate_yield_usage_program(&program)?;
+    validate_yield_usage_blocks(&begin_blocks)?;
+    validate_yield_usage_blocks(&end_blocks)?;
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
-    let body =
-        lower_block_with_auto_print(&builder, &program.stmts, auto_print_last, &program.span)?;
-    builder.module(body, &program.span).map_err(py_err_to_lower)
+    let span = program.span.clone();
+    let mut body = Vec::new();
+
+    for block in begin_blocks {
+        let lowered =
+            lower_block_with_auto_print(&builder, block.as_slice(), auto_print_last, &span)?;
+        body.extend(lowered);
+    }
+
+    let main_body = lower_block_with_auto_print(&builder, &program.stmts, auto_print_last, &span)?;
+    body.extend(main_body);
+
+    for block in end_blocks {
+        let lowered =
+            lower_block_with_auto_print(&builder, block.as_slice(), auto_print_last, &span)?;
+        body.extend(lowered);
+    }
+
+    builder.module(body, &span).map_err(py_err_to_lower)
 }
 
 pub fn lower_awk_program(py: Python<'_>, program: &AwkProgram) -> Result<PyObject, LowerError> {

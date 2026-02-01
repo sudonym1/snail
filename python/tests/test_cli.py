@@ -31,6 +31,7 @@ def greet(*args, **kwargs) { print(*args) }
 name = "world"
 bad_email = "bad@@email"
 phone = "867-5309"
+my_bashvar = 123
 """
 
 
@@ -132,6 +133,17 @@ def test_parse_ast_api_basic() -> None:
     result = snail.parse_ast("x = 1")
     assert "Program" in result
     assert "Assign" in result
+
+
+def test_parse_ast_api_snail_begin_end() -> None:
+    result = snail.parse_ast(
+        "print('body')",
+        begin_code=["print('start')"],
+        end_code=["print('done')"],
+    )
+    assert "begin_blocks" in result
+    assert "end_blocks" in result
+    assert "Program" in result
 
 
 def test_parse_ast_api_map_begin_end() -> None:
@@ -768,11 +780,45 @@ def test_awk_begin_end_file_and_cli_order(
     ]
 
 
-def test_begin_end_without_mode_fails(capsys: pytest.CaptureFixture[str]) -> None:
-    result = main(["--begin", "print('x')", "print('y')"])
-    assert result == 2
+def test_begin_end_regular_mode(capsys: pytest.CaptureFixture[str]) -> None:
+    result = main(
+        [
+            "--begin",
+            "print('start')",
+            "--end",
+            "print('done')",
+            "print('body')",
+        ]
+    )
+    assert result == 0
     captured = capsys.readouterr()
-    assert "-b/--begin and -e/--end options require --awk or --map mode" in captured.err
+    assert captured.out == "start\nbody\ndone\n"
+
+
+def test_begin_end_regular_mode_file_and_cli_order(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "BEGIN { print('file begin') }\nprint('body')\nEND { print('file end') }"
+    assert (
+        main(
+            [
+                "--begin",
+                "print('cli begin')",
+                "--end",
+                "print('cli end')",
+                script,
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "cli begin",
+        "file begin",
+        "body",
+        "file end",
+        "cli end",
+    ]
 
 
 # --- Tests for auto-import ---
@@ -1050,6 +1096,8 @@ def _parse_oneliner_command(command: str) -> tuple[str, list[str]]:
             mode = "map"
             i += 1
             continue
+        if tok == "x=$my_bashvar":
+            tok = "x=123"
         break
     argv = tokens[i:]
     if not argv:
@@ -1151,8 +1199,18 @@ def test_readme_snail_oneliners(
         map_argv = _replace_map_oneliner_args(argv, map_file)
         assert main(["--map", *map_argv]) == 0, f"failed at {path}:{line_no}"
     else:
-        combined = f"{README_SNIPPET_PREAMBLE}\n{argv[0]}"
-        assert main([combined, *argv[1:]]) == 0, f"failed at {path}:{line_no}"
+        argv = ["-b", README_SNIPPET_PREAMBLE] + argv
+
+        # Hackjobs for some test cases
+        os.environ["my_bashvar"] = "123"
+        try:
+            # Special case hackjob since we don't actually run a shell
+            if argv[3] == "x=$my_bashvar":
+                argv[3] = "x=123"
+        except IndexError:
+            pass
+
+        assert main(argv) == 0, f"failed at {path}:{line_no}"
 
 
 # Map mode tests

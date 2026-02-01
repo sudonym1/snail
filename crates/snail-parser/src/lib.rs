@@ -12,7 +12,7 @@ mod string;
 mod util;
 
 use awk::parse_awk_rule;
-use stmt::{parse_block, parse_stmt, parse_stmt_list};
+use stmt::{parse_block, parse_stmt};
 use util::{error_with_span, full_span, parse_error_from_pest, span_from_offset, span_from_pair};
 
 #[derive(Parser)]
@@ -20,8 +20,16 @@ use util::{error_with_span, full_span, parse_error_from_pest, span_from_offset, 
 pub struct SnailParser;
 
 pub type MapProgramWithBeginEnd = (Program, Vec<Vec<Stmt>>, Vec<Vec<Stmt>>);
+pub type ProgramWithBeginEnd = (Program, Vec<Vec<Stmt>>, Vec<Vec<Stmt>>);
 
 pub fn parse_program(source: &str) -> Result<Program, ParseError> {
+    let (program, _, _) = parse_program_with_begin_end(source)?;
+    Ok(program)
+}
+
+/// Parses a regular Snail program with in-file BEGIN/END blocks.
+/// BEGIN/END blocks are parsed as regular Snail statement blocks (no map/awk vars).
+pub fn parse_program_with_begin_end(source: &str) -> Result<ProgramWithBeginEnd, ParseError> {
     let mut pairs = SnailParser::parse(Rule::program, source)
         .map_err(|err| parse_error_from_pest(err, source))?;
     let pair = pairs
@@ -29,14 +37,51 @@ pub fn parse_program(source: &str) -> Result<Program, ParseError> {
         .ok_or_else(|| ParseError::new("missing program root"))?;
     let span = full_span(source);
     let mut stmts = Vec::new();
+    let mut begin_blocks = Vec::new();
+    let mut end_blocks = Vec::new();
+    let mut entries = Vec::new();
+
     for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::stmt_list {
-            stmts = parse_stmt_list(inner, source)?;
+        if inner.as_rule() == Rule::program_entry_list {
+            for entry in inner.into_inner() {
+                if entry.as_rule() != Rule::program_entry {
+                    continue;
+                }
+                let entry_span = span_from_pair(&entry, source);
+                let mut entry_inner = entry.into_inner();
+                let entry_pair = entry_inner.next().ok_or_else(|| {
+                    error_with_span("missing program entry", entry_span.clone(), source)
+                })?;
+                match entry_pair.as_rule() {
+                    Rule::program_begin => {
+                        let block = parse_begin_end_block(entry_pair, source, "BEGIN")?;
+                        if !block.is_empty() {
+                            begin_blocks.push(block);
+                        }
+                        entries.push((entry_span, ProgramEntryKind::BeginEnd));
+                    }
+                    Rule::program_end => {
+                        let block = parse_begin_end_block(entry_pair, source, "END")?;
+                        if !block.is_empty() {
+                            end_blocks.push(block);
+                        }
+                        entries.push((entry_span, ProgramEntryKind::BeginEnd));
+                    }
+                    _ => {
+                        let stmt = parse_stmt(entry_pair, source)?;
+                        entries.push((entry_span, program_entry_kind_for_stmt(&stmt)));
+                        stmts.push(stmt);
+                    }
+                }
+            }
         }
     }
+
+    validate_program_entry_separators(&entries, source)?;
+
     let program = Program { stmts, span };
     validate_no_awk_syntax(&program, source)?;
-    Ok(program)
+    Ok((program, begin_blocks, end_blocks))
 }
 
 pub fn parse_awk_program(source: &str) -> Result<AwkProgram, ParseError> {
@@ -208,6 +253,46 @@ fn parse_begin_end_block(
     let block = parse_block(block_pair, source)?;
     validate_block(&block, source)?;
     Ok(block)
+}
+
+#[derive(Clone, Copy)]
+enum ProgramEntryKind {
+    BeginEnd,
+    Simple,
+    Compound,
+}
+
+fn program_entry_kind_for_stmt(stmt: &Stmt) -> ProgramEntryKind {
+    match stmt {
+        Stmt::If { .. }
+        | Stmt::While { .. }
+        | Stmt::For { .. }
+        | Stmt::Def { .. }
+        | Stmt::Class { .. }
+        | Stmt::Try { .. }
+        | Stmt::With { .. } => ProgramEntryKind::Compound,
+        _ => ProgramEntryKind::Simple,
+    }
+}
+
+fn validate_program_entry_separators(
+    entries: &[(SourceSpan, ProgramEntryKind)],
+    source: &str,
+) -> Result<(), ParseError> {
+    for window in entries.windows(2) {
+        let (prev_span, prev_kind) = &window[0];
+        let (next_span, _) = &window[1];
+        let gap = &source[prev_span.end.offset..next_span.start.offset];
+        let has_sep = gap.contains('\n') || gap.contains(';');
+        if !has_sep && matches!(prev_kind, ProgramEntryKind::Simple) {
+            return Err(error_with_span(
+                "expected statement separator",
+                span_from_offset(next_span.start.offset, next_span.start.offset, source),
+                source,
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]

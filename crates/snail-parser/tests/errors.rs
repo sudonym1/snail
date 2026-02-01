@@ -3,7 +3,7 @@ mod common;
 use common::*;
 use snail_parser::{
     parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
-    parse_program,
+    parse_program, parse_program_with_begin_end,
 };
 
 #[test]
@@ -201,6 +201,29 @@ fn parser_rejects_invalid_parameter_syntax() {
             || message.contains("parameter")
     );
     assert!(err.span.is_some());
+}
+
+// ========== Regular Mode BEGIN/END Parser Tests ==========
+
+#[test]
+fn program_begin_end_parsed_as_blocks() {
+    let (program, begin_blocks, end_blocks) =
+        parse_program_with_begin_end("BEGIN { print(1) }\nprint(2)\nEND { print(3) }")
+            .expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+    assert_eq!(begin_blocks.len(), 1);
+    assert_eq!(end_blocks.len(), 1);
+}
+
+#[test]
+fn program_begin_end_rejects_awk_map_vars() {
+    let err =
+        parse_program_with_begin_end("BEGIN { print($0) }").expect_err("should reject awk vars");
+    assert!(err.to_string().contains("$0"));
+
+    let err =
+        parse_program_with_begin_end("BEGIN { print($src) }").expect_err("should reject map vars");
+    assert!(err.to_string().contains("$src"));
 }
 
 // ========== AWK Mode Parser Tests ==========
