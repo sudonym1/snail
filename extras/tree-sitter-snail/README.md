@@ -115,7 +115,7 @@ The grammar is defined in `grammar.js` and closely mirrors the Pest grammar at `
 
 ## Highlight queries
 
-Tree-sitter highlight queries are in `queries/highlights.scm` and are also copied to `extras/vim/after/queries/snail/highlights.scm` for Neovim integration.
+Tree-sitter highlight queries are in `queries/highlights.scm` and are also copied to `extras/vim/queries/snail/highlights.scm` for Neovim integration.
 
 ## License
 

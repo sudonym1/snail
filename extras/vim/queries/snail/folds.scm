@@ -13,4 +13,3 @@
 (awk_begin) @fold
 (awk_end) @fold
 (awk_rule) @fold
-

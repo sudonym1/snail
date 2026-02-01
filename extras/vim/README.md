@@ -23,7 +23,7 @@ A Vim/Neovim plugin for the Snail programming language, providing Tree-sitter-ba
   - `:SnailRun` - Execute the current Snail file
   - `:SnailShowPython` - View generated Python code
 
-- **Tree-sitter Queries** (Neovim): Highlighting, folding, and indentation via `after/queries`
+- **Tree-sitter Queries** (Neovim): Highlighting, folding, and indentation via `queries`
 
 ## Installation
 
@@ -44,9 +44,25 @@ use { 'sudonym1/snail', rtp = 'extras/vim' }
 ```lua
 {
   'sudonym1/snail',
+  lazy = false,
+  rtp = 'extras/vim',
+}
+```
+
+If your lazy.nvim version does not honor `rtp`, use this fallback:
+
+```lua
+{
+  'sudonym1/snail',
+  lazy = false,
   config = function()
-    vim.opt.rtp:append('extras/vim')
-  end
+    local base = vim.fn.stdpath("data") .. "/lazy/snail"
+    local rtp = base .. "/extras/vim"
+    if vim.loop.fs_stat(rtp) then
+      vim.opt.rtp:append(rtp)
+      vim.cmd("runtime plugin/snail.vim")
+    end
+  end,
 }
 ```
 
@@ -83,7 +99,9 @@ the Snail parser with nvim-treesitter when running in Neovim.
 
 1. **Install nvim-treesitter** (if not already installed).
 
-2. **Install the parser:**
+2. **Restart Neovim** to load the Snail plugin.
+
+3. **Install the parser:**
 
    ```vim
    :TSInstall snail
@@ -107,7 +125,7 @@ extras/vim/
 │   └── snail.vim       # Indentation rules
 ├── plugin/
 │   └── snail.vim       # Main plugin configuration
-├── after/queries/snail/
+├── queries/snail/
 │   ├── highlights.scm  # Tree-sitter highlights
 │   ├── folds.scm       # Tree-sitter folds
 │   └── indents.scm     # Tree-sitter indents

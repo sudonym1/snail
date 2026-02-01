@@ -38,8 +38,17 @@ Using packer.nvim: >
     use { 'sudonym1/snail', rtp = 'extras/vim' }
 <
 Using lazy.nvim: >
-    { 'sudonym1/snail', config = function()
-        vim.opt.rtp:append('extras/vim')
+    { 'sudonym1/snail', lazy = false, rtp = 'extras/vim' }
+<
+
+If your lazy.nvim version does not honor `rtp`: >
+    { 'sudonym1/snail', lazy = false, config = function()
+        local base = vim.fn.stdpath("data") .. "/lazy/snail"
+        local rtp = base .. "/extras/vim"
+        if vim.loop.fs_stat(rtp) then
+          vim.opt.rtp:append(rtp)
+          vim.cmd("runtime plugin/snail.vim")
+        end
       end
     }
 <
@@ -50,7 +59,7 @@ Manual installation:
 
 Tree-sitter (Neovim only):
     The plugin auto-registers the Snail parser with nvim-treesitter.
-    Install the parser with: >
+    Restart Neovim, then install the parser with: >
         :TSInstall snail
 <
 
@@ -133,7 +142,7 @@ Benefits of Tree-sitter:
 - Improved indentation
 - Structural text objects
 
-Query files are provided:
+Query files are provided in `extras/vim/queries/snail/`:
 - highlights.scm: Syntax highlighting
 - folds.scm: Code folding
 - indents.scm: Smart indentation
