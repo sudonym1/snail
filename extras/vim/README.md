@@ -1,10 +1,10 @@
 # Snail Vim Plugin
 
-A comprehensive Vim/Neovim plugin for the Snail programming language, providing syntax highlighting, code formatting, and Tree-sitter integration.
+A Vim/Neovim plugin for the Snail programming language, providing Tree-sitter-based highlighting (Neovim), code formatting, and filetype support.
 
 ## Features
 
-- **Syntax Highlighting**: Complete highlighting for all Snail constructs including:
+- **Tree-sitter Highlighting** (Neovim): Highlighting for all Snail constructs including:
   - Keywords, operators, and literals
   - Subprocess syntax: `$()` and `@()`
   - Compact try operator: `?`
@@ -23,7 +23,7 @@ A comprehensive Vim/Neovim plugin for the Snail programming language, providing 
   - `:SnailRun` - Execute the current Snail file
   - `:SnailShowPython` - View generated Python code
 
-- **Tree-sitter Support** (Neovim): Advanced syntax highlighting and code analysis
+- **Tree-sitter Queries** (Neovim): Highlighting, folding, and indentation via `after/queries`
 
 ## Installation
 
@@ -70,50 +70,26 @@ Add to your vimrc/init.vim:
 " Enable format on save
 let g:snail_format_on_save = 1
 
-" Enable AWK variable highlighting (default: 1)
-let g:snail_highlight_awk_vars = 1
-
-" Enable string interpolation highlighting (default: 1)
-let g:snail_highlight_interpolation = 1
+" Tree-sitter highlighting is enabled via nvim-treesitter
 ```
 
 ## Tree-sitter (Neovim only)
 
-For enhanced syntax highlighting, code folding, and parsing with Tree-sitter:
+Tree-sitter is required for syntax highlighting, code folding, and parsing.
+Vim does not provide syntax highlighting for Snail. The plugin auto-registers
+the Snail parser with nvim-treesitter when running in Neovim.
 
 ### Quick Setup
 
-1. **Build the parser:**
+1. **Install nvim-treesitter** (if not already installed).
 
-   ```bash
-   cd extras/tree-sitter-snail
-   tree-sitter generate  # Or: npm install && npm run build
-   ```
-
-2. **Configure nvim-treesitter:**
-
-   Add to your Neovim config (Lua):
-
-   ```lua
-   local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
-   parser_config.snail = {
-     install_info = {
-       url = "~/path/to/snail/extras/tree-sitter-snail",
-       files = {"src/parser.c"},
-       generate_requires_npm = false,
-       requires_generate_from_grammar = false,
-     },
-     filetype = "snail",
-   }
-   ```
-
-3. **Install the parser:**
+2. **Install the parser:**
 
    ```vim
    :TSInstall snail
    ```
 
-See `extras/tree-sitter-snail/README.md` for more details.
+See `extras/tree-sitter-snail/README.md` for grammar details.
 
 ## Directory Structure
 
@@ -131,8 +107,6 @@ extras/vim/
 │   └── snail.vim       # Indentation rules
 ├── plugin/
 │   └── snail.vim       # Main plugin configuration
-├── syntax/
-│   └── snail.vim       # Syntax highlighting
 ├── after/queries/snail/
 │   ├── highlights.scm  # Tree-sitter highlights
 │   ├── folds.scm       # Tree-sitter folds
@@ -152,4 +126,3 @@ Open a `.snail` file and the plugin will automatically activate. Use:
 ## License
 
 MIT License - see the main Snail repository for details.
-

@@ -310,7 +310,7 @@ Documentation is WIP
 
 ## 🔌 Editor Support
 
-Vim/Neovim plugin with syntax highlighting, formatting, and run commands:
+Vim/Neovim plugin with Tree-sitter-based highlighting (Neovim), formatting, and run commands:
 
 ```vim
 Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }

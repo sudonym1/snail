@@ -21,7 +21,7 @@ in Vim and Neovim. Snail compiles to Python while offering terse, Perl/awk-like
 syntax for quick scripts.
 
 Features:
-- Syntax highlighting for all Snail constructs
+- Tree-sitter highlighting for Snail constructs (Neovim only)
 - Code formatting and indentation
 - Filetype detection for .snail files
 - Commands for running and debugging Snail code
@@ -49,12 +49,10 @@ Manual installation:
     - Neovim: ~/.config/nvim/
 
 Tree-sitter (Neovim only):
-    1. Build the grammar: >
-        cd extras/tree-sitter-snail
-        npm install
-        npm run build
+    The plugin auto-registers the Snail parser with nvim-treesitter.
+    Install the parser with: >
+        :TSInstall snail
 <
-    2. Configure nvim-treesitter to use the parser
 
 ==============================================================================
 3. CONFIGURATION                                                  *snail-config*
@@ -66,47 +64,21 @@ g:snail_format_on_save~
 >
     let g:snail_format_on_save = 1
 <
-                                                    *g:snail_highlight_awk_vars*
-g:snail_highlight_awk_vars~
-    Enable highlighting of AWK special variables ($0, $1, $n, etc.).
-    Default: 1 (enabled)
->
-    let g:snail_highlight_awk_vars = 1
-<
-                                                *g:snail_highlight_interpolation*
-g:snail_highlight_interpolation~
-    Enable highlighting of string interpolation {expr} blocks.
-    Default: 1 (enabled)
->
-    let g:snail_highlight_interpolation = 1
-<
 ==============================================================================
-4. SYNTAX HIGHLIGHTING                                            *snail-syntax*
+4. SYNTAX HIGHLIGHTING (TREE-SITTER)                              *snail-syntax*
 
-The syntax file provides highlighting for:
+Syntax highlighting is provided via Tree-sitter queries in Neovim.
+Vim does not provide syntax highlighting for Snail.
+Configure nvim-treesitter as described in |snail-treesitter|.
 
-Keywords~
-    if, elif, else, while, for, def, class, try, except, finally,
-    with, return, break, continue, pass, raise, assert, del,
-    import, from, as, and, or, not, in, is, True, False, None
-
-AWK Keywords~
-    BEGIN, END
-
-Snail-specific Syntax~
-    - Subprocess capture: $(command)
-    - Subprocess status: @(command)
-    - Compact try operator: expr? or expr?fallback
-    - Regex literals: /pattern/
-    - Special variables: $e, $n, $fn, $p, $m
-    - Field variables: $0, $1, $2, ...
-    - Structured accessor: $[query]
-    - Pipeline operator: |
-    - String interpolation: "text {expr}"
-
-Strings~
-    Single, double, and triple-quoted strings are supported, including
-    raw strings with the 'r' prefix.
+Tree-sitter Highlights~
+    Keywords, operators, booleans, None
+    AWK keywords and special variables
+    Subprocess syntax: $(command) and @(command)
+    Compact try operator: expr? or expr?fallback
+    Regex literals: /pattern/
+    Structured accessor: $[query]
+    String interpolation: "text {expr}"
 
 ==============================================================================
 5. COMMANDS                                                     *snail-commands*
@@ -151,8 +123,9 @@ To format a range: >
 ==============================================================================
 8. TREE-SITTER                                                *snail-treesitter*
 
-For Neovim users, a Tree-sitter grammar is provided for enhanced parsing
-and highlighting. The grammar is located in `extras/tree-sitter-snail/`.
+For Neovim users, Tree-sitter is required for highlighting and provides
+enhanced parsing. The grammar is located in `extras/tree-sitter-snail/`.
+The plugin auto-registers the parser with nvim-treesitter.
 
 Benefits of Tree-sitter:
 - More accurate syntax highlighting

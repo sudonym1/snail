@@ -41,7 +41,7 @@ class Counter {
 }
 
 class SimpleCtx {
-    def __enter__(self) {
+    def __enter__(self) { # this is a { }
         return "context"
     }
 
