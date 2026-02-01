@@ -5,7 +5,7 @@ pkgdesc="Snail programming language interpreter"
 arch=('x86_64')
 url="https://github.com/sudonym1/snail"
 license=('MIT')
-depends=('python>=3.10' 'python-jmespath')
+depends=('python>=3.8' 'python-jmespath')
 makedepends=('cargo' 'python-build' 'python-installer' 'python-maturin' 'rust')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/sudonym1/snail/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
