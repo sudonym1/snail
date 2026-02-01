@@ -350,6 +350,48 @@ def test_jsonl_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "['Ada', 'Lin']\n"
 
 
+def test_jmespath_double_quotes_string_literal(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            'data = js(%{"items": [%{"ifname": "eth0"}, %{"ifname": "wlan0"}]})',
+            'print(data | $[items[?ifname=="eth0"].ifname])',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "['eth0']\n"
+
+
+def test_jmespath_double_quotes_single_quote_escape(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            'data = js(%{"items": [%{"name": "O\'Connor"}, %{"name": "Ada"}]})',
+            'print(data | $[items[?name=="O\'Connor"].name])',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == '["O\'Connor"]\n'
+
+
+def test_jmespath_escaped_double_quotes_for_identifier(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            'data = js(%{"foo-bar": 1})',
+            'print(data | $[\\"foo-bar\\"])',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "1\n"
+
+
 def test_pipeline_placeholder(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [

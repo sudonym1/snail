@@ -4,6 +4,96 @@ import json as _json
 import os as _os
 import sys as _sys
 
+
+def _append_transpiled_char(out: list[str], ch: str) -> None:
+    if ch == "'":
+        out.append("\\")
+        out.append("'")
+        return
+    if ch == "\\":
+        out.append("\\")
+        out.append("\\")
+        return
+    out.append(ch)
+
+
+def _transpile_jmespath_query(query: str) -> str:
+    out: list[str] = []
+    state = "normal"
+    i = 0
+    while i < len(query):
+        ch = query[i]
+        if state == "normal":
+            if ch == "\\" and i + 1 < len(query) and query[i + 1] == '"':
+                out.append('"')
+                i += 2
+                continue
+            if ch == "'":
+                state = "single"
+                out.append(ch)
+                i += 1
+                continue
+            if ch == "`":
+                state = "backtick"
+                out.append(ch)
+                i += 1
+                continue
+            if ch == '"':
+                state = "double"
+                out.append("'")
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+            continue
+
+        if state == "single":
+            out.append(ch)
+            if ch == "\\" and i + 1 < len(query):
+                out.append(query[i + 1])
+                i += 2
+                continue
+            if ch == "'":
+                state = "normal"
+            i += 1
+            continue
+
+        if state == "backtick":
+            out.append(ch)
+            if ch == "\\" and i + 1 < len(query):
+                out.append(query[i + 1])
+                i += 2
+                continue
+            if ch == "`":
+                state = "normal"
+            i += 1
+            continue
+
+        if state == "double":
+            if ch == '"':
+                out.append("'")
+                state = "normal"
+                i += 1
+                continue
+            if ch == "\\" and i + 1 < len(query):
+                nxt = query[i + 1]
+                if nxt == '"':
+                    _append_transpiled_char(out, '"')
+                    i += 2
+                    continue
+                if nxt == "\\":
+                    _append_transpiled_char(out, "\\")
+                    i += 2
+                    continue
+                _append_transpiled_char(out, "\\")
+                i += 1
+                continue
+            _append_transpiled_char(out, ch)
+            i += 1
+
+    return "".join(out)
+
+
 def __snail_jmespath_query(query: str):
     """Create a callable that applies JMESPath query.
 
@@ -12,8 +102,10 @@ def __snail_jmespath_query(query: str):
 
     import jmespath as _jmespath
 
+    transpiled = _transpile_jmespath_query(query)
+
     def apply(data):
-        return _jmespath.search(query, data)
+        return _jmespath.search(transpiled, data)
 
     return apply
 

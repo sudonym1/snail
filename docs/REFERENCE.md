@@ -391,6 +391,13 @@ queryable object. For JSONL input, the result is a list of parsed objects. The
 `$[query]` accessor produces a callable that applies the JMESPath query to the
 input data.
 
+Snail rewrites JMESPath queries in `$[query]` so that double-quoted segments are
+treated as string literals. This makes expressions like
+`$[items[?ifname=="eth0"].ifname]` work even when the Snail program is wrapped
+in single quotes by the shell. If you need JMESPath quoted identifiers (for
+keys like `"foo-bar"`), escape the quotes in the query (for example,
+`$[\"foo-bar\"]`). JSON literal backticks (`` `...` ``) are left unchanged.
+
 ```snail
 # JSONL input parses into a list
 records = js('{"name": "Ada"}\n{"name": "Lin"}')

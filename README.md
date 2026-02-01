@@ -265,6 +265,13 @@ result = js('{{"foo": 12}}') | $[foo]
 names = js('{{"name": "Ada"}}\n{{"name": "Lin"}}') | $[[*].name]
 ```
 
+Snail rewrites JMESPath queries in `$[query]` so that double-quoted segments are
+treated as string literals. This lets you write
+`$[items[?ifname=="eth0"].ifname]` inside a single-quoted shell command. If you
+need JMESPath quoted identifiers (for keys like `"foo-bar"`), escape the quotes
+in the query (for example, `$[\"foo-bar\"]`). JSON literal backticks
+(`` `...` ``) are left unchanged.
+
 ### Full Python Interoperability
 
 Snail compiles to Python AST—import any Python module, use any library, in any
