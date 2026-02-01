@@ -54,13 +54,14 @@
 
 [
   "return"
-  "break"
-  "continue"
-  "pass"
   "assert"
   "del"
   "with"
 ] @keyword
+
+(break_stmt) @keyword
+(continue_stmt) @keyword
+(pass_stmt) @keyword
 
 [
   "and"
@@ -69,12 +70,6 @@
   "in"
   "is"
 ] @keyword.operator
-
-; AWK keywords
-[
-  "BEGIN"
-  "END"
-] @keyword.directive
 
 ; Operators
 [

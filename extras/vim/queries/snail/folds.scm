@@ -9,7 +9,3 @@
 (class_stmt) @fold
 (try_stmt) @fold
 (with_stmt) @fold
-
-(awk_begin) @fold
-(awk_end) @fold
-(awk_rule) @fold
