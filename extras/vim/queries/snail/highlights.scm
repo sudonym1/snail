@@ -173,9 +173,9 @@
 (primary (identifier) (call) (attribute (identifier) @function.method.call) (call) (#set! "priority" 110))
 
 ; Special Snail variables
-(exception_var) @variable.builtin
-(injected_var) @variable.builtin
-(field_index_var) @variable.builtin
+(exception_var) @constant.builtin (#set! "priority" 120)
+(injected_var) @constant.builtin (#set! "priority" 120)
+(field_index_var) @constant.builtin (#set! "priority" 120)
 
 ; Subprocess
 (subprocess_capture) @function.macro
@@ -186,3 +186,5 @@
 
 ; Attributes
 (attribute (identifier) @property)
+[ (identifier) @keyword.directive (#eq? @keyword.directive "BEGIN") ]
+[ (identifier) @keyword.directive (#eq? @keyword.directive "END") ]
