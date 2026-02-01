@@ -9,6 +9,10 @@ let g:loaded_snail = 1
 let s:save_cpo = &cpo
 set cpo&vim
 
+let s:plugin_path = expand('<sfile>:p')
+let s:extras_dir = fnamemodify(s:plugin_path, ':h:h:h')
+let s:default_treesitter_dir = s:extras_dir . '/tree-sitter-snail'
+
 " Configuration options with defaults
 if !exists('g:snail_format_on_save')
   let g:snail_format_on_save = 0
@@ -27,33 +31,61 @@ augroup END
 
 " Neovim: register Tree-sitter parser config automatically
 if has('nvim')
-  let s:extras_dir = fnamemodify(expand('<sfile>:p'), ':h:h:h')
-  let s:default_treesitter_dir = s:extras_dir . '/tree-sitter-snail'
-  let s:treesitter_dir = exists('g:snail_treesitter_dir')
-        \ ? g:snail_treesitter_dir
-        \ : s:default_treesitter_dir
-  if isdirectory(s:treesitter_dir)
+  if !exists('g:snail_treesitter_registered')
+    let g:snail_treesitter_registered = 0
+  endif
+
+  function! s:snail_register_treesitter() abort
+    let s:treesitter_dir = exists('g:snail_treesitter_dir')
+          \ ? g:snail_treesitter_dir
+          \ : s:default_treesitter_dir
+    if !isdirectory(s:treesitter_dir)
+      return
+    endif
     let g:snail_treesitter_dir = s:treesitter_dir
     lua << EOF
 local ok, parsers = pcall(require, "nvim-treesitter.parsers")
-if ok then
-  local configs = parsers
-  if type(parsers.get_parser_configs) == "function" then
-    configs = parsers.get_parser_configs()
-  end
-  if not configs.snail then
-    configs.snail = {
-      install_info = {
-        url = vim.g.snail_treesitter_dir,
-        files = { "src/parser.c" },
-        generate_requires_npm = false,
-        requires_generate_from_grammar = false,
-      },
-      filetype = "snail",
-    }
-  end
+if not ok then
+  return
 end
+local configs = parsers
+if type(parsers.get_parser_configs) == "function" then
+  configs = parsers.get_parser_configs()
+end
+if not configs.snail then
+  configs.snail = {
+    install_info = {
+      url = vim.g.snail_treesitter_dir,
+      files = { "src/parser.c" },
+      generate_requires_npm = false,
+      requires_generate_from_grammar = false,
+    },
+    filetype = "snail",
+  }
+end
+vim.g.snail_treesitter_registered = 1
 EOF
+  endfunction
+
+  function! s:snail_treesitter_try() abort
+    if g:snail_treesitter_registered
+      return
+    endif
+    call s:snail_register_treesitter()
+    if g:snail_treesitter_registered
+      augroup snail_treesitter_register
+        autocmd!
+      augroup END
+    endif
+  endfunction
+
+  call s:snail_treesitter_try()
+  if !g:snail_treesitter_registered
+    augroup snail_treesitter_register
+      autocmd!
+      autocmd VimEnter,BufEnter,FileType * call <SID>snail_treesitter_try()
+      autocmd User LazyLoad,LazyDone,PackerLoad,PackerComplete call <SID>snail_treesitter_try()
+    augroup END
   endif
 endif
 
