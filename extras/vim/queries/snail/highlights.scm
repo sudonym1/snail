@@ -8,9 +8,14 @@
 (single_string) @string
 (triple_double_string) @string
 (triple_single_string) @string
+(raw_double_string) @string
+(raw_single_string) @string
+(raw_triple_double_string) @string
+(raw_triple_single_string) @string
 (string_interpolation) @embedded
 (escape_sequence) @string.escape
 (raw_prefix) @string.special
+(byte_prefix) @string.special
 
 ; Regex
 (regex) @string.regex
@@ -28,6 +33,9 @@
   "elif"
   "else"
 ] @keyword.conditional
+
+(let_cond "let" @keyword.special)
+(let_guard) @keyword.special
 
 [
   "for"
@@ -106,8 +114,11 @@
 [
   "("
   ")"
+  "$("
+  "@("
   "["
   "]"
+  "$["
   "{"
   "}"
   "%{"
@@ -115,20 +126,51 @@
 ] @punctuation.bracket
 
 ; Functions and classes
-(def_stmt name: (identifier) @function)
-(class_stmt name: (identifier) @type)
+(def_stmt name: (identifier) @function.definition (#set! "priority" 110))
+(class_stmt name: (identifier) @type.definition (#set! "priority" 110))
 
-; Function calls
-; Note: We match the func field of call which is a primary expression
-(call) @function.call
+; Methods (definitions inside classes)
+(class_stmt
+  body: (block
+    (stmt_list
+      (def_stmt name: (identifier) @function.method.definition (#set! "priority" 120))
+    )
+  )
+)
+
 
 ; Parameters
-(regular_param (identifier) @variable.parameter)
-(star_param (identifier) @variable.parameter)
-(kw_param (identifier) @variable.parameter)
+(regular_param (identifier) @variable.parameter (#set! "priority" 120))
+(star_param (identifier) @variable.parameter (#set! "priority" 120))
+(kw_param (identifier) @variable.parameter (#set! "priority" 120))
+
+; Method self parameter
+(class_stmt
+  body: (block
+    (stmt_list
+      (def_stmt
+        parameters: (parameters
+          (param_list
+            (regular_param (identifier) @variable.builtin (#eq? @variable.builtin "self") (#set! "priority" 130))
+          )
+        )
+      )
+    )
+  )
+)
 
 ; Variables
 (identifier) @variable
+
+; Imports
+(import_from (dotted_name) @module (#set! "priority" 105))
+(import_item (dotted_name) @module (#set! "priority" 105))
+
+; Function calls
+; Call target is the primary identifier or attribute before (call)
+(primary (identifier) @function.call (call) (#set! "priority" 110))
+(primary (identifier) (attribute (identifier) @function.method.call) (call) (#set! "priority" 110))
+(primary (identifier) (call) (attribute (identifier) @function.method.call) (call) (#set! "priority" 110))
 
 ; Special Snail variables
 (exception_var) @variable.builtin

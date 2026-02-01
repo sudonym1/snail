@@ -147,7 +147,7 @@ module.exports = grammar({
     // Control flow statements
     if_stmt: $ => seq(
       'if',
-      field('condition', $._expr),
+      field('condition', $.if_condition),
       field('consequence', $.block),
       repeat(seq(repeat($._stmt_sep), $.elif_clause)),
       optional(seq(repeat($._stmt_sep), $.else_clause)),
@@ -161,14 +161,14 @@ module.exports = grammar({
 
     while_stmt: $ => seq(
       'while',
-      field('condition', $._expr),
+      field('condition', $.while_condition),
       field('body', $.block),
       optional(seq(repeat($._stmt_sep), $.else_clause)),
     ),
 
     for_stmt: $ => seq(
       'for',
-      field('variable', $.identifier),
+      field('variable', $.assign_target_list),
       'in',
       field('iterable', $._expr),
       field('body', $.block),
@@ -181,7 +181,7 @@ module.exports = grammar({
     def_stmt: $ => seq(
       'def',
       field('name', $.identifier),
-      field('parameters', $.parameters),
+      optional(field('parameters', $.parameters)),
       field('body', $.block),
     ),
 
@@ -277,6 +277,20 @@ module.exports = grammar({
     continue_stmt: $ => 'continue',
     pass_stmt: $ => 'pass',
 
+    // Let conditions
+    if_condition: $ => choice($.let_cond, $._expr),
+    while_condition: $ => choice($.let_cond, $._expr),
+
+    let_cond: $ => seq(
+      'let',
+      $.assign_target_list,
+      '=',
+      $._expr,
+      optional($.let_guard),
+    ),
+
+    let_guard: $ => seq(';', $._expr),
+
     // Import statements
     import_from: $ => seq(
       'from',
@@ -307,10 +321,32 @@ module.exports = grammar({
 
     // Assignment and expression statements
     assign_stmt: $ => seq(
-      $.assign_target,
+      $.assign_target_list,
       '=',
       $._expr,
     ),
+
+    assign_target_list: $ => choice(
+      $.assign_target_tuple,
+      $.assign_target,
+    ),
+
+    assign_target_tuple: $ => seq(
+      $.assign_target_item,
+      ',',
+      optional(seq(
+        $.assign_target_item,
+        repeat(seq(',', $.assign_target_item)),
+        optional(','),
+      )),
+    ),
+
+    assign_target_item: $ => choice(
+      $.assign_target_star,
+      $.assign_target,
+    ),
+
+    assign_target_star: $ => seq('*', $.assign_target),
 
     assign_target: $ => seq(
       $.identifier,
@@ -646,7 +682,12 @@ module.exports = grammar({
     field_index_var: $ => /\$[0-9]+/,
 
     injected_var: $ => choice(
-      '$fn',  // Must come before $n
+      '$text',
+      '$src',
+      '$env',
+      '$fn',  // Must come before $f and $n
+      '$fd',
+      '$f',
       '$n',
       '$p',
       '$m',
@@ -655,18 +696,28 @@ module.exports = grammar({
     // Number literals
     number: $ => /[0-9]+(\.[0-9]+)?/,
 
-    // String literals with optional raw prefix
-    string: $ => seq(
-      optional($.raw_prefix),
-      choice(
-        $.triple_double_string,
-        $.triple_single_string,
-        $.double_string,
-        $.single_string,
-      ),
+    // String literals with optional prefix
+    string: $ => choice(
+      seq($.raw_prefix, $._raw_string_body),
+      seq(optional($.byte_prefix), $._string_body),
     ),
 
-    raw_prefix: $ => 'r',
+    raw_prefix: $ => choice('br', 'rb', 'r'),
+    byte_prefix: $ => 'b',
+
+    _string_body: $ => choice(
+      $.triple_double_string,
+      $.triple_single_string,
+      $.double_string,
+      $.single_string,
+    ),
+
+    _raw_string_body: $ => choice(
+      $.raw_triple_double_string,
+      $.raw_triple_single_string,
+      $.raw_double_string,
+      $.raw_single_string,
+    ),
 
     triple_double_string: $ => seq(
       '"""',
@@ -674,6 +725,15 @@ module.exports = grammar({
         $.string_interpolation,
         $.escape_sequence,
         $.triple_double_char,
+      )),
+      '"""',
+    ),
+
+    raw_triple_double_string: $ => seq(
+      '"""',
+      repeat(choice(
+        $.escape_sequence,
+        $.raw_triple_double_char,
       )),
       '"""',
     ),
@@ -688,14 +748,35 @@ module.exports = grammar({
       "'''",
     ),
 
+    raw_triple_single_string: $ => seq(
+      "'''",
+      repeat(choice(
+        $.escape_sequence,
+        $.raw_triple_single_char,
+      )),
+      "'''",
+    ),
+
     triple_double_char: $ => choice(
       /[^"\\{]+/,
       seq('"', /[^"]/),  // Allow single " that's not part of """
       seq('"', '"', /[^"]/),  // Allow "" that's not part of """
     ),
 
+    raw_triple_double_char: $ => choice(
+      /[^"\\]+/,
+      seq('"', /[^"]/),  // Allow single " that's not part of """
+      seq('"', '"', /[^"]/),  // Allow "" that's not part of """
+    ),
+
     triple_single_char: $ => choice(
       /[^'\\{]+/,
+      seq("'", /[^']/),  // Allow single ' that's not part of '''
+      seq("'", "'", /[^']/),  // Allow '' that's not part of '''
+    ),
+
+    raw_triple_single_char: $ => choice(
+      /[^'\\]+/,
       seq("'", /[^']/),  // Allow single ' that's not part of '''
       seq("'", "'", /[^']/),  // Allow '' that's not part of '''
     ),
@@ -710,6 +791,15 @@ module.exports = grammar({
       '"',
     ),
 
+    raw_double_string: $ => seq(
+      '"',
+      repeat(choice(
+        $.escape_sequence,
+        $.raw_double_string_char,
+      )),
+      '"',
+    ),
+
     single_string: $ => seq(
       "'",
       repeat(choice(
@@ -720,8 +810,20 @@ module.exports = grammar({
       "'",
     ),
 
+    raw_single_string: $ => seq(
+      "'",
+      repeat(choice(
+        $.escape_sequence,
+        $.raw_single_string_char,
+      )),
+      "'",
+    ),
+
     double_string_char: $ => /[^"\\{]+/,
     single_string_char: $ => /[^'\\{]+/,
+
+    raw_double_string_char: $ => /[^"\\]+/,
+    raw_single_string_char: $ => /[^'\\]+/,
 
     string_interpolation: $ => seq(
       '{',
