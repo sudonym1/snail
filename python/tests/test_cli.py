@@ -627,6 +627,16 @@ def test_combined_short_flag_with_attached_value(
     assert captured.out == "foo\n"
 
 
+def test_combined_short_flag_with_attached_field_separator(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("a,b\n"))
+    assert main(["-aF,", "{ print($1) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "a\n"
+
+
 def test_combined_short_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["-ah"]) == 0
     captured = capsys.readouterr()
@@ -671,6 +681,50 @@ def test_awk_mode(
     assert main(["--awk", "/foo/ { print($0) }"]) == 0
     captured = capsys.readouterr()
     assert captured.out == "foo\n"
+
+
+def test_awk_field_separator_multiple_flags(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("a,b;c\n"))
+    assert main(["--awk", "-F", ",", "-F", ";", "{ print($1, $2, $3) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "a b c\n"
+
+
+def test_awk_field_separator_long_flags(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("a b/c\n"))
+    assert (
+        main(
+            [
+                "--awk",
+                "--whitespace",
+                "--field-separator",
+                "/",
+                "{ print($1, $2, $3) }",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert captured.out == "a b c\n"
+
+
+def test_awk_field_separator_with_whitespace_flag(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(
+            "eth0             UP             172.20.223.220/20 fe80::215:5dff:fee5:ebb/64\n"
+        ),
+    )
+    assert main(["--awk", "-W", "-F", "/", "{ print($1, $2, $3, $4, $5, $6) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "eth0 UP 172.20.223.220 20 fe80::215:5dff:fee5:ebb 64\n"
 
 
 def test_awk_match_group_access(

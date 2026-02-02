@@ -420,6 +420,8 @@ Begin and end blocks can live in the source file (`BEGIN { ... }` / `END { ... }
 specified via CLI flags:
 - `-b <code>` or `--begin <code>`: Code to run before processing lines (repeatable)
 - `-e <code>` or `--end <code>`: Code to run after processing lines (repeatable)
+- `-F <chars>` or `--field-separator <chars>`: Split `$0` on any of these characters (repeatable)
+- `-W` or `--whitespace`: Include whitespace as a separator (matches default awk field splitting)
 CLI BEGIN blocks run before in-file BEGIN blocks; CLI END blocks run after in-file END blocks.
 
 Example:
@@ -435,7 +437,8 @@ for a runnable sample program.
 
 While processing, Snail populates awk-style variables:
 - `$0`: the current line with the trailing newline removed.
-- `$1`, `$2`, ...: fields from `$0.split()` on whitespace.
+- `$1`, `$2`, ...: fields from splitting `$0` on whitespace (default), on any of the
+  characters supplied via `-F`, or on both when `-W` is used with `-F`.
 - `$n`: global line counter across all files.
 - `$fn`: per-file line counter.
 - `$p`: the active filename, with `"-"` representing stdin.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import re
 from typing import Optional
 
 __all__ = ["install_helpers", "AutoImportDict", "AUTO_IMPORT_NAMES"]
@@ -49,6 +50,7 @@ _incr_index = None
 _aug_attr = None
 _aug_index = None
 _env_map = None
+_awk_split_cache: dict[tuple[str, bool], re.Pattern[str]] = {}
 
 
 def _get_compact_try():
@@ -221,6 +223,28 @@ def _lazy_aug_index(obj, index, value, op: str):
     return _get_aug_index()(obj, index, value, op)
 
 
+def __snail_awk_split(line: str, separators: Optional[str], include_whitespace: bool):
+    if not separators:
+        return line.split()
+    if not include_whitespace:
+        if len(separators) == 1:
+            return line.split(separators)
+        regex = _awk_split_cache.get((separators, False))
+        if regex is None:
+            regex = re.compile(f"[{re.escape(separators)}]")
+            _awk_split_cache[(separators, False)] = regex
+        return regex.split(line)
+
+    stripped = line.strip()
+    if not stripped:
+        return []
+    regex = _awk_split_cache.get((separators, True))
+    if regex is None:
+        regex = re.compile(f"(?:\\s+|[{re.escape(separators)}])")
+        _awk_split_cache[(separators, True)] = regex
+    return regex.split(stripped)
+
+
 def __snail_partial(func, /, *args, **kwargs):
     import functools
 
@@ -255,6 +279,9 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_incr_index"] = _lazy_incr_index
     globals_dict["__snail_aug_attr"] = _lazy_aug_attr
     globals_dict["__snail_aug_index"] = _lazy_aug_index
+    globals_dict["__snail_awk_split"] = __snail_awk_split
+    globals_dict["__snail_awk_field_separators"] = None
+    globals_dict["__snail_awk_include_whitespace"] = False
     globals_dict["__snail_env"] = _get_env_map()
     globals_dict["js"] = _lazy_js
     globals_dict["__SnailLazyText"] = _get_lazy_text_class()

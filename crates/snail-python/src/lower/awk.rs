@@ -270,23 +270,36 @@ pub(crate) fn lower_awk_line_loop_with_auto_print(
         .call_node(
             "Call",
             vec![
-                builder
-                    .call_node(
-                        "Attribute",
-                        vec![
-                            name_expr(
-                                builder,
-                                SNAIL_AWK_LINE_PYVAR,
-                                span,
-                                builder.load_ctx().map_err(py_err_to_lower)?,
-                            )?,
-                            "split".to_string().into_py(builder.py()),
+                name_expr(
+                    builder,
+                    SNAIL_AWK_SPLIT_HELPER,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        name_expr(
+                            builder,
+                            SNAIL_AWK_LINE_PYVAR,
+                            span,
                             builder.load_ctx().map_err(py_err_to_lower)?,
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)?,
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                        )?,
+                        name_expr(
+                            builder,
+                            SNAIL_AWK_FIELD_SEPARATORS_PYVAR,
+                            span,
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        )?,
+                        name_expr(
+                            builder,
+                            SNAIL_AWK_INCLUDE_WHITESPACE_PYVAR,
+                            span,
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        )?,
+                    ],
+                )
+                .into_py(builder.py()),
                 PyList::empty_bound(builder.py()).into_py(builder.py()),
             ],
             span,

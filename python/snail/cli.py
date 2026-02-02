@@ -8,8 +8,8 @@ from . import __build_info__, compile_ast, exec
 
 _USAGE = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]..."
 _DESCRIPTION = "Snail programming language interpreter"
-_BOOLEAN_FLAGS = frozenset("amPIvh")
-_VALUE_FLAGS = frozenset("fbe")
+_BOOLEAN_FLAGS = frozenset("amPIvhW")
+_VALUE_FLAGS = frozenset("fbeF")
 
 
 def _display_filename(filename: str) -> str:
@@ -101,6 +101,8 @@ class _Args:
         self.help = False
         self.begin_code: list[str] = []
         self.end_code: list[str] = []
+        self.field_separators: list[str] = []
+        self.include_whitespace = False
         self.args: list[str] = []
 
 
@@ -123,6 +125,11 @@ def _print_help(file=None) -> None:
         "  -e, --end <code>         end block code (repeatable)",
         file=file,
     )
+    print(
+        "  -F, --field-separator <chars>  field separator characters (repeatable)",
+        file=file,
+    )
+    print("  -W, --whitespace        include whitespace as a separator", file=file)
     print(
         "  -P, --no-print          disable auto-print of implicit return value",
         file=file,
@@ -244,6 +251,11 @@ def _parse_args(argv: list[str]) -> _Args:
             code_found = True
             idx += 2
             continue
+        if token in ("-W", "--whitespace"):
+            args.include_whitespace = True
+            args.awk = True
+            idx += 1
+            continue
         if token in ("-b", "--begin"):
             if idx + 1 >= len(argv):
                 raise ValueError(f"option {token} requires an argument")
@@ -254,6 +266,13 @@ def _parse_args(argv: list[str]) -> _Args:
             if idx + 1 >= len(argv):
                 raise ValueError(f"option {token} requires an argument")
             args.end_code.append(argv[idx + 1])
+            idx += 2
+            continue
+        if token in ("-F", "--field-separator"):
+            if idx + 1 >= len(argv):
+                raise ValueError(f"option {token} requires an argument")
+            args.field_separators.append(argv[idx + 1])
+            args.awk = True
             idx += 2
             continue
         raise ValueError(f"unknown option: {token}")
@@ -394,6 +413,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(output)
         return 0
 
+    separators = "".join(namespace.field_separators)
+    field_separators = separators if separators else None
+    include_whitespace = namespace.include_whitespace or field_separators is None
+
     return exec(
         source,
         argv=args,
@@ -403,6 +426,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         filename=filename,
         begin_code=namespace.begin_code,
         end_code=namespace.end_code,
+        field_separators=field_separators,
+        include_whitespace=include_whitespace,
     )
 
 

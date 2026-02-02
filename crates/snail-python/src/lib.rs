@@ -112,6 +112,8 @@ fn prepare_globals<'py>(
     filename: &str,
     argv: &[String],
     auto_import: bool,
+    awk_field_separators: Option<String>,
+    awk_include_whitespace: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let runtime = py.import_bound("snail.runtime")?;
 
@@ -131,6 +133,16 @@ fn prepare_globals<'py>(
     sys.setattr("argv", PyList::new_bound(py, argv))?;
 
     runtime.call_method1("install_helpers", (&globals,))?;
+    let separators = awk_field_separators
+        .as_deref()
+        .filter(|value| !value.is_empty());
+    let separators_value = match separators {
+        Some(separators) => separators.into_py(py),
+        None => py.None().into_py(py),
+    };
+    globals.set_item("__snail_awk_field_separators", separators_value)?;
+    let include_whitespace = awk_include_whitespace.unwrap_or(separators.is_none());
+    globals.set_item("__snail_awk_include_whitespace", include_whitespace)?;
 
     Ok(globals)
 }
@@ -201,7 +213,7 @@ fn compile_ast_py(
 }
 
 #[pyfunction(name = "exec")]
-#[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, auto_import = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
+#[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, auto_import = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new(), field_separators = None, include_whitespace = None))]
 #[allow(clippy::too_many_arguments)]
 fn exec_py(
     py: Python<'_>,
@@ -213,6 +225,8 @@ fn exec_py(
     filename: &str,
     begin_code: Vec<String>,
     end_code: Vec<String>,
+    field_separators: Option<String>,
+    include_whitespace: Option<bool>,
 ) -> PyResult<i32> {
     let profile = profile_enabled();
     let total_start = Instant::now();
@@ -241,7 +255,14 @@ fn exec_py(
         log_profile("py_compile", compile_start.elapsed());
     }
     let globals_start = Instant::now();
-    let globals = prepare_globals(py, strip_display_prefix(filename), &argv, auto_import)?;
+    let globals = prepare_globals(
+        py,
+        strip_display_prefix(filename),
+        &argv,
+        auto_import,
+        field_separators,
+        include_whitespace,
+    )?;
     if profile {
         log_profile("prepare_globals", globals_start.elapsed());
     }
