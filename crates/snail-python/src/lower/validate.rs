@@ -269,8 +269,8 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
             for param in params {
                 check_param(param)?;
             }
-            // Lambdas lower to Python lambdas; disallow yield in their bodies.
-            check_stmts(body, false)?;
+            // Anonymous defs are hoisted to defs; allow yield in their bodies.
+            check_stmts(body, true)?;
         }
         Expr::Compound { expressions, .. } => {
             for expr in expressions {

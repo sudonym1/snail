@@ -222,6 +222,22 @@ def test_implicit_return_function(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "3"
 
 
+def test_lambda_semicolon_disables_implicit_return(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "def f { 2; }",
+            "g = def { 2; }",
+            "print(f())",
+            "print(g())",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["None", "None"]
+
+
 def test_implicit_return_if_else_requires_return(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

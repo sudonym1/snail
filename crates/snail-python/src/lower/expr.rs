@@ -10,7 +10,6 @@ use super::operators::{
     lower_unary_op,
 };
 use super::py_ast::{AstBuilder, py_err_to_lower};
-use super::stmt::lower_parameters;
 
 pub(crate) fn lower_expr(builder: &AstBuilder<'_>, expr: &Expr) -> Result<PyObject, LowerError> {
     lower_expr_with_exception(builder, expr, None)
@@ -782,9 +781,9 @@ pub(crate) fn lower_expr_with_exception(
                 .call_node("YieldFrom", vec![value], span)
                 .map_err(py_err_to_lower)
         }
-        Expr::Lambda { params, body, span } => {
-            lower_lambda_expr(builder, params, body, span, exception_name)
-        }
+        Expr::Lambda { .. } => Err(LowerError::new(
+            "def expressions should be desugared before lowering",
+        )),
         Expr::Compound { expressions, span } => {
             let mut lowered = Vec::new();
             for expr in expressions {
@@ -1429,83 +1428,6 @@ fn lower_subprocess_parts(
         }
     }
     Ok(lowered_parts)
-}
-
-fn lower_lambda_expr(
-    builder: &AstBuilder<'_>,
-    params: &[Parameter],
-    body: &[Stmt],
-    span: &SourceSpan,
-    exception_name: Option<&str>,
-) -> Result<PyObject, LowerError> {
-    let args = lower_parameters(builder, params, exception_name)?;
-    let body_expr = lower_lambda_body_expr(builder, body, span, exception_name)?;
-    builder
-        .call_node("Lambda", vec![args, body_expr], span)
-        .map_err(py_err_to_lower)
-}
-
-fn lower_lambda_body_expr(
-    builder: &AstBuilder<'_>,
-    body: &[Stmt],
-    span: &SourceSpan,
-    exception_name: Option<&str>,
-) -> Result<PyObject, LowerError> {
-    let mut lowered = Vec::new();
-    for stmt in body {
-        match stmt {
-            Stmt::Expr { value, .. } => {
-                lowered.push(lower_expr_with_exception(builder, value, exception_name)?);
-            }
-            _ => {
-                return Err(LowerError::new(
-                    "def expression bodies must contain only expression statements",
-                ));
-            }
-        }
-    }
-
-    if lowered.is_empty() {
-        return builder
-            .call_node(
-                "Constant",
-                vec![builder.py().None().into_py(builder.py())],
-                span,
-            )
-            .map_err(py_err_to_lower);
-    }
-
-    if lowered.len() == 1 {
-        return Ok(lowered.pop().unwrap());
-    }
-
-    let tuple_expr = builder
-        .call_node(
-            "Tuple",
-            vec![
-                PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
-                builder.load_ctx().map_err(py_err_to_lower)?,
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-    let index_expr = builder
-        .call_node(
-            "UnaryOp",
-            vec![
-                lower_unary_op(builder, UnaryOp::Minus)?,
-                number_expr(builder, "1", span)?,
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-    subscript_expr(
-        builder,
-        tuple_expr,
-        index_expr,
-        builder.load_ctx().map_err(py_err_to_lower)?,
-        span,
-    )
 }
 
 fn lower_call_arguments(

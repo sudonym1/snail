@@ -553,26 +553,18 @@ impl LambdaHoister {
                 span: span.clone(),
             },
             Expr::Lambda { params, body, span } => {
-                if lambda_requires_def(params, body) {
-                    let params = self.desugar_params(params, prelude);
-                    let body = ensure_lambda_return(self.desugar_block(body));
-                    let name = self.next_lambda_name();
-                    prelude.push(Stmt::Def {
-                        name: name.clone(),
-                        params,
-                        body,
-                        span: span.clone(),
-                    });
-                    Expr::Name {
-                        name,
-                        span: span.clone(),
-                    }
-                } else {
-                    Expr::Lambda {
-                        params: params.clone(),
-                        body: body.clone(),
-                        span: span.clone(),
-                    }
+                let params = self.desugar_params(params, prelude);
+                let body = self.desugar_block(body);
+                let name = self.next_lambda_name();
+                prelude.push(Stmt::Def {
+                    name: name.clone(),
+                    params,
+                    body,
+                    span: span.clone(),
+                });
+                Expr::Name {
+                    name,
+                    span: span.clone(),
                 }
             }
             Expr::Compound { expressions, span } => Expr::Compound {
@@ -716,191 +708,4 @@ impl LambdaHoister {
             },
         }
     }
-}
-
-fn lambda_requires_def(params: &[Parameter], body: &[Stmt]) -> bool {
-    if body.iter().any(|stmt| !matches!(stmt, Stmt::Expr { .. })) {
-        return true;
-    }
-
-    for param in params {
-        if let Parameter::Regular { default, .. } = param
-            && let Some(default) = default
-            && expr_contains_complex_lambda(default)
-        {
-            return true;
-        }
-    }
-
-    for stmt in body {
-        if let Stmt::Expr { value, .. } = stmt
-            && expr_contains_complex_lambda(value)
-        {
-            return true;
-        }
-    }
-
-    false
-}
-
-fn expr_contains_complex_lambda(expr: &Expr) -> bool {
-    match expr {
-        Expr::Yield { value, .. } => value
-            .as_ref()
-            .is_some_and(|expr| expr_contains_complex_lambda(expr)),
-        Expr::YieldFrom { expr, .. } => expr_contains_complex_lambda(expr),
-        Expr::Lambda { params, body, .. } => lambda_requires_def(params, body),
-        Expr::Unary { expr, .. } => expr_contains_complex_lambda(expr),
-        Expr::Binary { left, right, .. } => {
-            expr_contains_complex_lambda(left) || expr_contains_complex_lambda(right)
-        }
-        Expr::AugAssign { target, value, .. } => {
-            assign_target_contains_complex_lambda(target) || expr_contains_complex_lambda(value)
-        }
-        Expr::PrefixIncr { target, .. } | Expr::PostfixIncr { target, .. } => {
-            assign_target_contains_complex_lambda(target)
-        }
-        Expr::Compare {
-            left, comparators, ..
-        } => {
-            if expr_contains_complex_lambda(left) {
-                return true;
-            }
-            comparators.iter().any(expr_contains_complex_lambda)
-        }
-        Expr::IfExpr {
-            test, body, orelse, ..
-        } => {
-            expr_contains_complex_lambda(test)
-                || expr_contains_complex_lambda(body)
-                || expr_contains_complex_lambda(orelse)
-        }
-        Expr::TryExpr { expr, fallback, .. } => {
-            expr_contains_complex_lambda(expr)
-                || fallback
-                    .as_ref()
-                    .is_some_and(|expr| expr_contains_complex_lambda(expr))
-        }
-        Expr::Compound { expressions, .. } => expressions.iter().any(expr_contains_complex_lambda),
-        Expr::Regex { pattern, .. } => regex_pattern_contains_complex_lambda(pattern),
-        Expr::RegexMatch { value, pattern, .. } => {
-            expr_contains_complex_lambda(value) || regex_pattern_contains_complex_lambda(pattern)
-        }
-        Expr::Subprocess { parts, .. } => parts.iter().any(|part| match part {
-            SubprocessPart::Expr(expr) => expr_contains_complex_lambda(expr),
-            SubprocessPart::Text(_) => false,
-        }),
-        Expr::Call { func, args, .. } => {
-            if expr_contains_complex_lambda(func) {
-                return true;
-            }
-            args.iter().any(|arg| match arg {
-                Argument::Positional { value, .. }
-                | Argument::Keyword { value, .. }
-                | Argument::Star { value, .. }
-                | Argument::KwStar { value, .. } => expr_contains_complex_lambda(value),
-            })
-        }
-        Expr::Attribute { value, .. } => expr_contains_complex_lambda(value),
-        Expr::Index { value, index, .. } => {
-            expr_contains_complex_lambda(value) || expr_contains_complex_lambda(index)
-        }
-        Expr::Paren { expr, .. } => expr_contains_complex_lambda(expr),
-        Expr::List { elements, .. } | Expr::Tuple { elements, .. } => {
-            elements.iter().any(expr_contains_complex_lambda)
-        }
-        Expr::Set { elements, .. } => elements.iter().any(expr_contains_complex_lambda),
-        Expr::Dict { entries, .. } => entries.iter().any(|(key, value)| {
-            expr_contains_complex_lambda(key) || expr_contains_complex_lambda(value)
-        }),
-        Expr::Slice { start, end, .. } => {
-            start
-                .as_ref()
-                .is_some_and(|expr| expr_contains_complex_lambda(expr))
-                || end
-                    .as_ref()
-                    .is_some_and(|expr| expr_contains_complex_lambda(expr))
-        }
-        Expr::ListComp {
-            element, iter, ifs, ..
-        } => {
-            expr_contains_complex_lambda(element)
-                || expr_contains_complex_lambda(iter)
-                || ifs.iter().any(expr_contains_complex_lambda)
-        }
-        Expr::DictComp {
-            key,
-            value,
-            iter,
-            ifs,
-            ..
-        } => {
-            expr_contains_complex_lambda(key)
-                || expr_contains_complex_lambda(value)
-                || expr_contains_complex_lambda(iter)
-                || ifs.iter().any(expr_contains_complex_lambda)
-        }
-        Expr::FString { parts, .. } => parts.iter().any(fstring_part_contains_complex_lambda),
-        Expr::Name { .. }
-        | Expr::Placeholder { .. }
-        | Expr::Number { .. }
-        | Expr::String { .. }
-        | Expr::Bool { .. }
-        | Expr::None { .. }
-        | Expr::StructuredAccessor { .. }
-        | Expr::FieldIndex { .. } => false,
-    }
-}
-
-fn assign_target_contains_complex_lambda(target: &AssignTarget) -> bool {
-    match target {
-        AssignTarget::Name { .. } => false,
-        AssignTarget::Attribute { value, .. } => expr_contains_complex_lambda(value),
-        AssignTarget::Index { value, index, .. } => {
-            expr_contains_complex_lambda(value) || expr_contains_complex_lambda(index)
-        }
-        AssignTarget::Starred { target, .. } => assign_target_contains_complex_lambda(target),
-        AssignTarget::Tuple { elements, .. } | AssignTarget::List { elements, .. } => {
-            elements.iter().any(assign_target_contains_complex_lambda)
-        }
-    }
-}
-
-fn regex_pattern_contains_complex_lambda(pattern: &RegexPattern) -> bool {
-    match pattern {
-        RegexPattern::Literal(_) => false,
-        RegexPattern::Interpolated(parts) => parts.iter().any(fstring_part_contains_complex_lambda),
-    }
-}
-
-fn fstring_part_contains_complex_lambda(part: &FStringPart) -> bool {
-    match part {
-        FStringPart::Text(_) => false,
-        FStringPart::Expr(expr) => fstring_expr_contains_complex_lambda(expr),
-    }
-}
-
-fn fstring_expr_contains_complex_lambda(expr: &FStringExpr) -> bool {
-    if expr_contains_complex_lambda(expr.expr.as_ref()) {
-        return true;
-    }
-    expr.format_spec
-        .as_ref()
-        .is_some_and(|parts| parts.iter().any(fstring_part_contains_complex_lambda))
-}
-
-fn ensure_lambda_return(mut body: Vec<Stmt>) -> Vec<Stmt> {
-    let Some(last) = body.pop() else {
-        return body;
-    };
-    match last {
-        Stmt::Expr { value, span, .. } => {
-            body.push(Stmt::Return {
-                value: Some(value),
-                span,
-            });
-        }
-        other => body.push(other),
-    }
-    body
 }
