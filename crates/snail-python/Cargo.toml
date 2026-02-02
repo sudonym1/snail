@@ -1,6 +1,6 @@
 [package]
 name = "snail-python"
-version = "0.7.4"
+version = "0.7.5"
 edition.workspace = true
 build = "build.rs"
 
