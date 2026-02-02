@@ -1,0 +1,34 @@
+{
+  "grammars": [
+    {
+      "name": "snail",
+      "camelcase": "Snail",
+      "scope": "source.snail",
+      "path": ".",
+      "file-types": [
+        "snail"
+      ],
+      "highlights": "queries/highlights.scm",
+      "folds": "queries/folds.scm",
+      "injection-regex": "snail"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Snail grammar for tree-sitter",
+    "authors": [
+      {
+        "name": "Snail Contributors"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/sudonym1/snail"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "node": true,
+    "rust": true
+  }
+}

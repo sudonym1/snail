@@ -81,6 +81,21 @@ npm install    # Install dependencies
 npm run build  # Generate parser from grammar.js
 ```
 
+### VS Code (stable)
+
+A lightweight VS Code extension lives at `extras/vscode/` and uses Tree-sitter
+to provide semantic highlighting.
+
+```bash
+cd extras/vscode
+npm install
+
+# Build the wasm parser (requires Emscripten or Docker)
+tree-sitter build --wasm -o extras/vscode/assets/tree-sitter-snail.wasm extras/tree-sitter-snail
+```
+
+Open the repo in VS Code and run **Run Extension** from the Run and Debug view.
+
 ## Development
 
 ### Regenerating the parser

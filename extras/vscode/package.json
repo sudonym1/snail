@@ -1,0 +1,99 @@
+{
+  "name": "snail-language",
+  "displayName": "Snail",
+  "description": "Tree-sitter semantic highlighting for the Snail language",
+  "version": "0.1.0",
+  "publisher": "sudonym1",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:snail"
+  ],
+  "main": "./extension.js",
+  "scripts": {
+    "build-wasm": "bash scripts/build-wasm.sh"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "snail",
+        "aliases": [
+          "Snail"
+        ],
+        "extensions": [
+          ".snail"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[snail]": {
+        "editor.semanticHighlighting.enabled": true
+      }
+    },
+    "semanticTokenScopes": [
+      {
+        "language": "snail",
+        "scopes": {
+          "comment": [
+            "comment.line"
+          ],
+          "string": [
+            "string.quoted"
+          ],
+          "keyword": [
+            "keyword.control"
+          ],
+          "number": [
+            "constant.numeric"
+          ],
+          "regexp": [
+            "string.regexp"
+          ],
+          "operator": [
+            "keyword.operator"
+          ],
+          "namespace": [
+            "entity.name.namespace"
+          ],
+          "class": [
+            "entity.name.type.class"
+          ],
+          "type": [
+            "entity.name.type"
+          ],
+          "function": [
+            "entity.name.function"
+          ],
+          "method": [
+            "entity.name.function.method"
+          ],
+          "macro": [
+            "entity.name.function.macro"
+          ],
+          "variable": [
+            "variable.other.readwrite"
+          ],
+          "variable.defaultLibrary": [
+            "variable.language",
+            "constant.language"
+          ],
+          "parameter": [
+            "variable.parameter"
+          ],
+          "property": [
+            "variable.other.property"
+          ]
+        }
+      }
+    ]
+  },
+  "dependencies": {
+    "web-tree-sitter": "^0.20.8"
+  }
+}
