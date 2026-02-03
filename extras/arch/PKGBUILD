@@ -1,5 +1,5 @@
 pkgname=snail-lang
-pkgver=0.7.7
+pkgver=0.7.8
 pkgrel=1
 pkgdesc="Snail programming language interpreter"
 arch=('x86_64')
