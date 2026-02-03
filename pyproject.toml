@@ -17,7 +17,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "maturin>=1.5",
+    "black",
+    "isort",
+    "mypy",
     "pytest",
+    "ruff",
 ]
 
 [project.scripts]
@@ -28,3 +32,27 @@ bindings = "pyo3"
 python-source = "python"
 module-name = "snail._native"
 manifest-path = "crates/snail-python/Cargo.toml"
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+src_paths = ["python"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+src = ["python"]
+exclude = ["target", ".venv", "build", "dist"]
+
+[tool.mypy]
+python_version = "3.8"
+show_error_codes = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["snail._native"]
+ignore_missing_imports = true

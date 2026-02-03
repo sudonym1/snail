@@ -1,4 +1,4 @@
-.PHONY: all test build install clean sync benchmark develop test-rust
+.PHONY: all test build install clean sync benchmark develop test-rust test-python
 
 UV ?= uv
 
@@ -14,6 +14,12 @@ test-rust:
 	CARGO_TARGET_DIR=target/ci cargo clippy
 	CARGO_TARGET_DIR=target/ci cargo test
 
+test-python: sync
+	$(UV) run -- black --check python
+	$(UV) run -- isort --check-only python
+	$(UV) run -- ruff check python
+	$(UV) run -- mypy python/snail
+
 sync:
 	$(UV) sync --extra dev
 
@@ -21,7 +27,7 @@ develop: sync
 	$(UV) run -- python -m maturin develop
 
 # Run all tests
-test: test-rust develop
+test: test-rust test-python develop
 	$(UV) run -- python -m pytest python/tests
 	sha1sum CLAUDE.md AGENTS.md | $(UV) run -- $(SNAIL) -a '{assert $$1 == prev:$$1?, "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"; prev=$$1}'
 
