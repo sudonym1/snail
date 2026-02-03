@@ -1297,9 +1297,9 @@ def test_readme_snail_blocks_parse(
         assert main(["--awk", source]) == 0, f"failed at {path}:{line_no}"
     elif lang == "snail-map":
         map_file = _ensure_readme_map_file(tmp_path)
-        assert main(["--map", source, str(map_file)]) == 0, (
-            f"failed at {path}:{line_no}"
-        )
+        assert (
+            main(["--map", source, str(map_file)]) == 0
+        ), f"failed at {path}:{line_no}"
     else:
         combined = f"{README_SNIPPET_PREAMBLE}\n{source}"
         assert main([combined]) == 0, f"failed at {path}:{line_no}"
