@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import ast
+import importlib
 import importlib.util
 import io
-import ast
 import os
 import re
 import shlex
@@ -21,8 +22,8 @@ sys.path.insert(0, str(PYTHON_DIR))
 if importlib.util.find_spec("snail._native") is None:
     pytest.skip("snail extension not built", allow_module_level=True)
 
-from snail.cli import main
-import snail
+snail = importlib.import_module("snail")
+main = importlib.import_module("snail.cli").main
 
 README_SNIPPET_PREAMBLE = """
 def risky(*args, fail=False) { if fail { raise Exception(fail) } else { return args } }
