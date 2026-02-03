@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Optional
+from types import TracebackType
+from typing import Any, Iterable, Optional, cast
 
 from . import __build_info__, compile_ast, exec
 
@@ -58,7 +59,7 @@ def _install_trimmed_excepthook() -> None:
     def _snail_excepthook(
         exc_type: type[BaseException],
         exc: BaseException,
-        tb: object,
+        tb: TracebackType | None,
     ) -> None:
         if exc_type is KeyboardInterrupt:
             return original_excepthook(exc_type, exc, tb)
@@ -72,13 +73,13 @@ def _install_trimmed_excepthook() -> None:
         )
         _trim_traceback_exception(tb_exc, internal_files)
         try:
-            import _colorize
+            import _colorize  # type: ignore[import-not-found]
 
             colorize = _colorize.can_colorize(file=sys.stderr)
         except Exception:
             colorize = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
         try:
-            formatted = tb_exc.format(colorize=colorize)
+            formatted = cast(Iterable[str], cast(Any, tb_exc).format(colorize=colorize))
         except TypeError:
             formatted = tb_exc.format()
         for line in formatted:
@@ -407,7 +408,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             output = ast.unparse(python_ast)
         except AttributeError:
-            import astunparse
+            import astunparse  # type: ignore[import-untyped]
 
             output = astunparse.unparse(python_ast).rstrip("\n")
         print(output)

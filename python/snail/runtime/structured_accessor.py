@@ -100,7 +100,7 @@ def __snail_jmespath_query(query: str):
     Used by the $[query] syntax which lowers to __snail_jmespath_query(query).
     """
 
-    import jmespath as _jmespath
+    import jmespath as _jmespath  # type: ignore[import-untyped]
 
     transpiled = _transpile_jmespath_query(query)
 
