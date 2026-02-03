@@ -728,6 +728,25 @@ def test_awk_field_separator_long_flags(
     assert captured.out == "a b c\n"
 
 
+def test_awk_field_separator_whitespace_rules(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("/one/two/three\n"))
+    assert (
+        main(
+            [
+                "--awk",
+                "--field-separator",
+                "/",
+                "{ print($1, $2, $3) }",
+            ]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert captured.out == "one two three\n"
+
+
 def test_awk_field_separator_with_whitespace_flag(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

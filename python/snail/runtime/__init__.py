@@ -223,7 +223,7 @@ def _lazy_aug_index(obj, index, value, op: str):
     return _get_aug_index()(obj, index, value, op)
 
 
-def __snail_awk_split(line: str, separators: Optional[str], include_whitespace: bool):
+def __snail_awk_split_internal(line: str, separators: Optional[str], include_whitespace: bool):
     if not separators:
         return line.split()
     if not include_whitespace:
@@ -244,6 +244,9 @@ def __snail_awk_split(line: str, separators: Optional[str], include_whitespace: 
         _awk_split_cache[(separators, True)] = regex
     return regex.split(stripped)
 
+def __snail_awk_split(line: str, separators: Optional[str], include_whitespace: bool):
+    fields = __snail_awk_split_internal(line, separators, include_whitespace)
+    return [f for f in fields if f]
 
 def __snail_partial(func, /, *args, **kwargs):
     import functools
