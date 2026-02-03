@@ -385,6 +385,17 @@ pub(crate) fn lower_awk_line_loop_with_auto_print(
         )?,
         span,
     )?);
+    loop_body.push(assign_name(
+        builder,
+        SNAIL_MAP_SRC_PYVAR,
+        name_expr(
+            builder,
+            "__snail_path",
+            span,
+            builder.load_ctx().map_err(py_err_to_lower)?,
+        )?,
+        span,
+    )?);
 
     loop_body.extend(lower_awk_rules_with_auto_print(
         builder,

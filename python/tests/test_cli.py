@@ -700,6 +700,15 @@ def test_awk_mode(
     assert captured.out == "foo\n"
 
 
+def test_awk_src_current_file(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("foo\nbar\n"))
+    assert main(["--awk", "{ print($src) }"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "-\n-\n"
+
+
 def test_awk_field_separator_multiple_flags(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1538,7 +1547,7 @@ def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) ->
     """Test that $src is rejected in snail mode."""
     with pytest.raises(SyntaxError) as excinfo:
         main(["print($src)"])
-    assert "map variables are only valid in map mode" in str(excinfo.value)
+    assert "map or awk mode" in str(excinfo.value)
 
 
 def test_awk_and_map_mutually_exclusive(capsys: pytest.CaptureFixture[str]) -> None:

@@ -180,7 +180,7 @@ function! snail#complete(findstart, base) abort
           \ 'min', 'max', 'sum', 'sorted', 'reversed', 'enumerate',
           \ 'zip', 'map', 'filter', 'any', 'all', 'json',
           \ ]
-    let l:snail_vars = ['$e', '$0', '$1', '$n', '$fn', '$p', '$m']
+    let l:snail_vars = ['$e', '$0', '$1', '$n', '$fn', '$src', '$m']
     
     let l:matches = []
     for l:word in l:keywords + l:builtins + l:snail_vars

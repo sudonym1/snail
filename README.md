@@ -60,7 +60,7 @@ END { print("done") }
 | `$f` | All fields as a list |
 | `$n` | Global line number (across all files) |
 | `$fn` | Per-file line number |
-| `$p` | Current file path |
+| `$src` | Current file path |
 | `$m` | Last regex match object |
 
 

@@ -159,11 +159,14 @@ pub fn parse_awk_program_with_begin_end(
     Ok(program)
 }
 
-const AWK_ONLY_NAMES: [&str; 5] = ["$n", "$fn", "$p", "$m", "$f"];
+const AWK_ONLY_NAMES: [&str; 4] = ["$n", "$fn", "$m", "$f"];
 const AWK_ONLY_MESSAGE: &str = "awk variables are only valid in awk mode; use --awk";
 
-const MAP_ONLY_NAMES: [&str; 3] = ["$src", "$fd", "$text"];
+const MAP_ONLY_NAMES: [&str; 2] = ["$fd", "$text"];
 const MAP_ONLY_MESSAGE: &str = "map variables are only valid in map mode; use --map";
+const MAP_OR_AWK_NAMES: [&str; 1] = ["$src"];
+const MAP_OR_AWK_MESSAGE: &str =
+    "map/awk variables are only valid in map or awk mode; use --map or --awk";
 
 /// Parses a map program that processes files one at a time.
 /// Allows map variables ($src, $fd, $text) but rejects awk variables.
@@ -932,6 +935,9 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
             }
             if MAP_ONLY_NAMES.contains(&name.as_str()) {
                 return Err(error_with_span(MAP_ONLY_MESSAGE, span.clone(), source));
+            }
+            if MAP_OR_AWK_NAMES.contains(&name.as_str()) {
+                return Err(error_with_span(MAP_OR_AWK_MESSAGE, span.clone(), source));
             }
         }
         Expr::Placeholder { .. } => {}

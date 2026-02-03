@@ -168,7 +168,7 @@ Built-in Variables~
     $0, $1, $2, ...   AWK-style field access (whitespace-split)
     $n      Global line number
     $fn     Per-file line number
-    $p      Current file path
+    $src    Current file path
     $m      Last regex match object
     $e      Exception in fallback expressions (expr:fallback?)
 

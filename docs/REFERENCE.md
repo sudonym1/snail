@@ -441,7 +441,7 @@ While processing, Snail populates awk-style variables:
   characters supplied via `-F`, or on both when `-W` is used with `-F`.
 - `$n`: global line counter across all files.
 - `$fn`: per-file line counter.
-- `$p`: the active filename, with `"-"` representing stdin.
+- `$src`: the active filename, with `"-"` representing stdin.
 - `$m`: the last regex match tuple (`$m.1` maps to `$m[1]`).
 
 These `$` variables are injected by the language; user-defined identifiers
