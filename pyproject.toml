@@ -49,7 +49,7 @@ src = ["python"]
 exclude = ["target", ".venv", "build", "dist"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.12"
 show_error_codes = true
 warn_unused_ignores = true
 

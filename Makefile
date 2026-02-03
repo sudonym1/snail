@@ -18,7 +18,11 @@ test-python: sync
 	$(UV) run -- black --check python
 	$(UV) run -- isort --check-only python
 	$(UV) run -- ruff check python
-	$(UV) run -- mypy python/snail
+	if $(UV) run -- python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)'; then \
+		$(UV) run -- mypy python/snail; \
+	else \
+		echo "Skipping mypy (requires >= 3.9)"; \
+	fi
 
 sync:
 	$(UV) sync --extra dev
