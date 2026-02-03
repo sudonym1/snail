@@ -414,6 +414,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(output)
         return 0
 
+    if mode == "awk" and not args[1:]:
+        try:
+            is_tty = sys.stdin.isatty()
+        except Exception:
+            is_tty = False
+        if is_tty:
+            print('Missing input (see "snail --help")', file=sys.stderr)
+            return 1
+
     separators = "".join(namespace.field_separators)
     field_separators = separators if separators else None
     include_whitespace = namespace.include_whitespace or field_separators is None

@@ -700,6 +700,26 @@ def test_awk_mode(
     assert captured.out == "foo\n"
 
 
+def test_awk_requires_input_when_stdin_is_tty(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    result = main(["--awk", "/foo/ { print($0) }"])
+    assert result == 1
+    captured = capsys.readouterr()
+    assert 'Missing input (see "snail --help")' in captured.err
+
+
+def test_awk_does_not_require_input_when_stdin_is_not_a_tty(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    result = main(["--awk", "/foo/ { print($0) }"])
+    assert result == 0
+
+
 def test_awk_src_current_file(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
