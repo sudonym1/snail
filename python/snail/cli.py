@@ -408,7 +408,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             output = ast.unparse(python_ast)
         except AttributeError:
-            import astunparse  # type: ignore[import-untyped]
+            import astunparse  # type: ignore[import-not-found]
 
             output = astunparse.unparse(python_ast).rstrip("\n")
         print(output)
