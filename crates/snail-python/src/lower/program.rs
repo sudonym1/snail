@@ -98,6 +98,15 @@ pub fn lower_awk_program_with_auto_print(
                                 ],
                             )
                             .map_err(py_err_to_lower)?,
+                        builder
+                            .call_node_no_loc(
+                                "alias",
+                                vec![
+                                    "contextlib".to_string().into_py(builder.py()),
+                                    builder.py().None().into_py(builder.py()),
+                                ],
+                            )
+                            .map_err(py_err_to_lower)?,
                     ],
                 )
                 .into_py(builder.py()),

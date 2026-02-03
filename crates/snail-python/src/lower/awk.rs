@@ -23,41 +23,27 @@ pub(crate) fn lower_awk_file_loop_with_auto_print(
         span,
     )?);
 
-    let stdin_body = vec![
-        assign_name(
-            builder,
-            "__snail_file",
-            builder
-                .call_node(
-                    "Attribute",
-                    vec![
-                        name_expr(
-                            builder,
-                            "sys",
-                            span,
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        )?,
-                        "stdin".to_string().into_py(builder.py()),
+    let stdin_assign = assign_name(
+        builder,
+        "__snail_file",
+        builder
+            .call_node(
+                "Attribute",
+                vec![
+                    name_expr(
+                        builder,
+                        "sys",
+                        span,
                         builder.load_ctx().map_err(py_err_to_lower)?,
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)?,
-            span,
-        )?,
-        lower_awk_line_loop_with_auto_print(
-            builder,
-            program,
-            span,
-            name_expr(
-                builder,
-                "__snail_file",
+                    )?,
+                    "stdin".to_string().into_py(builder.py()),
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                ],
                 span,
-                builder.load_ctx().map_err(py_err_to_lower)?,
-            )?,
-            auto_print,
-        )?,
-    ];
+            )
+            .map_err(py_err_to_lower)?,
+        span,
+    )?;
 
     let open_call = builder
         .call_node(
@@ -85,45 +71,34 @@ pub(crate) fn lower_awk_file_loop_with_auto_print(
         )
         .map_err(py_err_to_lower)?;
 
-    let with_item = builder
-        .call_node_no_loc(
-            "withitem",
-            vec![
-                open_call,
-                name_expr(
-                    builder,
-                    "__snail_file",
-                    span,
-                    builder.store_ctx().map_err(py_err_to_lower)?,
-                )?,
-            ],
-        )
-        .map_err(py_err_to_lower)?;
-    let with_stmt = builder
+    let enter_context_call = builder
         .call_node(
-            "With",
+            "Call",
             vec![
-                PyList::new_bound(builder.py(), vec![with_item]).into_py(builder.py()),
-                PyList::new_bound(
-                    builder.py(),
-                    vec![lower_awk_line_loop_with_auto_print(
-                        builder,
-                        program,
-                        span,
-                        name_expr(
-                            builder,
-                            "__snail_file",
-                            span,
+                builder
+                    .call_node(
+                        "Attribute",
+                        vec![
+                            name_expr(
+                                builder,
+                                "__snail_stack",
+                                span,
+                                builder.load_ctx().map_err(py_err_to_lower)?,
+                            )?,
+                            "enter_context".to_string().into_py(builder.py()),
                             builder.load_ctx().map_err(py_err_to_lower)?,
-                        )?,
-                        auto_print,
-                    )?],
-                )
-                .into_py(builder.py()),
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?,
+                PyList::new_bound(builder.py(), vec![open_call]).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
             ],
             span,
         )
         .map_err(py_err_to_lower)?;
+
+    let file_assign = assign_name(builder, "__snail_file", enter_context_call, span)?;
 
     let test = builder
         .call_node(
@@ -161,14 +136,80 @@ pub(crate) fn lower_awk_file_loop_with_auto_print(
             "If",
             vec![
                 test,
-                PyList::new_bound(builder.py(), stdin_body).into_py(builder.py()),
-                PyList::new_bound(builder.py(), vec![with_stmt]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![stdin_assign]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![file_assign]).into_py(builder.py()),
             ],
             span,
         )
         .map_err(py_err_to_lower)?;
 
-    file_loop.push(if_stmt);
+    let exit_stack_call = builder
+        .call_node(
+            "Call",
+            vec![
+                builder
+                    .call_node(
+                        "Attribute",
+                        vec![
+                            name_expr(
+                                builder,
+                                "contextlib",
+                                span,
+                                builder.load_ctx().map_err(py_err_to_lower)?,
+                            )?,
+                            "ExitStack".to_string().into_py(builder.py()),
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?,
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let with_item = builder
+        .call_node_no_loc(
+            "withitem",
+            vec![
+                exit_stack_call,
+                name_expr(
+                    builder,
+                    "__snail_stack",
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+            ],
+        )
+        .map_err(py_err_to_lower)?;
+
+    let line_loop = lower_awk_line_loop_with_auto_print(
+        builder,
+        program,
+        span,
+        name_expr(
+            builder,
+            "__snail_file",
+            span,
+            builder.load_ctx().map_err(py_err_to_lower)?,
+        )?,
+        auto_print,
+    )?;
+
+    let with_stmt = builder
+        .call_node(
+            "With",
+            vec![
+                PyList::new_bound(builder.py(), vec![with_item]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![if_stmt, line_loop]).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    file_loop.push(with_stmt);
     Ok(file_loop)
 }
 
