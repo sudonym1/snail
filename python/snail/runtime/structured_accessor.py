@@ -143,6 +143,10 @@ def js(input_data=None):
             raise ValueError('Missing input (see "snail --help")')
         input_data = _sys.stdin
 
+    if input_data == "-":
+
+        input_data = _sys.stdin
+
     if isinstance(input_data, str):
         try:
             return _json.loads(input_data)

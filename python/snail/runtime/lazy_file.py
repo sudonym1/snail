@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+
 
 class LazyFile:
     """Context manager that opens the file on first access."""
 
-    __slots__ = ("_path", "_mode", "_kwargs", "_fd", "_closed")
+    __slots__ = ("_path", "_mode", "_kwargs", "_fd", "_closed", "_owns_fd")
 
     def __init__(self, path, mode="r", **kwargs):
         self._path = path
@@ -14,12 +16,21 @@ class LazyFile:
         self._kwargs = kwargs
         self._fd = None
         self._closed = False
+        self._owns_fd = False
 
     def _ensure_open(self):
         if self._closed:
             raise ValueError("I/O operation on closed file.")
         if self._fd is None:
-            self._fd = open(self._path, self._mode, **self._kwargs)
+            if self._path == "-":
+                if "b" in self._mode and hasattr(sys.stdin, "buffer"):
+                    self._fd = sys.stdin.buffer
+                else:
+                    self._fd = sys.stdin
+                self._owns_fd = False
+            else:
+                self._fd = open(self._path, self._mode, **self._kwargs)
+                self._owns_fd = True
         return self._fd
 
     def __enter__(self):
@@ -27,7 +38,7 @@ class LazyFile:
 
     def __exit__(self, exc_type, exc, tb):
         self._closed = True
-        if self._fd is not None:
+        if self._fd is not None and self._owns_fd:
             self._fd.close()
         return False
 

@@ -367,6 +367,16 @@ def test_jsonl_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "['Ada', 'Lin']\n"
 
 
+def test_js_dash_reads_stdin(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"name": "Ada"}'))
+    script = 'data = js("-")\nprint(data["name"])\n'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "Ada\n"
+
+
 def test_js_requires_input_when_stdin_is_tty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1410,6 +1420,16 @@ def test_map_mode_from_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     captured = capsys.readouterr()
     assert str(file_a) in captured.out
     assert str(file_b) in captured.out
+
+
+def test_map_mode_dash_reads_stdin(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("stdin data"))
+    result = main(["--map", "print($src)\nprint($text)", "-"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["-", "stdin data"]
 
 
 def test_map_mode_missing_file_src_only(

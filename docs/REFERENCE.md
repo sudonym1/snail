@@ -387,9 +387,10 @@ result = js(r'{"foo": 12}') | $[foo]    # yields 12
 ```
 
 The `js()` function parses JSON strings (including JSONL) and returns a
-queryable object. For JSONL input, the result is a list of parsed objects. The
-`$[query]` accessor produces a callable that applies the JMESPath query to the
-input data.
+queryable object. For JSONL input, the result is a list of parsed objects. If
+given a filename, `js()` reads and parses the file contents; pass `"-"` to
+read from stdin explicitly. The `$[query]` accessor produces a callable that
+applies the JMESPath query to the input data.
 
 Snail rewrites JMESPath queries in `$[query]` so that double-quoted segments are
 treated as string literals. This makes expressions like
