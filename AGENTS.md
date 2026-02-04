@@ -67,6 +67,10 @@ cargo clippy -- -D warnings
 - **Rust tests**: Run targeted `cargo test <name>` as needed; `make test` runs `cargo test`.
 - **Python CLI tests**: Run `uv run -- python -m pytest python/tests` when touching the CLI; `make test` runs it.
 
+IMPORTANT: after making any edit, always run at least some test that covers
+that edit. If it isn't immediately obvious which test to run, just run `make
+test`.
+
 ### Required Final CI Step
 
 ```bash
