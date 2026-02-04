@@ -135,6 +135,12 @@ def js(input_data=None):
     If called with no arguments, reads from stdin.
     """
     if input_data is None:
+        try:
+            is_tty = _sys.stdin.isatty()
+        except Exception:
+            is_tty = False
+        if is_tty:
+            raise ValueError('Missing input (see "snail --help")')
         input_data = _sys.stdin
 
     if isinstance(input_data, str):

@@ -367,6 +367,28 @@ def test_jsonl_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "['Ada', 'Lin']\n"
 
 
+def test_js_requires_input_when_stdin_is_tty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    with pytest.raises(ValueError) as excinfo:
+        main(["-P", "js()"])
+    assert 'Missing input (see "snail --help")' in str(excinfo.value)
+
+
+def test_js_does_not_require_input_when_stdin_is_not_a_tty(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    result = main(["-P", "js()"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
 def test_jmespath_double_quotes_string_literal(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
