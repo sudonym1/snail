@@ -283,11 +283,7 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
             check_regex_pattern(pattern, in_function)?;
         }
         Expr::Subprocess { parts, .. } => {
-            for part in parts {
-                if let SubprocessPart::Expr(expr) = part {
-                    check_expr(expr, in_function)?;
-                }
-            }
+            check_fstring_parts(parts, in_function)?;
         }
         Expr::Call { func, args, .. } => {
             check_expr(func, in_function)?;

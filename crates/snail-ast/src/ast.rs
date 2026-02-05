@@ -284,7 +284,7 @@ pub enum Expr {
     },
     Subprocess {
         kind: SubprocessKind,
-        parts: Vec<SubprocessPart>,
+        parts: Vec<FStringPart>,
         span: SourceSpan,
     },
     StructuredAccessor {
@@ -394,12 +394,6 @@ pub enum RegexPattern {
 pub enum SubprocessKind {
     Capture,
     Status,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SubprocessPart {
-    Text(String),
-    Expr(Box<Expr>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

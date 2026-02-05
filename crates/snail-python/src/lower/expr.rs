@@ -1359,11 +1359,11 @@ fn incr_delta(op: IncrOp) -> &'static str {
 fn lower_subprocess_object(
     builder: &AstBuilder<'_>,
     kind: &SubprocessKind,
-    parts: &[SubprocessPart],
+    parts: &[FStringPart],
     span: &SourceSpan,
     exception_name: Option<&str>,
 ) -> Result<PyObject, LowerError> {
-    let values = lower_subprocess_parts(builder, parts, exception_name)?;
+    let values = lower_fstring_parts(builder, parts, exception_name)?;
     let command = builder
         .call_node(
             "JoinedStr",
@@ -1392,42 +1392,6 @@ fn lower_subprocess_object(
             span,
         )
         .map_err(py_err_to_lower)
-}
-
-fn lower_subprocess_parts(
-    builder: &AstBuilder<'_>,
-    parts: &[SubprocessPart],
-    exception_name: Option<&str>,
-) -> Result<Vec<PyObject>, LowerError> {
-    let mut lowered_parts = Vec::with_capacity(parts.len());
-    for part in parts {
-        match part {
-            SubprocessPart::Text(text) => {
-                let const_node = builder
-                    .call_node(
-                        "Constant",
-                        vec![text.clone().into_py(builder.py())],
-                        &dummy_span(),
-                    )
-                    .map_err(py_err_to_lower)?;
-                lowered_parts.push(const_node);
-            }
-            SubprocessPart::Expr(expr) => {
-                let value = lower_expr_with_exception(builder, expr, exception_name)?;
-                let conversion = (-1i32).into_py(builder.py());
-                let format_spec = builder.py().None();
-                let formatted = builder
-                    .call_node(
-                        "FormattedValue",
-                        vec![value, conversion, format_spec.into_py(builder.py())],
-                        &dummy_span(),
-                    )
-                    .map_err(py_err_to_lower)?;
-                lowered_parts.push(formatted);
-            }
-        }
-    }
-    Ok(lowered_parts)
 }
 
 fn lower_call_arguments(
@@ -1582,9 +1546,7 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
         }
         Expr::Subprocess { parts, .. } => {
             for part in parts {
-                if let SubprocessPart::Expr(expr) = part {
-                    count_placeholders(expr, info);
-                }
+                count_placeholders_in_fstring_part(part, info);
             }
         }
         Expr::Call { func, args, .. } => {
@@ -1876,12 +1838,7 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             kind: *kind,
             parts: parts
                 .iter()
-                .map(|part| match part {
-                    SubprocessPart::Text(text) => SubprocessPart::Text(text.clone()),
-                    SubprocessPart::Expr(expr) => {
-                        SubprocessPart::Expr(Box::new(substitute_placeholder(expr, replacement)))
-                    }
-                })
+                .map(|part| substitute_placeholder_in_fstring_part(part, replacement))
                 .collect(),
             span: span.clone(),
         },

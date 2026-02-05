@@ -626,9 +626,7 @@ fn validate_expr_for_map(expr: &Expr, source: &str) -> Result<(), ParseError> {
         }
         Expr::Subprocess { parts, .. } => {
             for part in parts {
-                if let SubprocessPart::Expr(expr) = part {
-                    validate_expr_for_map(expr, source)?;
-                }
+                validate_fstring_part_for_map(part, source)?;
             }
         }
         Expr::StructuredAccessor { .. }
@@ -1012,9 +1010,7 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
         }
         Expr::Subprocess { parts, .. } => {
             for part in parts {
-                if let SubprocessPart::Expr(expr) = part {
-                    validate_expr(expr, source)?;
-                }
+                validate_fstring_part(part, source)?;
             }
         }
         Expr::StructuredAccessor { .. }

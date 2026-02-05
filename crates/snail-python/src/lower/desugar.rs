@@ -591,12 +591,7 @@ impl LambdaHoister {
                 kind: *kind,
                 parts: parts
                     .iter()
-                    .map(|part| match part {
-                        SubprocessPart::Text(text) => SubprocessPart::Text(text.clone()),
-                        SubprocessPart::Expr(expr) => {
-                            SubprocessPart::Expr(Box::new(self.desugar_expr(expr, prelude)))
-                        }
-                    })
+                    .map(|part| self.desugar_fstring_part(part, prelude))
                     .collect(),
                 span: span.clone(),
             },

@@ -228,8 +228,9 @@ subprocess = { subprocess_capture | subprocess_status }
 subprocess_capture = { "$(" ~ subprocess_body ~ ")" }
 subprocess_status = { "@(" ~ subprocess_body ~ ")" }
 subprocess_body = { subprocess_part* }
-subprocess_part = _{ subprocess_expr | subprocess_text }
-subprocess_expr = { "{" ~ expr ~ "}" }
+subprocess_part = _{ subprocess_brace_block | subprocess_text }
+subprocess_brace_block = { "{" ~ subprocess_brace_content* ~ "}" }
+subprocess_brace_content = _{ subprocess_brace_block | (!"}" ~ !"{" ~ ANY) }
 subprocess_text = @{ ( "{{" | "}}" | (!("{" | ")") ~ ANY) )+ }
 
 // Structured pipeline accessor: $[query] for querying structured data

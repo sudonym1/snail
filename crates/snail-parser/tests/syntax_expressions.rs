@@ -2,7 +2,7 @@ mod common;
 
 use common::*;
 use snail_ast::{
-    BinaryOp, CompareOp, Expr, RegexPattern, Stmt, SubprocessKind, SubprocessPart, UnaryOp,
+    BinaryOp, CompareOp, Expr, FStringPart, RegexPattern, Stmt, SubprocessKind, UnaryOp,
 };
 
 #[test]
@@ -191,7 +191,7 @@ fn parses_subprocess_expressions() {
             assert!(
                 parts
                     .iter()
-                    .any(|part| matches!(part, SubprocessPart::Expr(_)))
+                    .any(|part| matches!(part, FStringPart::Expr(_)))
             );
         }
         other => panic!("Expected subprocess capture, got {other:?}"),
@@ -204,7 +204,7 @@ fn parses_subprocess_expressions() {
             assert!(
                 parts
                     .iter()
-                    .any(|part| matches!(part, SubprocessPart::Text(text) if text.contains("ok")))
+                    .any(|part| matches!(part, FStringPart::Text(text) if text.contains("ok")))
             );
         }
         other => panic!("Expected subprocess status, got {other:?}"),
