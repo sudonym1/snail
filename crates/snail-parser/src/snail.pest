@@ -227,10 +227,7 @@ compound_expr = { "(" ~ NEWLINE* ~ expr ~ (";" ~ NEWLINE* ~ expr)+ ~ NEWLINE* ~ 
 subprocess = { subprocess_capture | subprocess_status }
 subprocess_capture = { "$(" ~ subprocess_body ~ ")" }
 subprocess_status = { "@(" ~ subprocess_body ~ ")" }
-subprocess_body = { subprocess_part* }
-subprocess_part = _{ subprocess_expr | subprocess_text }
-subprocess_expr = { "{" ~ expr ~ "}" }
-subprocess_text = @{ ( "{{" | "}}" | (!("{" | ")") ~ ANY) )+ }
+subprocess_body = @{ (!")" ~ ANY)* }
 
 // Structured pipeline accessor: $[query] for querying structured data
 // The query is treated as a raw string (no interpolation)

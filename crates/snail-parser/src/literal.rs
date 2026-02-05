@@ -239,131 +239,20 @@ pub fn parse_subprocess_body(
     source: &str,
     span: SourceSpan,
 ) -> Result<Vec<SubprocessPart>, ParseError> {
-    let mut parts = Vec::new();
-    for inner in pair.into_inner() {
-        match inner.as_rule() {
-            Rule::subprocess_text => {
-                let start_offset = inner.as_span().start();
-                let text_parts = parse_subprocess_text_parts(inner.as_str(), start_offset, source)?;
-                parts.extend(text_parts);
-            }
-            Rule::subprocess_expr => {
-                let expr_pair = inner.into_inner().next().ok_or_else(|| {
-                    error_with_span("missing subprocess expression", span.clone(), source)
-                })?;
-                let expr = crate::expr::parse_expr_pair(expr_pair, source)?;
-                parts.push(SubprocessPart::Expr(Box::new(expr)));
-            }
-            _ => {}
-        }
-    }
+    let content = pair.as_str();
+    let content_offset = pair.as_span().start();
+    let fstring_parts = parse_fstring_parts(content, content_offset, source)?;
+    let parts = fstring_parts
+        .into_iter()
+        .map(|part| match part {
+            FStringPart::Text(text) => SubprocessPart::Text(text),
+            FStringPart::Expr(expr) => SubprocessPart::Expr(expr),
+        })
+        .collect::<Vec<_>>();
     if parts.is_empty() {
         return Err(error_with_span("missing subprocess command", span, source));
     }
     Ok(parts)
-}
-
-pub fn parse_subprocess_text_parts(
-    text: &str,
-    start_offset: usize,
-    source: &str,
-) -> Result<Vec<SubprocessPart>, ParseError> {
-    let mut parts = Vec::new();
-    let mut buffer = String::new();
-    let mut iter = text.char_indices().peekable();
-
-    while let Some((idx, ch)) = iter.next() {
-        match ch {
-            '{' => {
-                if matches!(iter.peek(), Some((_, '{'))) {
-                    iter.next();
-                }
-                buffer.push('{');
-            }
-            '}' => {
-                if matches!(iter.peek(), Some((_, '}'))) {
-                    iter.next();
-                }
-                buffer.push('}');
-            }
-            '$' => {
-                if matches!(iter.peek(), Some((_, '$'))) {
-                    iter.next();
-                    buffer.push('$');
-                    continue;
-                }
-
-                if let Some((_, next_ch)) = iter.peek().copied()
-                    && next_ch.is_ascii_digit()
-                {
-                    let mut digits = String::new();
-                    let mut end = idx + 1;
-                    while let Some((d_idx, d_ch)) = iter.peek().copied() {
-                        if d_ch.is_ascii_digit() {
-                            iter.next();
-                            digits.push(d_ch);
-                            end = d_idx + d_ch.len_utf8();
-                        } else {
-                            break;
-                        }
-                    }
-                    if !buffer.is_empty() {
-                        parts.push(SubprocessPart::Text(std::mem::take(&mut buffer)));
-                    }
-                    let span = crate::util::span_from_offset(
-                        start_offset + idx,
-                        start_offset + end,
-                        source,
-                    );
-                    parts.push(SubprocessPart::Expr(Box::new(Expr::FieldIndex {
-                        index: digits,
-                        span,
-                    })));
-                    continue;
-                }
-
-                if let Some((name, len)) = match_injected_name(&text[idx + 1..]) {
-                    for _ in 0..len {
-                        iter.next();
-                    }
-                    if !buffer.is_empty() {
-                        parts.push(SubprocessPart::Text(std::mem::take(&mut buffer)));
-                    }
-                    let span = crate::util::span_from_offset(
-                        start_offset + idx,
-                        start_offset + idx + 1 + len,
-                        source,
-                    );
-                    parts.push(SubprocessPart::Expr(Box::new(Expr::Name {
-                        name: format!("${name}"),
-                        span,
-                    })));
-                    continue;
-                }
-
-                buffer.push('$');
-            }
-            _ => buffer.push(ch),
-        }
-    }
-
-    if !buffer.is_empty() {
-        parts.push(SubprocessPart::Text(buffer));
-    }
-
-    Ok(parts)
-}
-
-pub fn match_injected_name(text: &str) -> Option<(&'static str, usize)> {
-    if text.starts_with("fn") {
-        return Some(("fn", 2));
-    }
-    for name in ["l", "f", "n", "p", "m", "e"] {
-        if text.starts_with(name) {
-            return Some((name, 1));
-        }
-    }
-    None
 }
 
 pub fn parse_structured_accessor(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {

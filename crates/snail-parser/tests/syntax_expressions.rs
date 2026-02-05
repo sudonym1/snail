@@ -2,7 +2,8 @@ mod common;
 
 use common::*;
 use snail_ast::{
-    BinaryOp, CompareOp, Expr, RegexPattern, Stmt, SubprocessKind, SubprocessPart, UnaryOp,
+    BinaryOp, CompareOp, Expr, FStringConversion, FStringPart, RegexPattern, Stmt, SubprocessKind,
+    SubprocessPart, UnaryOp,
 };
 
 #[test]
@@ -208,6 +209,34 @@ fn parses_subprocess_expressions() {
             );
         }
         other => panic!("Expected subprocess status, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_subprocess_fstring_formatting() {
+    let source = "name = \"snail\"\nout = $(echo {name!r:>10})\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+
+    let (_, value) = expect_assign(&program.stmts[1]);
+    match value {
+        Expr::Subprocess { parts, .. } => {
+            let expr_part = parts.iter().find_map(|part| match part {
+                SubprocessPart::Expr(expr) => Some(expr),
+                _ => None,
+            });
+            let expr_part = expr_part.expect("expected fstring expr in subprocess");
+            assert!(matches!(expr_part.conversion, FStringConversion::Repr));
+            let spec = expr_part
+                .format_spec
+                .as_ref()
+                .expect("expected format spec");
+            assert!(matches!(
+                spec.as_slice(),
+                [FStringPart::Text(text)] if text == ">10"
+            ));
+        }
+        other => panic!("Expected subprocess capture, got {other:?}"),
     }
 }
 

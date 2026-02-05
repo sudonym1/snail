@@ -399,7 +399,7 @@ pub enum SubprocessKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SubprocessPart {
     Text(String),
-    Expr(Box<Expr>),
+    Expr(FStringExpr),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

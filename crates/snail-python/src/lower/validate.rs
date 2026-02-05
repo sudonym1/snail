@@ -285,7 +285,7 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
         Expr::Subprocess { parts, .. } => {
             for part in parts {
                 if let SubprocessPart::Expr(expr) = part {
-                    check_expr(expr, in_function)?;
+                    check_fstring_expr(expr, in_function)?;
                 }
             }
         }

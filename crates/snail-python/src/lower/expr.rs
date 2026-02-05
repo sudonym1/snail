@@ -1399,35 +1399,14 @@ fn lower_subprocess_parts(
     parts: &[SubprocessPart],
     exception_name: Option<&str>,
 ) -> Result<Vec<PyObject>, LowerError> {
-    let mut lowered_parts = Vec::with_capacity(parts.len());
-    for part in parts {
-        match part {
-            SubprocessPart::Text(text) => {
-                let const_node = builder
-                    .call_node(
-                        "Constant",
-                        vec![text.clone().into_py(builder.py())],
-                        &dummy_span(),
-                    )
-                    .map_err(py_err_to_lower)?;
-                lowered_parts.push(const_node);
-            }
-            SubprocessPart::Expr(expr) => {
-                let value = lower_expr_with_exception(builder, expr, exception_name)?;
-                let conversion = (-1i32).into_py(builder.py());
-                let format_spec = builder.py().None();
-                let formatted = builder
-                    .call_node(
-                        "FormattedValue",
-                        vec![value, conversion, format_spec.into_py(builder.py())],
-                        &dummy_span(),
-                    )
-                    .map_err(py_err_to_lower)?;
-                lowered_parts.push(formatted);
-            }
-        }
-    }
-    Ok(lowered_parts)
+    let fstring_parts = parts
+        .iter()
+        .map(|part| match part {
+            SubprocessPart::Text(text) => FStringPart::Text(text.clone()),
+            SubprocessPart::Expr(expr) => FStringPart::Expr(expr.clone()),
+        })
+        .collect::<Vec<_>>();
+    lower_fstring_parts(builder, &fstring_parts, exception_name)
 }
 
 fn lower_call_arguments(
@@ -1583,7 +1562,7 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
         Expr::Subprocess { parts, .. } => {
             for part in parts {
                 if let SubprocessPart::Expr(expr) = part {
-                    count_placeholders(expr, info);
+                    count_placeholders_in_fstring_expr(expr, info);
                 }
             }
         }
@@ -1676,11 +1655,15 @@ fn count_placeholders_in_regex(pattern: &RegexPattern, info: &mut PlaceholderInf
 
 fn count_placeholders_in_fstring_part(part: &FStringPart, info: &mut PlaceholderInfo) {
     if let FStringPart::Expr(expr) = part {
-        count_placeholders(&expr.expr, info);
-        if let Some(spec) = &expr.format_spec {
-            for spec_part in spec {
-                count_placeholders_in_fstring_part(spec_part, info);
-            }
+        count_placeholders_in_fstring_expr(expr, info);
+    }
+}
+
+fn count_placeholders_in_fstring_expr(expr: &FStringExpr, info: &mut PlaceholderInfo) {
+    count_placeholders(&expr.expr, info);
+    if let Some(spec) = &expr.format_spec {
+        for spec_part in spec {
+            count_placeholders_in_fstring_part(spec_part, info);
         }
     }
 }
@@ -1878,9 +1861,9 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                 .iter()
                 .map(|part| match part {
                     SubprocessPart::Text(text) => SubprocessPart::Text(text.clone()),
-                    SubprocessPart::Expr(expr) => {
-                        SubprocessPart::Expr(Box::new(substitute_placeholder(expr, replacement)))
-                    }
+                    SubprocessPart::Expr(expr) => SubprocessPart::Expr(
+                        substitute_placeholder_in_fstring_expr(expr, replacement),
+                    ),
                 })
                 .collect(),
             span: span.clone(),
@@ -2038,15 +2021,21 @@ fn substitute_placeholder_in_regex(pattern: &RegexPattern, replacement: &Expr) -
 fn substitute_placeholder_in_fstring_part(part: &FStringPart, replacement: &Expr) -> FStringPart {
     match part {
         FStringPart::Text(text) => FStringPart::Text(text.clone()),
-        FStringPart::Expr(expr) => FStringPart::Expr(FStringExpr {
-            expr: Box::new(substitute_placeholder(&expr.expr, replacement)),
-            conversion: expr.conversion,
-            format_spec: expr.format_spec.as_ref().map(|parts| {
-                parts
-                    .iter()
-                    .map(|part| substitute_placeholder_in_fstring_part(part, replacement))
-                    .collect()
-            }),
+        FStringPart::Expr(expr) => {
+            FStringPart::Expr(substitute_placeholder_in_fstring_expr(expr, replacement))
+        }
+    }
+}
+
+fn substitute_placeholder_in_fstring_expr(expr: &FStringExpr, replacement: &Expr) -> FStringExpr {
+    FStringExpr {
+        expr: Box::new(substitute_placeholder(&expr.expr, replacement)),
+        conversion: expr.conversion,
+        format_spec: expr.format_spec.as_ref().map(|parts| {
+            parts
+                .iter()
+                .map(|part| substitute_placeholder_in_fstring_part(part, replacement))
+                .collect()
         }),
     }
 }

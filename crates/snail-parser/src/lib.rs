@@ -627,7 +627,7 @@ fn validate_expr_for_map(expr: &Expr, source: &str) -> Result<(), ParseError> {
         Expr::Subprocess { parts, .. } => {
             for part in parts {
                 if let SubprocessPart::Expr(expr) = part {
-                    validate_expr_for_map(expr, source)?;
+                    validate_fstring_expr_for_map(expr, source)?;
                 }
             }
         }
@@ -709,11 +709,16 @@ fn validate_regex_pattern_for_map(pattern: &RegexPattern, source: &str) -> Resul
 
 fn validate_fstring_part_for_map(part: &FStringPart, source: &str) -> Result<(), ParseError> {
     if let FStringPart::Expr(expr) = part {
-        validate_expr_for_map(&expr.expr, source)?;
-        if let Some(spec) = &expr.format_spec {
-            for spec_part in spec {
-                validate_fstring_part_for_map(spec_part, source)?;
-            }
+        validate_fstring_expr_for_map(expr, source)?;
+    }
+    Ok(())
+}
+
+fn validate_fstring_expr_for_map(expr: &FStringExpr, source: &str) -> Result<(), ParseError> {
+    validate_expr_for_map(&expr.expr, source)?;
+    if let Some(spec) = &expr.format_spec {
+        for spec_part in spec {
+            validate_fstring_part_for_map(spec_part, source)?;
         }
     }
     Ok(())
@@ -1013,7 +1018,7 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
         Expr::Subprocess { parts, .. } => {
             for part in parts {
                 if let SubprocessPart::Expr(expr) = part {
-                    validate_expr(expr, source)?;
+                    validate_fstring_expr(expr, source)?;
                 }
             }
         }
@@ -1095,11 +1100,16 @@ fn validate_regex_pattern(pattern: &RegexPattern, source: &str) -> Result<(), Pa
 
 fn validate_fstring_part(part: &FStringPart, source: &str) -> Result<(), ParseError> {
     if let FStringPart::Expr(expr) = part {
-        validate_expr(&expr.expr, source)?;
-        if let Some(spec) = &expr.format_spec {
-            for spec_part in spec {
-                validate_fstring_part(spec_part, source)?;
-            }
+        validate_fstring_expr(expr, source)?;
+    }
+    Ok(())
+}
+
+fn validate_fstring_expr(expr: &FStringExpr, source: &str) -> Result<(), ParseError> {
+    validate_expr(&expr.expr, source)?;
+    if let Some(spec) = &expr.format_spec {
+        for spec_part in spec {
+            validate_fstring_part(spec_part, source)?;
         }
     }
     Ok(())
