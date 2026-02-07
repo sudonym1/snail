@@ -545,21 +545,46 @@ fn validate_name_for_mode(
     Ok(())
 }
 
+fn validate_exprs_mode(
+    exprs: &[Expr],
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
+    for expr in exprs {
+        validate_expr_mode(expr, source, mode)?;
+    }
+    Ok(())
+}
+
+fn validate_fstring_parts_mode(
+    parts: &[FStringPart],
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
+    for part in parts {
+        validate_fstring_part_mode(part, source, mode)?;
+    }
+    Ok(())
+}
+
 fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result<(), ParseError> {
     match expr {
         Expr::Name { name, span } => {
             validate_name_for_mode(name, span, source, mode)?;
         }
-        Expr::Placeholder { .. } => {}
         Expr::FieldIndex { span, .. } => {
             return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
         }
-        Expr::FString { parts, .. } => {
-            for part in parts {
-                validate_fstring_part_mode(part, source, mode)?;
-            }
+        Expr::Placeholder { .. }
+        | Expr::StructuredAccessor { .. }
+        | Expr::Number { .. }
+        | Expr::String { .. }
+        | Expr::Bool { .. }
+        | Expr::None { .. } => {}
+        Expr::FString { parts, .. } | Expr::Subprocess { parts, .. } => {
+            validate_fstring_parts_mode(parts, source, mode)?;
         }
-        Expr::Unary { expr, .. } => {
+        Expr::Unary { expr, .. } | Expr::YieldFrom { expr, .. } | Expr::Paren { expr, .. } => {
             validate_expr_mode(expr, source, mode)?;
         }
         Expr::Binary { left, right, .. } => {
@@ -577,9 +602,7 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             left, comparators, ..
         } => {
             validate_expr_mode(left, source, mode)?;
-            for expr in comparators {
-                validate_expr_mode(expr, source, mode)?;
-            }
+            validate_exprs_mode(comparators, source, mode)?;
         }
         Expr::IfExpr {
             test, body, orelse, ..
@@ -599,20 +622,19 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
                 validate_expr_mode(value, source, mode)?;
             }
         }
-        Expr::YieldFrom { expr, .. } => {
-            validate_expr_mode(expr, source, mode)?;
-        }
         Expr::Lambda { params, body, .. } => {
             for param in params {
                 validate_param_mode(param, source, mode)?;
             }
             validate_block_mode(body, source, mode)?;
         }
-        Expr::Compound { expressions, .. } => {
-            for expr in expressions {
-                validate_expr_mode(expr, source, mode)?;
-            }
+        Expr::Compound {
+            expressions: elements,
+            ..
         }
+        | Expr::List { elements, .. }
+        | Expr::Tuple { elements, .. }
+        | Expr::Set { elements, .. } => validate_exprs_mode(elements, source, mode)?,
         Expr::Regex { pattern, .. } => {
             validate_regex_pattern_mode(pattern, source, mode)?;
         }
@@ -620,16 +642,6 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_expr_mode(value, source, mode)?;
             validate_regex_pattern_mode(pattern, source, mode)?;
         }
-        Expr::Subprocess { parts, .. } => {
-            for part in parts {
-                validate_fstring_part_mode(part, source, mode)?;
-            }
-        }
-        Expr::StructuredAccessor { .. }
-        | Expr::Number { .. }
-        | Expr::String { .. }
-        | Expr::Bool { .. }
-        | Expr::None { .. } => {}
         Expr::Call { func, args, .. } => {
             validate_expr_mode(func, source, mode)?;
             for arg in args {
@@ -642,14 +654,6 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
         Expr::Index { value, index, .. } => {
             validate_expr_mode(value, source, mode)?;
             validate_expr_mode(index, source, mode)?;
-        }
-        Expr::Paren { expr, .. } => {
-            validate_expr_mode(expr, source, mode)?;
-        }
-        Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
-            for expr in elements {
-                validate_expr_mode(expr, source, mode)?;
-            }
         }
         Expr::Dict { entries, .. } => {
             for (key, value) in entries {
@@ -670,9 +674,7 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
         } => {
             validate_expr_mode(element, source, mode)?;
             validate_expr_mode(iter, source, mode)?;
-            for expr in ifs {
-                validate_expr_mode(expr, source, mode)?;
-            }
+            validate_exprs_mode(ifs, source, mode)?;
         }
         Expr::DictComp {
             key,
@@ -684,9 +686,7 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_expr_mode(key, source, mode)?;
             validate_expr_mode(value, source, mode)?;
             validate_expr_mode(iter, source, mode)?;
-            for expr in ifs {
-                validate_expr_mode(expr, source, mode)?;
-            }
+            validate_exprs_mode(ifs, source, mode)?;
         }
     }
     Ok(())
@@ -698,9 +698,7 @@ fn validate_regex_pattern_mode(
     mode: ValidationMode,
 ) -> Result<(), ParseError> {
     if let RegexPattern::Interpolated(parts) = pattern {
-        for part in parts {
-            validate_fstring_part_mode(part, source, mode)?;
-        }
+        validate_fstring_parts_mode(parts, source, mode)?;
     }
     Ok(())
 }
@@ -713,9 +711,7 @@ fn validate_fstring_part_mode(
     if let FStringPart::Expr(expr) = part {
         validate_expr_mode(&expr.expr, source, mode)?;
         if let Some(spec) = &expr.format_spec {
-            for spec_part in spec {
-                validate_fstring_part_mode(spec_part, source, mode)?;
-            }
+            validate_fstring_parts_mode(spec, source, mode)?;
         }
     }
     Ok(())
