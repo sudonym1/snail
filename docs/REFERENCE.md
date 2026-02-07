@@ -268,9 +268,18 @@ use a `b` prefix (`b"..."`, `rb"..."`, `br"..."`) and produce Python `bytes`.
 Byte strings interpolate `{}` like regular strings; interpolated byte strings
 are UTF-8 encoded.
 
-Interpolation supports Python-style conversions and format specs:
-`{expr!r}`, `{expr!s}`, `{expr!a}`, `{expr:spec}`, and `{expr!r:spec}`. Format
-specs can include nested `{expr}` segments for dynamic widths/precision.
+Interpolation supports two forms:
+- `{expr}` for arbitrary Snail expressions (including Python-style conversions
+  and format specs: `{expr!r}`, `{expr!s}`, `{expr!a}`, `{expr:spec}`,
+  `{expr!r:spec}`)
+- `$` shorthand for Snail special variables only:
+  `$e`, `$<digits>`, `$env`, `$src`, `$text`, `$fd`, `$n`, `$fn`, `$m`, `$f`
+
+Use `$$` to emit a literal dollar sign. Non-special `$name` text stays literal
+(for example, `$user`). Mode restrictions still apply to map/awk-only names
+(for example, `$src` requires `--map` or `--awk`).
+
+Format specs can include nested `{expr}` segments for dynamic widths/precision.
 
 ## Context managers
 `with` uses the same protocol as Python and supports aliasing:
@@ -343,8 +352,8 @@ operator:
   success. On failure it raises unless a fallback is specified; the injected
   `__fallback__` returns the process return code.
 
-Both forms treat the command body as an f-string, so variables inside `{}` are
-interpolated directly:
+Both forms treat the command body as an f-string, so `{expr}` and special
+`$` variables are interpolated directly (`$$` escapes a literal `$`):
 ```snail
 cmd_name = "snail"
 echoed = $(echo {cmd_name})

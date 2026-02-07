@@ -198,6 +198,116 @@ fn parses_regular_string_with_interpolation() {
 }
 
 #[test]
+fn parses_dollar_special_var_interpolation() {
+    let source = r#"x = "env=$env.HOME field=$env['HOME']""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::FString { parts, .. } => {
+            assert_eq!(parts.len(), 4);
+            match &parts[0] {
+                FStringPart::Text(text) => assert_eq!(text, "env="),
+                other => panic!("Expected text part, got {other:?}"),
+            }
+            match &parts[1] {
+                FStringPart::Expr(expr) => match expr.expr.as_ref() {
+                    Expr::Attribute { value, attr, .. } => {
+                        assert_eq!(attr, "HOME");
+                        expect_name(value.as_ref(), "$env");
+                    }
+                    other => panic!("Expected $env attribute expression, got {other:?}"),
+                },
+                other => panic!("Expected expression part, got {other:?}"),
+            }
+            match &parts[2] {
+                FStringPart::Text(text) => assert_eq!(text, " field="),
+                other => panic!("Expected text part, got {other:?}"),
+            }
+            match &parts[3] {
+                FStringPart::Expr(expr) => match expr.expr.as_ref() {
+                    Expr::Index { value, index, .. } => {
+                        expect_name(value.as_ref(), "$env");
+                        expect_string(index.as_ref(), "HOME", false, StringDelimiter::Single);
+                    }
+                    other => panic!("Expected $env index expression, got {other:?}"),
+                },
+                other => panic!("Expected expression part, got {other:?}"),
+            }
+        }
+        other => panic!("Expected FString, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_dollar_escape_and_non_special_dollar_text() {
+    let source = r#"x = "$$user $user $$$env.HOME""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::FString { parts, .. } => {
+            assert_eq!(parts.len(), 2);
+            match &parts[0] {
+                FStringPart::Text(text) => assert_eq!(text, "$user $user $"),
+                other => panic!("Expected text part, got {other:?}"),
+            }
+            match &parts[1] {
+                FStringPart::Expr(expr) => match expr.expr.as_ref() {
+                    Expr::Attribute { value, attr, .. } => {
+                        assert_eq!(attr, "HOME");
+                        expect_name(value.as_ref(), "$env");
+                    }
+                    other => panic!("Expected $env attribute expression, got {other:?}"),
+                },
+                other => panic!("Expected expression part, got {other:?}"),
+            }
+        }
+        other => panic!("Expected FString, got {other:?}"),
+    }
+}
+
+#[test]
+fn preserves_whitespace_after_plain_dollar_special_var() {
+    let source = r#"x = "$env x""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::FString { parts, .. } => {
+            assert_eq!(parts.len(), 2);
+            match &parts[0] {
+                FStringPart::Expr(expr) => expect_name(&expr.expr, "$env"),
+                other => panic!("Expected expression part, got {other:?}"),
+            }
+            match &parts[1] {
+                FStringPart::Text(text) => assert_eq!(text, " x"),
+                other => panic!("Expected text part, got {other:?}"),
+            }
+        }
+        other => panic!("Expected FString, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_raw_string_without_dollar_interpolation() {
+    let source = r#"x = r"cost $5 and $$env {expr}""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    expect_string(
+        value,
+        "cost $5 and $$env {expr}",
+        true,
+        StringDelimiter::Double,
+    );
+}
+
+#[test]
 fn parses_fstring_conversion_and_format_spec() {
     let source = r#"x = "value {y!r:>8}""#;
     let program = parse_ok(source);

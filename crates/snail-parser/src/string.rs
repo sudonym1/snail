@@ -148,6 +148,24 @@ pub fn parse_fstring_parts(
                     source,
                 ));
             }
+            b'$' => {
+                if i + 1 < bytes.len() && bytes[i + 1] == b'$' {
+                    i += 2;
+                    continue;
+                }
+                if let Some((expr, expr_end)) =
+                    parse_dollar_shorthand_expr(content, i, content_offset, source)?
+                {
+                    if text_start < i {
+                        parts.push(FStringPart::Text(content[text_start..i].to_string()));
+                    }
+                    parts.push(FStringPart::Expr(expr));
+                    i = expr_end;
+                    text_start = i;
+                    continue;
+                }
+                i += 1;
+            }
             _ => i += 1,
         }
     }
@@ -156,10 +174,96 @@ pub fn parse_fstring_parts(
     }
     for part in parts.iter_mut() {
         if let FStringPart::Text(text) = part {
-            *text = text.replace("{{", "{").replace("}}", "}");
+            *text = text
+                .replace("{{", "{")
+                .replace("}}", "}")
+                .replace("$$", "$");
         }
     }
     Ok(parts)
+}
+
+fn parse_dollar_shorthand_expr(
+    content: &str,
+    start: usize,
+    content_offset: usize,
+    source: &str,
+) -> Result<Option<(FStringExpr, usize)>, ParseError> {
+    let Some(token_end) = scan_special_dollar_token_end(content, start) else {
+        return Ok(None);
+    };
+    let mut expr_end = find_primary_expr_end(content, start, token_end);
+    let expr_offset = content_offset + start;
+
+    let expr = match parse_inline_expr(&content[start..expr_end], expr_offset, source) {
+        Ok(expr) => expr,
+        Err(_) if expr_end != token_end => {
+            expr_end = token_end;
+            parse_inline_expr(&content[start..expr_end], expr_offset, source)?
+        }
+        Err(err) => return Err(err),
+    };
+
+    Ok(Some((FStringExpr::new(Box::new(expr)), expr_end)))
+}
+
+fn find_primary_expr_end(content: &str, start: usize, min_end: usize) -> usize {
+    let min_len = min_end.saturating_sub(start);
+    let suffix = &content[start..];
+    let Ok(mut pairs) = SnailParser::parse(Rule::primary, suffix) else {
+        return min_end;
+    };
+    let Some(pair) = pairs.next() else {
+        return min_end;
+    };
+    let consumed = pair.as_span().end();
+    if consumed < min_len {
+        return min_end;
+    }
+    let mut end = start + consumed;
+    while end > min_end && content.as_bytes()[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    end
+}
+
+fn scan_special_dollar_token_end(content: &str, start: usize) -> Option<usize> {
+    let bytes = content.as_bytes();
+    if bytes.get(start) != Some(&b'$') {
+        return None;
+    }
+    let next = *bytes.get(start + 1)?;
+    if next.is_ascii_digit() {
+        let mut end = start + 2;
+        while end < bytes.len() && bytes[end].is_ascii_digit() {
+            end += 1;
+        }
+        return Some(end);
+    }
+
+    const SPECIAL_NAMES: [&str; 9] = ["text", "src", "env", "fn", "fd", "e", "n", "m", "f"];
+    for name in SPECIAL_NAMES {
+        let name_end = start + 1 + name.len();
+        if content.get(start + 1..name_end) != Some(name) {
+            continue;
+        }
+        if has_ident_boundary(bytes, name_end) {
+            return Some(name_end);
+        }
+    }
+
+    None
+}
+
+fn has_ident_boundary(bytes: &[u8], index: usize) -> bool {
+    match bytes.get(index) {
+        Some(next) => !is_ident_continue_byte(*next),
+        None => true,
+    }
+}
+
+fn is_ident_continue_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
 pub fn parse_inline_expr(

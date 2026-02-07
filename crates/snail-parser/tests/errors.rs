@@ -2,8 +2,8 @@ mod common;
 
 use common::*;
 use snail_parser::{
-    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
-    parse_program, parse_program_with_begin_end,
+    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program,
+    parse_map_program_with_begin_end, parse_program, parse_program_with_begin_end,
 };
 
 #[test]
@@ -39,6 +39,29 @@ fn rejects_awk_field_indices_in_regular_mode() {
     assert!(message.contains("$1"));
     assert!(message.contains("--awk"));
     expect_err_span(&err, 1, 9);
+}
+
+#[test]
+fn rejects_map_or_awk_vars_in_dollar_string_interpolation_in_regular_mode() {
+    let err = parse_err(r#"value = "$src""#);
+    let message = err.to_string();
+    assert!(message.contains("$src"));
+    assert!(message.contains("--map") && message.contains("--awk"));
+    expect_err_span(&err, 1, 10);
+}
+
+#[test]
+fn rejects_awk_field_indices_in_dollar_string_interpolation_in_regular_mode() {
+    let err = parse_err(r#"value = "$1""#);
+    let message = err.to_string();
+    assert!(message.contains("$1"));
+    assert!(message.contains("--awk"));
+    expect_err_span(&err, 1, 10);
+}
+
+#[test]
+fn map_mode_accepts_map_vars_in_dollar_string_interpolation() {
+    parse_map_program(r#"value = "$src""#).expect("map mode should accept $src interpolation");
 }
 
 #[test]

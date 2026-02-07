@@ -212,6 +212,35 @@ fn parses_subprocess_expressions() {
 }
 
 #[test]
+fn parses_subprocess_dollar_special_var_interpolation() {
+    let source = "out = $(echo $env.HOME)";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Subprocess { parts, .. } => {
+            assert_eq!(parts.len(), 2);
+            match &parts[0] {
+                FStringPart::Text(text) => assert_eq!(text, "echo "),
+                other => panic!("Expected text part, got {other:?}"),
+            }
+            match &parts[1] {
+                FStringPart::Expr(expr) => match expr.expr.as_ref() {
+                    Expr::Attribute { value, attr, .. } => {
+                        assert_eq!(attr, "HOME");
+                        expect_name(value.as_ref(), "$env");
+                    }
+                    other => panic!("Expected $env attribute expression, got {other:?}"),
+                },
+                other => panic!("Expected expression part, got {other:?}"),
+            }
+        }
+        other => panic!("Expected subprocess expression, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_regex_expressions() {
     let source = "text = \"value\"\nfound = text in /val(.)/\ncompiled = /abc/\n";
     let program = parse_ok(source);
@@ -236,6 +265,34 @@ fn parses_regex_expressions() {
             other => panic!("Expected literal regex, got {other:?}"),
         },
         other => panic!("Expected regex literal, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_regex_dollar_special_var_interpolation() {
+    let source = "pattern = /$env.HOME/";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Regex { pattern, .. } => match pattern {
+            RegexPattern::Interpolated(parts) => {
+                assert_eq!(parts.len(), 1);
+                match &parts[0] {
+                    FStringPart::Expr(expr) => match expr.expr.as_ref() {
+                        Expr::Attribute { value, attr, .. } => {
+                            assert_eq!(attr, "HOME");
+                            expect_name(value.as_ref(), "$env");
+                        }
+                        other => panic!("Expected $env attribute expression, got {other:?}"),
+                    },
+                    other => panic!("Expected expression part, got {other:?}"),
+                }
+            }
+            other => panic!("Expected interpolated regex, got {other:?}"),
+        },
+        other => panic!("Expected regex expression, got {other:?}"),
     }
 }
 

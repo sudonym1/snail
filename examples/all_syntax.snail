@@ -169,12 +169,21 @@ byte_interp = b"hello {byte_name}"
 user_name = "snail"
 greeting = "hello {user_name}"
 brace_text = "brace {{ok}}"
+# $ shorthand interpolation for special Snail vars + $$ escape
+os.environ["SNAIL_STRING_ENV"] = "ok"
+dollar_special = "env=$env.SNAIL_STRING_ENV"
+dollar_escape = "cost $$5"
+dollar_non_special = "$$user $user"
+assert dollar_special == "env=ok"
+assert dollar_escape == "cost $$5"
+assert dollar_non_special == "$user $user"
 
 # ---- Subprocess and pipeline syntax ----
 cmd_name = "snail"
 # $(...) captures stdout
 # @(...) returns status (raise on non-zero, with ? to swallow)
 echoed = $(echo {cmd_name})
+echoed_env = $(echo $env.SNAIL_STRING_ENV)
 try {
     echoed = $(false)? # it is required to provide a default value for this form.
 } except Exception as e {
@@ -386,6 +395,9 @@ print("power", power)
 print("mix", mix)
 print("greeting", greeting)
 print("brace_text", brace_text)
+print("dollar_special", dollar_special)
+print("dollar_escape", dollar_escape)
+print("dollar_non_special", dollar_non_special)
 print("total", total)
 print("evens", evens)
 print("lookup", lookup)
@@ -409,6 +421,7 @@ print("safe_fallback", safe_fallback)
 print("safe_details", safe_details)
 print("regex", regex_match[1], compiled_match[1])
 print("echoed", echoed)
+print("echoed_env", echoed_env)
 print("status_ok", status_ok)
 print("status_fail", status_fail)
 print("prefer_lambda", prefer_lambda)

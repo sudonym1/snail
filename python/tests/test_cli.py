@@ -833,6 +833,15 @@ def test_awk_match_group_access(
     assert captured.out == "1\n2\n"
 
 
+def test_awk_dollar_interpolation_preserves_following_whitespace(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("foo bar\n"))
+    assert main(["--awk", '{ print("$1 x") }']) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "foo x\n"
+
+
 def test_awk_identifiers_require_awk_mode() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(["print($0)"])
@@ -1093,6 +1102,34 @@ def test_env_map_missing_fallback(
     assert main(["-P", "print(repr($env.SNAIL_ENV_MISSING?))"]) == 0
     captured = capsys.readouterr()
     assert captured.out == "''\n"
+
+
+# --- Tests for $ interpolation shorthand ---
+
+
+def test_dollar_string_special_var_interpolation(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("SNAIL_DOLLAR_INTERP", "snail")
+    assert main(["-P", 'print("$env.SNAIL_DOLLAR_INTERP")']) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "snail\n"
+
+
+def test_dollar_string_escape_and_non_special_literal(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("SNAIL_DOLLAR_ESC", "snail")
+    script = 'print("$$user $user $$$env.SNAIL_DOLLAR_ESC")'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "$user $user $snail\n"
+
+
+def test_raw_string_keeps_dollar_text(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-P", r'print(r"$env.HOME $$5")']) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "$env.HOME $$5\n"
 
 
 # --- Tests for byte strings ---
@@ -1603,6 +1640,23 @@ def test_map_begin_end_flags_reject_map_vars(tmp_path: Path) -> None:
                 str(file_a),
             ]
         )
+
+
+def test_map_mode_dollar_string_src_interpolation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("alpha")
+    result = main(["--map", 'print("$src")', str(file_a)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == str(file_a)
+
+
+def test_dollar_string_map_var_requires_map_or_awk_mode() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(['print("$src")'])
+    assert "map or awk mode" in str(excinfo.value)
 
 
 def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) -> None:
