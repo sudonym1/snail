@@ -25,6 +25,7 @@ def _run_subprocess(cmd: str, input_data=None, *, capture: bool):
     # mypy cannot resolve subprocess.run overloads from dynamic kwargs.
     return subprocess.run(cmd, **cast(Any, kwargs))
 
+
 class SubprocessCapture:
     def __init__(self, cmd: str) -> None:
         self.cmd = cmd
