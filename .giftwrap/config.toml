@@ -1,0 +1,7 @@
+image = "docker.io/library/ubuntu:latest"
+setup_script = "setup.sh"
+
+[env]
+PATH="/rust/cargo/bin:/usr/local/bin:/usr/bin:/bin"
+RUSTUP_HOME="/rust/rustup"
+CARGO_HOME="/rust/cargo"
