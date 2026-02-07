@@ -621,6 +621,76 @@ def test_chained_in_short_circuit(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "True\n1\n()\n0\n"
 
 
+def test_chained_not_in_regex_short_circuit(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "hits = [0]",
+            "pat = /a/",
+            "def bump() {",
+            "    hits[0] = hits[0] + 1",
+            "    return [pat]",
+            "}",
+            'print("a" not in pat not in bump())',
+            "print(hits[0])",
+            "hits[0] = 0",
+            "pat = /z/",
+            'print("a" not in pat not in bump())',
+            "print(hits[0])",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "False\n0\nFalse\n1\n"
+
+
+def test_regex_search_helper_with_snailregex_object(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "pat = /a/",
+            "print(__snail_regex_search('za', pat))",
+            "print(__snail_regex_search('zz', pat))",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "('a',)\n()\n"
+
+
+def test_contains_prefers_snail_hook_over_python_contains(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "class Hooked {",
+            "    def __init__(self) {",
+            "        self.snail_calls = 0",
+            "        self.python_calls = 0",
+            "    }",
+            "    def __snail_contains__(self, value) {",
+            "        self.snail_calls = self.snail_calls + 1",
+            "        return [value]",
+            "    }",
+            "    def __contains__(self, value) {",
+            "        self.python_calls = self.python_calls + 1",
+            "        return False",
+            "    }",
+            "}",
+            "obj = Hooked()",
+            "print('x' in obj)",
+            "print('x' not in obj)",
+            "print(obj.snail_calls)",
+            "print(obj.python_calls)",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "['x']\nFalse\n2\n0\n"
+
+
 def test_augmented_assignment_and_increments(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -651,6 +721,64 @@ def test_augmented_assignment_and_increments(
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     assert captured.out == "pre 6 6\npost 6 5\naug 8 8\nattr_pre 2 2\nidx_post 11 10\n"
+
+
+def test_increment_index_single_evaluation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "arr = [10]",
+            "calls = [0]",
+            "def idx() {",
+            "    calls[0] = calls[0] + 1",
+            "    return 0",
+            "}",
+            "pre = ++arr[idx()]",
+            'print("pre", arr[0], pre, calls[0])',
+            "arr[0] = 10",
+            "calls[0] = 0",
+            "post = arr[idx()]++",
+            'print("post", arr[0], post, calls[0])',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "pre 11 11 1\npost 11 10 1\n"
+
+
+def test_increment_attr_chain_single_evaluation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "class Cell {",
+            "    def __init__(self, value) {",
+            "        self.value = value",
+            "    }",
+            "}",
+            "class Holder {",
+            "    def __init__(self, value) {",
+            "        self.cell = Cell(value)",
+            "    }",
+            "}",
+            "holder = Holder(10)",
+            "calls = [0]",
+            "def get_holder() {",
+            "    calls[0] = calls[0] + 1",
+            "    return holder",
+            "}",
+            "pre = ++get_holder().cell.value",
+            'print("pre", holder.cell.value, pre, calls[0])',
+            "holder.cell.value = 10",
+            "calls[0] = 0",
+            "post = get_holder().cell.value++",
+            'print("post", holder.cell.value, post, calls[0])',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "pre 11 11 1\npost 11 10 1\n"
 
 
 def test_assignment_target_attr_index_chains(capsys: pytest.CaptureFixture[str]) -> None:
@@ -714,6 +842,190 @@ def test_augmented_attr_index_single_evaluation(
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     assert captured.out == "attr 5 1\nidx 15 1\n"
+
+
+def test_augmented_attr_getter_exception_skips_setter() -> None:
+    augmented = importlib.import_module("snail.runtime.augmented")
+
+    class AttrGetterError:
+        def __init__(self) -> None:
+            self.setter_calls = 0
+
+        @property
+        def value(self):
+            raise RuntimeError("attr getter boom")
+
+        @value.setter
+        def value(self, new) -> None:
+            self.setter_calls += 1
+
+    obj = AttrGetterError()
+    with pytest.raises(RuntimeError, match="attr getter boom"):
+        augmented.__snail_aug_attr(obj, "value", 1, "+")
+    assert obj.setter_calls == 0
+
+
+def test_augmented_index_getter_exception_skips_setter() -> None:
+    augmented = importlib.import_module("snail.runtime.augmented")
+
+    class IndexGetterError:
+        def __init__(self) -> None:
+            self.setter_calls = 0
+
+        def __getitem__(self, index):
+            raise RuntimeError("index getter boom")
+
+        def __setitem__(self, index, value) -> None:
+            self.setter_calls += 1
+
+    obj = IndexGetterError()
+    with pytest.raises(RuntimeError, match="index getter boom"):
+        augmented.__snail_aug_index(obj, 0, 1, "+")
+    assert obj.setter_calls == 0
+
+
+def test_augmented_setter_exception_called_once() -> None:
+    augmented = importlib.import_module("snail.runtime.augmented")
+
+    class AttrSetterError:
+        def __init__(self) -> None:
+            self._value = 4
+            self.setter_calls = 0
+
+        @property
+        def value(self):
+            return self._value
+
+        @value.setter
+        def value(self, new) -> None:
+            self.setter_calls += 1
+            raise RuntimeError("attr setter boom")
+
+    attr_obj = AttrSetterError()
+    with pytest.raises(RuntimeError, match="attr setter boom"):
+        augmented.__snail_aug_attr(attr_obj, "value", 1, "+")
+    assert attr_obj.setter_calls == 1
+    assert attr_obj._value == 4
+
+    class IndexSetterError:
+        def __init__(self) -> None:
+            self.values = {0: 4}
+            self.setter_calls = 0
+
+        def __getitem__(self, index):
+            return self.values[index]
+
+        def __setitem__(self, index, value) -> None:
+            self.setter_calls += 1
+            raise RuntimeError("index setter boom")
+
+    index_obj = IndexSetterError()
+    with pytest.raises(RuntimeError, match="index setter boom"):
+        augmented.__snail_aug_index(index_obj, 0, 1, "+")
+    assert index_obj.setter_calls == 1
+    assert index_obj.values[0] == 4
+
+
+def test_augmented_attr_operator_error_no_mutation() -> None:
+    augmented = importlib.import_module("snail.runtime.augmented")
+
+    class AttrTarget:
+        def __init__(self) -> None:
+            self._value = "text"
+            self.setter_calls = 0
+
+        @property
+        def value(self):
+            return self._value
+
+        @value.setter
+        def value(self, new) -> None:
+            self.setter_calls += 1
+            self._value = new
+
+    obj = AttrTarget()
+    with pytest.raises(TypeError):
+        augmented.__snail_aug_attr(obj, "value", 1, "+")
+    assert obj._value == "text"
+    assert obj.setter_calls == 0
+
+
+def test_augmented_index_operator_error_no_mutation() -> None:
+    augmented = importlib.import_module("snail.runtime.augmented")
+
+    class IndexTarget:
+        def __init__(self) -> None:
+            self.values = {0: 9}
+            self.setter_calls = 0
+
+        def __getitem__(self, index):
+            return self.values[index]
+
+        def __setitem__(self, index, value) -> None:
+            self.setter_calls += 1
+            self.values[index] = value
+
+    obj = IndexTarget()
+    with pytest.raises(ZeroDivisionError):
+        augmented.__snail_aug_index(obj, 0, 0, "/")
+    assert obj.values[0] == 9
+    assert obj.setter_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("op", "expected"),
+    [
+        ("+", 7),
+        ("-", 3),
+        ("*", 10),
+        ("/", 2.5),
+        ("//", 2),
+        ("%", 1),
+        ("**", 25),
+    ],
+)
+def test_augmented_ops_attr_coverage(op: str, expected: int | float) -> None:
+    augmented = importlib.import_module("snail.runtime.augmented")
+
+    class AttrTarget:
+        def __init__(self) -> None:
+            self.value = 5
+
+    obj = AttrTarget()
+    result = augmented.__snail_aug_attr(obj, "value", 2, op)
+    assert result == expected
+    assert obj.value == expected
+
+
+@pytest.mark.parametrize(
+    ("op", "expected"),
+    [
+        ("+", 7),
+        ("-", 3),
+        ("*", 10),
+        ("/", 2.5),
+        ("//", 2),
+        ("%", 1),
+        ("**", 25),
+    ],
+)
+def test_augmented_ops_index_coverage(op: str, expected: int | float) -> None:
+    augmented = importlib.import_module("snail.runtime.augmented")
+
+    class IndexTarget:
+        def __init__(self) -> None:
+            self.values = {0: 5}
+
+        def __getitem__(self, index):
+            return self.values[index]
+
+        def __setitem__(self, index, value) -> None:
+            self.values[index] = value
+
+    obj = IndexTarget()
+    result = augmented.__snail_aug_index(obj, 0, 2, op)
+    assert result == expected
+    assert obj.values[0] == expected
 
 
 def test_combined_short_flags_awk(
@@ -1177,6 +1489,65 @@ def test_env_map_missing_fallback(
     assert main(["-P", "print(repr($env.SNAIL_ENV_MISSING?))"]) == 0
     captured = capsys.readouterr()
     assert captured.out == "''\n"
+
+
+def test_regex_search_custom_pattern_raises_propagates() -> None:
+    runtime_regex = importlib.import_module("snail.runtime.regex")
+
+    class RaisingPattern:
+        def search(self, value):
+            raise RuntimeError("custom search boom")
+
+    with pytest.raises(RuntimeError, match="custom search boom"):
+        runtime_regex.regex_search("abc", RaisingPattern())
+
+
+def test_regex_search_custom_pattern_invalid_match_shape() -> None:
+    runtime_regex = importlib.import_module("snail.runtime.regex")
+
+    class BadMatch:
+        def group(self, index):
+            return "x"
+
+    class InvalidPattern:
+        def search(self, value):
+            return BadMatch()
+
+    with pytest.raises(AttributeError) as excinfo:
+        runtime_regex.regex_search("abc", InvalidPattern())
+    assert "groups" in str(excinfo.value)
+
+
+def test_regex_match_invalid_pattern_raises() -> None:
+    runtime_regex = importlib.import_module("snail.runtime.regex")
+    with pytest.raises(re.error):
+        runtime_regex.regex_search("abc", "(")
+
+
+def test_regex_match_non_string_value_raises() -> None:
+    runtime_regex = importlib.import_module("snail.runtime.regex")
+    with pytest.raises(TypeError):
+        runtime_regex.regex_search(123, re.compile("a"))
+
+
+def test_runtime_helpers_installed_in_exec_globals() -> None:
+    runtime = importlib.import_module("snail.runtime")
+    globals_dict: dict[str, object] = {}
+    runtime.install_helpers(globals_dict)
+
+    helper_names = [
+        "__snail_incr_attr",
+        "__snail_incr_index",
+        "__snail_aug_attr",
+        "__snail_aug_index",
+        "__snail_regex_search",
+        "__snail_regex_compile",
+        "__snail_contains__",
+        "__snail_contains_not__",
+    ]
+    for name in helper_names:
+        assert name in globals_dict
+        assert callable(globals_dict[name])
 
 
 def test_runtime_run_subprocess_capture_normalizes_input(
