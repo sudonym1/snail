@@ -587,6 +587,18 @@ def test_contains_not_in(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "False\nTrue\n"
 
 
+def test_contains_not_in_regex_literal(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "print('abc' not in /ab(c)/)",
+            "print('zzz' not in /ab(c)/)",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "False\nTrue\n"
+
+
 def test_chained_in_short_circuit(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [
@@ -669,6 +681,39 @@ def test_assignment_target_attr_index_chains(capsys: pytest.CaptureFixture[str])
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     assert captured.out == "ok\n5\n3\n"
+
+
+def test_augmented_attr_index_single_evaluation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            "class Box {",
+            "    def __init__(self) {",
+            "        self.value = 1",
+            "    }",
+            "}",
+            "boxes = [Box()]",
+            "target_calls = [0]",
+            "idx_calls = [0]",
+            "arr = [10]",
+            "def get_target() {",
+            "    target_calls[0] = target_calls[0] + 1",
+            "    return 0",
+            "}",
+            "def get_idx() {",
+            "    idx_calls[0] = idx_calls[0] + 1",
+            "    return 0",
+            "}",
+            "boxes[get_target()].value += 4",
+            "arr[get_idx()] += 5",
+            'print("attr", boxes[0].value, target_calls[0])',
+            'print("idx", arr[0], idx_calls[0])',
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "attr 5 1\nidx 15 1\n"
 
 
 def test_combined_short_flags_awk(

@@ -21,29 +21,55 @@ def _apply_op(left, right, op: str):
     return func(left, right)
 
 
-def __snail_incr_attr(obj, attr: str, delta: int, pre: bool):
-    old = getattr(obj, attr)
+def _incr(get_value, set_value, delta: int, pre: bool):
+    old = get_value()
     new = old + delta
-    setattr(obj, attr, new)
+    set_value(new)
     return new if pre else old
+
+
+def _aug(get_value, set_value, value, op: str):
+    old = get_value()
+    new = _apply_op(old, value, op)
+    set_value(new)
+    return new
+
+
+def __snail_incr_attr(obj, attr: str, delta: int, pre: bool):
+    def get_value():
+        return getattr(obj, attr)
+
+    def set_value(new):
+        setattr(obj, attr, new)
+
+    return _incr(get_value, set_value, delta, pre)
 
 
 def __snail_incr_index(obj, index, delta: int, pre: bool):
-    old = obj[index]
-    new = old + delta
-    obj[index] = new
-    return new if pre else old
+    def get_value():
+        return obj[index]
+
+    def set_value(new):
+        obj[index] = new
+
+    return _incr(get_value, set_value, delta, pre)
 
 
 def __snail_aug_attr(obj, attr: str, value, op: str):
-    old = getattr(obj, attr)
-    new = _apply_op(old, value, op)
-    setattr(obj, attr, new)
-    return new
+    def get_value():
+        return getattr(obj, attr)
+
+    def set_value(new):
+        setattr(obj, attr, new)
+
+    return _aug(get_value, set_value, value, op)
 
 
 def __snail_aug_index(obj, index, value, op: str):
-    old = obj[index]
-    new = _apply_op(old, value, op)
-    obj[index] = new
-    return new
+    def get_value():
+        return obj[index]
+
+    def set_value(new):
+        obj[index] = new
+
+    return _aug(get_value, set_value, value, op)

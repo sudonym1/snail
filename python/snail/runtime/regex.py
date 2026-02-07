@@ -9,13 +9,13 @@ class SnailRegex:
         self._regex = re.compile(pattern)
 
     def search(self, value):
-        return regex_search(value, self._regex)
+        return self.__snail_contains__(value)
 
     def __contains__(self, value):
         return bool(self.__snail_contains__(value))
 
     def __snail_contains__(self, value):
-        return self.search(value)
+        return regex_search(value, self._regex)
 
     def __repr__(self) -> str:
         return f"/{self.pattern}/"
