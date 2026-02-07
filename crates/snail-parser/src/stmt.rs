@@ -6,8 +6,8 @@ use snail_ast::{
 use snail_error::ParseError;
 
 use crate::Rule;
-use crate::expr::{assign_target_from_expr, parse_expr_pair};
-use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
+use crate::expr::{apply_attr_index_suffix, assign_target_from_expr, parse_expr_pair};
+use crate::util::{error_with_span, span_from_pair};
 
 pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut stmts = Vec::new();
@@ -663,41 +663,7 @@ pub(crate) fn parse_assign_target_ref_expr(
         .ok_or_else(|| error_with_span("missing assignment target", span.clone(), source))?;
     let mut expr = parse_assign_target_atom_expr(atom_pair, source)?;
     for suffix in inner {
-        let suffix_span = span_from_pair(&suffix, source);
-        match suffix.as_rule() {
-            Rule::attribute => {
-                let attr = suffix
-                    .into_inner()
-                    .next()
-                    .ok_or_else(|| {
-                        error_with_span("missing attribute name", suffix_span.clone(), source)
-                    })?
-                    .as_str()
-                    .to_string();
-                let span = merge_span(expr_span(&expr), &suffix_span);
-                expr = Expr::Attribute {
-                    value: Box::new(expr),
-                    attr,
-                    span,
-                };
-            }
-            Rule::index => {
-                let mut idx_inner = suffix.into_inner();
-                let index_expr = crate::literal::parse_slice(
-                    idx_inner.next().ok_or_else(|| {
-                        error_with_span("missing index expr", suffix_span.clone(), source)
-                    })?,
-                    source,
-                )?;
-                let span = merge_span(expr_span(&expr), expr_span(&index_expr));
-                expr = Expr::Index {
-                    value: Box::new(expr),
-                    index: Box::new(index_expr),
-                    span,
-                };
-            }
-            _ => {}
-        }
+        expr = apply_attr_index_suffix(expr, suffix, source)?;
     }
     Ok(expr)
 }

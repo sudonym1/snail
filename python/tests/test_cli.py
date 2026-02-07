@@ -641,6 +641,36 @@ def test_augmented_assignment_and_increments(
     assert captured.out == "pre 6 6\npost 6 5\naug 8 8\nattr_pre 2 2\nidx_post 11 10\n"
 
 
+def test_assignment_target_attr_index_chains(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "class Cell {",
+            "    def __init__(self, v) {",
+            "        self.value = v",
+            "    }",
+            "}",
+            "class Box {",
+            "    def __init__(self) {",
+            "        self.items = [Cell(0)]",
+            "        self.meta = %{\"count\": 0}",
+            "    }",
+            "}",
+            "box = Box()",
+            "box.tag = 'ok'",
+            "box.items[0].value = 2",
+            "box.items[0].value += 3",
+            "box.meta['count'] = 1",
+            "box.meta['count'] += 2",
+            "print(box.tag)",
+            "print(box.items[0].value)",
+            "print(box.meta['count'])",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "ok\n5\n3\n"
+
+
 def test_combined_short_flags_awk(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1258,6 +1288,18 @@ def test_fstring_nested_format_spec(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.rstrip("\n") == "  3.14"
 
 
+def test_fstring_invalid_conversion_reports_syntax_error() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(['s = "{x!q}"'])
+    assert "conversion" in str(excinfo.value)
+
+
+def test_fstring_unterminated_expression_reports_syntax_error() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["s = \"{'abc}\""])
+    assert "unterminated f-string expression" in str(excinfo.value)
+
+
 # --- Tests for example files ---
 
 EXAMPLES_DIR = ROOT / "examples"
@@ -1711,6 +1753,52 @@ def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) ->
     with pytest.raises(SyntaxError) as excinfo:
         main(["print($src)"])
     assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_identifiers_require_map_mode_in_fstring_interpolation() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(['print("{$src}")'])
+    assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_identifiers_require_map_mode_in_subprocess_interpolation() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["x = $(echo {$src})"])
+    assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_identifiers_require_map_mode_in_regex_interpolation() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(['print("x" in /{$src}/)'])
+    assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_identifiers_require_map_mode_in_lambda_call_arguments() -> None:
+    for source in [
+        "f = def() { g($src) }",
+        "f = def() { g(k=$src) }",
+        "f = def() { g(*$src) }",
+        "f = def() { g(**$src) }",
+    ]:
+        with pytest.raises(SyntaxError) as excinfo:
+            main([source])
+        assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_begin_end_flags_reject_map_vars_fd_text(tmp_path: Path) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("alpha")
+    for begin_snippet in ["print($fd)", "print($text)"]:
+        with pytest.raises(SyntaxError):
+            main(
+                [
+                    "--map",
+                    "-b",
+                    begin_snippet,
+                    "print($src)",
+                    str(file_a),
+                ]
+            )
 
 
 def test_awk_and_map_mutually_exclusive(capsys: pytest.CaptureFixture[str]) -> None:
