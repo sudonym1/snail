@@ -537,37 +537,6 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                     span,
                 };
             }
-            Rule::attribute => {
-                let attr = suffix
-                    .into_inner()
-                    .next()
-                    .ok_or_else(|| {
-                        error_with_span("missing attribute name", suffix_span.clone(), source)
-                    })?
-                    .as_str()
-                    .to_string();
-                let span = merge_span(expr_span(&expr), &suffix_span);
-                expr = Expr::Attribute {
-                    value: Box::new(expr),
-                    attr,
-                    span,
-                };
-            }
-            Rule::index => {
-                let mut idx_inner = suffix.into_inner();
-                let index_expr = parse_slice(
-                    idx_inner.next().ok_or_else(|| {
-                        error_with_span("missing index expr", suffix_span.clone(), source)
-                    })?,
-                    source,
-                )?;
-                let span = merge_span(expr_span(&expr), expr_span(&index_expr));
-                expr = Expr::Index {
-                    value: Box::new(expr),
-                    index: Box::new(index_expr),
-                    span,
-                };
-            }
             Rule::try_suffix => {
                 if matches!(
                     expr,
@@ -621,10 +590,54 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                 };
                 postfix_seen = true;
             }
-            _ => {}
+            _ => {
+                expr = apply_attr_index_suffix(expr, suffix, source)?;
+            }
         }
     }
     Ok(expr)
+}
+
+pub(crate) fn apply_attr_index_suffix(
+    expr: Expr,
+    suffix: Pair<'_, Rule>,
+    source: &str,
+) -> Result<Expr, ParseError> {
+    let suffix_span = span_from_pair(&suffix, source);
+    match suffix.as_rule() {
+        Rule::attribute => {
+            let attr = suffix
+                .into_inner()
+                .next()
+                .ok_or_else(|| {
+                    error_with_span("missing attribute name", suffix_span.clone(), source)
+                })?
+                .as_str()
+                .to_string();
+            let span = merge_span(expr_span(&expr), &suffix_span);
+            Ok(Expr::Attribute {
+                value: Box::new(expr),
+                attr,
+                span,
+            })
+        }
+        Rule::index => {
+            let mut idx_inner = suffix.into_inner();
+            let index_expr = parse_slice(
+                idx_inner.next().ok_or_else(|| {
+                    error_with_span("missing index expr", suffix_span.clone(), source)
+                })?,
+                source,
+            )?;
+            let span = merge_span(expr_span(&expr), expr_span(&index_expr));
+            Ok(Expr::Index {
+                value: Box::new(expr),
+                index: Box::new(index_expr),
+                span,
+            })
+        }
+        _ => Ok(expr),
+    }
 }
 
 fn parse_call(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Argument>, ParseError> {

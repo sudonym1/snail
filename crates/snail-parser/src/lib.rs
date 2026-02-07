@@ -138,10 +138,7 @@ pub fn parse_map_main(source: &str) -> Result<Program, ParseError> {
 }
 
 fn validate_no_awk_syntax_for_map(program: &Program, source: &str) -> Result<(), ParseError> {
-    for stmt in &program.stmts {
-        validate_stmt_for_map(stmt, source)?;
-    }
-    Ok(())
+    validate_program(program, source, ValidationMode::Map)
 }
 
 /// Parses a map program with in-file BEGIN/END blocks.
@@ -233,7 +230,7 @@ fn parse_begin_end_block(
         .next()
         .ok_or_else(|| error_with_span(format!("missing {label} block"), span.clone(), source))?;
     let block = parse_block(block_pair, source)?;
-    validate_block(&block, source)?;
+    validate_block_mode(&block, source, ValidationMode::Main)?;
     Ok(block)
 }
 
@@ -278,390 +275,28 @@ fn validate_entry_separators(
     Ok(())
 }
 
-fn validate_stmt_for_map(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
-    match stmt {
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
-            ..
-        } => {
-            validate_condition_for_map(cond, source)?;
-            validate_block_for_map(body, source)?;
-            for (elif_cond, elif_body) in elifs {
-                validate_condition_for_map(elif_cond, source)?;
-                validate_block_for_map(elif_body, source)?;
-            }
-            if let Some(body) = else_body {
-                validate_block_for_map(body, source)?;
-            }
-        }
-        Stmt::While {
-            cond,
-            body,
-            else_body,
-            ..
-        } => {
-            validate_condition_for_map(cond, source)?;
-            validate_block_for_map(body, source)?;
-            if let Some(body) = else_body {
-                validate_block_for_map(body, source)?;
-            }
-        }
-        Stmt::For {
-            target,
-            iter,
-            body,
-            else_body,
-            ..
-        } => {
-            validate_assign_target_for_map(target, source)?;
-            validate_expr_for_map(iter, source)?;
-            validate_block_for_map(body, source)?;
-            if let Some(body) = else_body {
-                validate_block_for_map(body, source)?;
-            }
-        }
-        Stmt::Def { params, body, .. } => {
-            for param in params {
-                validate_param_for_map(param, source)?;
-            }
-            validate_block_for_map(body, source)?;
-        }
-        Stmt::Class { body, .. } => {
-            validate_block_for_map(body, source)?;
-        }
-        Stmt::Try {
-            body,
-            handlers,
-            else_body,
-            finally_body,
-            ..
-        } => {
-            validate_block_for_map(body, source)?;
-            for handler in handlers {
-                validate_except_handler_for_map(handler, source)?;
-            }
-            if let Some(body) = else_body {
-                validate_block_for_map(body, source)?;
-            }
-            if let Some(body) = finally_body {
-                validate_block_for_map(body, source)?;
-            }
-        }
-        Stmt::With { items, body, .. } => {
-            for item in items {
-                validate_with_item_for_map(item, source)?;
-            }
-            validate_block_for_map(body, source)?;
-        }
-        Stmt::Return { value, .. } => {
-            if let Some(value) = value {
-                validate_expr_for_map(value, source)?;
-            }
-        }
-        Stmt::Raise { value, from, .. } => {
-            if let Some(value) = value {
-                validate_expr_for_map(value, source)?;
-            }
-            if let Some(from) = from {
-                validate_expr_for_map(from, source)?;
-            }
-        }
-        Stmt::Assert { test, message, .. } => {
-            validate_expr_for_map(test, source)?;
-            if let Some(message) = message {
-                validate_expr_for_map(message, source)?;
-            }
-        }
-        Stmt::Delete { targets, .. } => {
-            for target in targets {
-                validate_assign_target_for_map(target, source)?;
-            }
-        }
-        Stmt::Import { .. }
-        | Stmt::ImportFrom { .. }
-        | Stmt::Break { .. }
-        | Stmt::Continue { .. }
-        | Stmt::Pass { .. } => {}
-        Stmt::Assign { targets, value, .. } => {
-            for target in targets {
-                validate_assign_target_for_map(target, source)?;
-            }
-            validate_expr_for_map(value, source)?;
-        }
-        Stmt::Expr { value, .. } => {
-            validate_expr_for_map(value, source)?;
-        }
-    }
-    Ok(())
-}
-
-fn validate_block_for_map(block: &[Stmt], source: &str) -> Result<(), ParseError> {
-    for stmt in block {
-        validate_stmt_for_map(stmt, source)?;
-    }
-    Ok(())
-}
-
-fn validate_with_item_for_map(item: &WithItem, source: &str) -> Result<(), ParseError> {
-    validate_expr_for_map(&item.context, source)?;
-    if let Some(target) = &item.target {
-        validate_assign_target_for_map(target, source)?;
-    }
-    Ok(())
-}
-
-fn validate_except_handler_for_map(
-    handler: &ExceptHandler,
-    source: &str,
-) -> Result<(), ParseError> {
-    if let Some(expr) = &handler.type_name {
-        validate_expr_for_map(expr, source)?;
-    }
-    validate_block_for_map(&handler.body, source)?;
-    Ok(())
-}
-
-fn validate_param_for_map(param: &Parameter, source: &str) -> Result<(), ParseError> {
-    match param {
-        Parameter::Regular { default, .. } => {
-            if let Some(default) = default {
-                validate_expr_for_map(default, source)?;
-            }
-        }
-        Parameter::VarArgs { .. } | Parameter::KwArgs { .. } => {}
-    }
-    Ok(())
-}
-
-fn validate_argument_for_map(arg: &Argument, source: &str) -> Result<(), ParseError> {
-    match arg {
-        Argument::Positional { value, .. }
-        | Argument::Keyword { value, .. }
-        | Argument::Star { value, .. }
-        | Argument::KwStar { value, .. } => validate_expr_for_map(value, source),
-    }
-}
-
-fn validate_assign_target_for_map(target: &AssignTarget, source: &str) -> Result<(), ParseError> {
-    match target {
-        AssignTarget::Name { .. } => Ok(()),
-        AssignTarget::Attribute { value, .. } => validate_expr_for_map(value, source),
-        AssignTarget::Index { value, index, .. } => {
-            validate_expr_for_map(value, source)?;
-            validate_expr_for_map(index, source)
-        }
-        AssignTarget::Starred { target, .. } => validate_assign_target_for_map(target, source),
-        AssignTarget::Tuple { elements, .. } | AssignTarget::List { elements, .. } => {
-            for element in elements {
-                validate_assign_target_for_map(element, source)?;
-            }
-            Ok(())
-        }
-    }
-}
-
-fn validate_condition_for_map(cond: &Condition, source: &str) -> Result<(), ParseError> {
-    match cond {
-        Condition::Expr(expr) => validate_expr_for_map(expr, source),
-        Condition::Let {
-            target,
-            value,
-            guard,
-            ..
-        } => {
-            validate_assign_target_for_map(target, source)?;
-            validate_expr_for_map(value, source)?;
-            if let Some(guard) = guard {
-                validate_expr_for_map(guard, source)?;
-            }
-            Ok(())
-        }
-    }
-}
-
-fn validate_expr_for_map(expr: &Expr, source: &str) -> Result<(), ParseError> {
-    match expr {
-        Expr::Name { name, span } => {
-            // Reject awk-only names but allow map names
-            if AWK_ONLY_NAMES.contains(&name.as_str()) {
-                return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
-            }
-            // Map variables are allowed in map mode
-        }
-        Expr::Placeholder { .. } => {}
-        Expr::FieldIndex { span, .. } => {
-            return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
-        }
-        Expr::FString { parts, .. } => {
-            for part in parts {
-                validate_fstring_part_for_map(part, source)?;
-            }
-        }
-        Expr::Unary { expr, .. } => {
-            validate_expr_for_map(expr, source)?;
-        }
-        Expr::Binary { left, right, .. } => {
-            validate_expr_for_map(left, source)?;
-            validate_expr_for_map(right, source)?;
-        }
-        Expr::AugAssign { target, value, .. } => {
-            validate_assign_target_for_map(target, source)?;
-            validate_expr_for_map(value, source)?;
-        }
-        Expr::PrefixIncr { target, .. } | Expr::PostfixIncr { target, .. } => {
-            validate_assign_target_for_map(target, source)?;
-        }
-        Expr::Compare {
-            left, comparators, ..
-        } => {
-            validate_expr_for_map(left, source)?;
-            for expr in comparators {
-                validate_expr_for_map(expr, source)?;
-            }
-        }
-        Expr::IfExpr {
-            test, body, orelse, ..
-        } => {
-            validate_expr_for_map(test, source)?;
-            validate_expr_for_map(body, source)?;
-            validate_expr_for_map(orelse, source)?;
-        }
-        Expr::TryExpr { expr, fallback, .. } => {
-            validate_expr_for_map(expr, source)?;
-            if let Some(fallback) = fallback {
-                validate_expr_for_map(fallback, source)?;
-            }
-        }
-        Expr::Yield { value, .. } => {
-            if let Some(value) = value {
-                validate_expr_for_map(value, source)?;
-            }
-        }
-        Expr::YieldFrom { expr, .. } => {
-            validate_expr_for_map(expr, source)?;
-        }
-        Expr::Lambda { params, body, .. } => {
-            for param in params {
-                validate_param_for_map(param, source)?;
-            }
-            validate_block_for_map(body, source)?;
-        }
-        Expr::Compound { expressions, .. } => {
-            for expr in expressions {
-                validate_expr_for_map(expr, source)?;
-            }
-        }
-        Expr::Regex { pattern, .. } => {
-            validate_regex_pattern_for_map(pattern, source)?;
-        }
-        Expr::RegexMatch { value, pattern, .. } => {
-            validate_expr_for_map(value, source)?;
-            validate_regex_pattern_for_map(pattern, source)?;
-        }
-        Expr::Subprocess { parts, .. } => {
-            for part in parts {
-                validate_fstring_part_for_map(part, source)?;
-            }
-        }
-        Expr::StructuredAccessor { .. }
-        | Expr::Number { .. }
-        | Expr::String { .. }
-        | Expr::Bool { .. }
-        | Expr::None { .. } => {}
-        Expr::Call { func, args, .. } => {
-            validate_expr_for_map(func, source)?;
-            for arg in args {
-                validate_argument_for_map(arg, source)?;
-            }
-        }
-        Expr::Attribute { value, .. } => {
-            validate_expr_for_map(value, source)?;
-        }
-        Expr::Index { value, index, .. } => {
-            validate_expr_for_map(value, source)?;
-            validate_expr_for_map(index, source)?;
-        }
-        Expr::Paren { expr, .. } => {
-            validate_expr_for_map(expr, source)?;
-        }
-        Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
-            for expr in elements {
-                validate_expr_for_map(expr, source)?;
-            }
-        }
-        Expr::Dict { entries, .. } => {
-            for (key, value) in entries {
-                validate_expr_for_map(key, source)?;
-                validate_expr_for_map(value, source)?;
-            }
-        }
-        Expr::Slice { start, end, .. } => {
-            if let Some(start) = start {
-                validate_expr_for_map(start, source)?;
-            }
-            if let Some(end) = end {
-                validate_expr_for_map(end, source)?;
-            }
-        }
-        Expr::ListComp {
-            element, iter, ifs, ..
-        } => {
-            validate_expr_for_map(element, source)?;
-            validate_expr_for_map(iter, source)?;
-            for expr in ifs {
-                validate_expr_for_map(expr, source)?;
-            }
-        }
-        Expr::DictComp {
-            key,
-            value,
-            iter,
-            ifs,
-            ..
-        } => {
-            validate_expr_for_map(key, source)?;
-            validate_expr_for_map(value, source)?;
-            validate_expr_for_map(iter, source)?;
-            for expr in ifs {
-                validate_expr_for_map(expr, source)?;
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_regex_pattern_for_map(pattern: &RegexPattern, source: &str) -> Result<(), ParseError> {
-    if let RegexPattern::Interpolated(parts) = pattern {
-        for part in parts {
-            validate_fstring_part_for_map(part, source)?;
-        }
-    }
-    Ok(())
-}
-
-fn validate_fstring_part_for_map(part: &FStringPart, source: &str) -> Result<(), ParseError> {
-    if let FStringPart::Expr(expr) = part {
-        validate_expr_for_map(&expr.expr, source)?;
-        if let Some(spec) = &expr.format_spec {
-            for spec_part in spec {
-                validate_fstring_part_for_map(spec_part, source)?;
-            }
-        }
-    }
-    Ok(())
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ValidationMode {
+    Main,
+    Map,
 }
 
 fn validate_no_awk_syntax(program: &Program, source: &str) -> Result<(), ParseError> {
+    validate_program(program, source, ValidationMode::Main)
+}
+
+fn validate_program(
+    program: &Program,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     for stmt in &program.stmts {
-        validate_stmt(stmt, source)?;
+        validate_stmt_mode(stmt, source, mode)?;
     }
     Ok(())
 }
 
-fn validate_stmt(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
+fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result<(), ParseError> {
     match stmt {
         Stmt::If {
             cond,
@@ -670,14 +305,14 @@ fn validate_stmt(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
             else_body,
             ..
         } => {
-            validate_condition(cond, source)?;
-            validate_block(body, source)?;
+            validate_condition_mode(cond, source, mode)?;
+            validate_block_mode(body, source, mode)?;
             for (elif_cond, elif_body) in elifs {
-                validate_condition(elif_cond, source)?;
-                validate_block(elif_body, source)?;
+                validate_condition_mode(elif_cond, source, mode)?;
+                validate_block_mode(elif_body, source, mode)?;
             }
             if let Some(body) = else_body {
-                validate_block(body, source)?;
+                validate_block_mode(body, source, mode)?;
             }
         }
         Stmt::While {
@@ -686,10 +321,10 @@ fn validate_stmt(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
             else_body,
             ..
         } => {
-            validate_condition(cond, source)?;
-            validate_block(body, source)?;
+            validate_condition_mode(cond, source, mode)?;
+            validate_block_mode(body, source, mode)?;
             if let Some(body) = else_body {
-                validate_block(body, source)?;
+                validate_block_mode(body, source, mode)?;
             }
         }
         Stmt::For {
@@ -699,21 +334,21 @@ fn validate_stmt(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
             else_body,
             ..
         } => {
-            validate_assign_target(target, source)?;
-            validate_expr(iter, source)?;
-            validate_block(body, source)?;
+            validate_assign_target_mode(target, source, mode)?;
+            validate_expr_mode(iter, source, mode)?;
+            validate_block_mode(body, source, mode)?;
             if let Some(body) = else_body {
-                validate_block(body, source)?;
+                validate_block_mode(body, source, mode)?;
             }
         }
         Stmt::Def { params, body, .. } => {
             for param in params {
-                validate_param(param, source)?;
+                validate_param_mode(param, source, mode)?;
             }
-            validate_block(body, source)?;
+            validate_block_mode(body, source, mode)?;
         }
         Stmt::Class { body, .. } => {
-            validate_block(body, source)?;
+            validate_block_mode(body, source, mode)?;
         }
         Stmt::Try {
             body,
@@ -722,45 +357,45 @@ fn validate_stmt(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
             finally_body,
             ..
         } => {
-            validate_block(body, source)?;
+            validate_block_mode(body, source, mode)?;
             for handler in handlers {
-                validate_except_handler(handler, source)?;
+                validate_except_handler_mode(handler, source, mode)?;
             }
             if let Some(body) = else_body {
-                validate_block(body, source)?;
+                validate_block_mode(body, source, mode)?;
             }
             if let Some(body) = finally_body {
-                validate_block(body, source)?;
+                validate_block_mode(body, source, mode)?;
             }
         }
         Stmt::With { items, body, .. } => {
             for item in items {
-                validate_with_item(item, source)?;
+                validate_with_item_mode(item, source, mode)?;
             }
-            validate_block(body, source)?;
+            validate_block_mode(body, source, mode)?;
         }
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
-                validate_expr(value, source)?;
+                validate_expr_mode(value, source, mode)?;
             }
         }
         Stmt::Raise { value, from, .. } => {
             if let Some(value) = value {
-                validate_expr(value, source)?;
+                validate_expr_mode(value, source, mode)?;
             }
             if let Some(from) = from {
-                validate_expr(from, source)?;
+                validate_expr_mode(from, source, mode)?;
             }
         }
         Stmt::Assert { test, message, .. } => {
-            validate_expr(test, source)?;
+            validate_expr_mode(test, source, mode)?;
             if let Some(message) = message {
-                validate_expr(message, source)?;
+                validate_expr_mode(message, source, mode)?;
             }
         }
         Stmt::Delete { targets, .. } => {
             for target in targets {
-                validate_assign_target(target, source)?;
+                validate_assign_target_mode(target, source, mode)?;
             }
         }
         Stmt::Import { .. }
@@ -770,45 +405,61 @@ fn validate_stmt(stmt: &Stmt, source: &str) -> Result<(), ParseError> {
         | Stmt::Pass { .. } => {}
         Stmt::Assign { targets, value, .. } => {
             for target in targets {
-                validate_assign_target(target, source)?;
+                validate_assign_target_mode(target, source, mode)?;
             }
-            validate_expr(value, source)?;
+            validate_expr_mode(value, source, mode)?;
         }
         Stmt::Expr { value, .. } => {
-            validate_expr(value, source)?;
+            validate_expr_mode(value, source, mode)?;
         }
     }
     Ok(())
 }
 
-fn validate_block(block: &[Stmt], source: &str) -> Result<(), ParseError> {
+fn validate_block_mode(
+    block: &[Stmt],
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     for stmt in block {
-        validate_stmt(stmt, source)?;
+        validate_stmt_mode(stmt, source, mode)?;
     }
     Ok(())
 }
 
-fn validate_with_item(item: &WithItem, source: &str) -> Result<(), ParseError> {
-    validate_expr(&item.context, source)?;
+fn validate_with_item_mode(
+    item: &WithItem,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
+    validate_expr_mode(&item.context, source, mode)?;
     if let Some(target) = &item.target {
-        validate_assign_target(target, source)?;
+        validate_assign_target_mode(target, source, mode)?;
     }
     Ok(())
 }
 
-fn validate_except_handler(handler: &ExceptHandler, source: &str) -> Result<(), ParseError> {
+fn validate_except_handler_mode(
+    handler: &ExceptHandler,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     if let Some(expr) = &handler.type_name {
-        validate_expr(expr, source)?;
+        validate_expr_mode(expr, source, mode)?;
     }
-    validate_block(&handler.body, source)?;
+    validate_block_mode(&handler.body, source, mode)?;
     Ok(())
 }
 
-fn validate_param(param: &Parameter, source: &str) -> Result<(), ParseError> {
+fn validate_param_mode(
+    param: &Parameter,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     match param {
         Parameter::Regular { default, .. } => {
             if let Some(default) = default {
-                validate_expr(default, source)?;
+                validate_expr_mode(default, source, mode)?;
             }
         }
         Parameter::VarArgs { .. } | Parameter::KwArgs { .. } => {}
@@ -816,64 +467,88 @@ fn validate_param(param: &Parameter, source: &str) -> Result<(), ParseError> {
     Ok(())
 }
 
-fn validate_argument(arg: &Argument, source: &str) -> Result<(), ParseError> {
+fn validate_argument_mode(
+    arg: &Argument,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     match arg {
         Argument::Positional { value, .. }
         | Argument::Keyword { value, .. }
         | Argument::Star { value, .. }
-        | Argument::KwStar { value, .. } => validate_expr(value, source),
+        | Argument::KwStar { value, .. } => validate_expr_mode(value, source, mode),
     }
 }
 
-fn validate_assign_target(target: &AssignTarget, source: &str) -> Result<(), ParseError> {
+fn validate_assign_target_mode(
+    target: &AssignTarget,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     match target {
         AssignTarget::Name { .. } => Ok(()),
-        AssignTarget::Attribute { value, .. } => validate_expr(value, source),
+        AssignTarget::Attribute { value, .. } => validate_expr_mode(value, source, mode),
         AssignTarget::Index { value, index, .. } => {
-            validate_expr(value, source)?;
-            validate_expr(index, source)
+            validate_expr_mode(value, source, mode)?;
+            validate_expr_mode(index, source, mode)
         }
-        AssignTarget::Starred { target, .. } => validate_assign_target(target, source),
+        AssignTarget::Starred { target, .. } => validate_assign_target_mode(target, source, mode),
         AssignTarget::Tuple { elements, .. } | AssignTarget::List { elements, .. } => {
             for element in elements {
-                validate_assign_target(element, source)?;
+                validate_assign_target_mode(element, source, mode)?;
             }
             Ok(())
         }
     }
 }
 
-fn validate_condition(cond: &Condition, source: &str) -> Result<(), ParseError> {
+fn validate_condition_mode(
+    cond: &Condition,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     match cond {
-        Condition::Expr(expr) => validate_expr(expr, source),
+        Condition::Expr(expr) => validate_expr_mode(expr, source, mode),
         Condition::Let {
             target,
             value,
             guard,
             ..
         } => {
-            validate_assign_target(target, source)?;
-            validate_expr(value, source)?;
+            validate_assign_target_mode(target, source, mode)?;
+            validate_expr_mode(value, source, mode)?;
             if let Some(guard) = guard {
-                validate_expr(guard, source)?;
+                validate_expr_mode(guard, source, mode)?;
             }
             Ok(())
         }
     }
 }
 
-fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
+fn validate_name_for_mode(
+    name: &str,
+    span: &SourceSpan,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
+    if AWK_ONLY_NAMES.contains(&name) {
+        return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
+    }
+    if mode == ValidationMode::Main {
+        if MAP_ONLY_NAMES.contains(&name) {
+            return Err(error_with_span(MAP_ONLY_MESSAGE, span.clone(), source));
+        }
+        if MAP_OR_AWK_NAMES.contains(&name) {
+            return Err(error_with_span(MAP_OR_AWK_MESSAGE, span.clone(), source));
+        }
+    }
+    Ok(())
+}
+
+fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result<(), ParseError> {
     match expr {
         Expr::Name { name, span } => {
-            if AWK_ONLY_NAMES.contains(&name.as_str()) {
-                return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
-            }
-            if MAP_ONLY_NAMES.contains(&name.as_str()) {
-                return Err(error_with_span(MAP_ONLY_MESSAGE, span.clone(), source));
-            }
-            if MAP_OR_AWK_NAMES.contains(&name.as_str()) {
-                return Err(error_with_span(MAP_OR_AWK_MESSAGE, span.clone(), source));
-            }
+            validate_name_for_mode(name, span, source, mode)?;
         }
         Expr::Placeholder { .. } => {}
         Expr::FieldIndex { span, .. } => {
@@ -881,73 +556,73 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
         }
         Expr::FString { parts, .. } => {
             for part in parts {
-                validate_fstring_part(part, source)?;
+                validate_fstring_part_mode(part, source, mode)?;
             }
         }
         Expr::Unary { expr, .. } => {
-            validate_expr(expr, source)?;
+            validate_expr_mode(expr, source, mode)?;
         }
         Expr::Binary { left, right, .. } => {
-            validate_expr(left, source)?;
-            validate_expr(right, source)?;
+            validate_expr_mode(left, source, mode)?;
+            validate_expr_mode(right, source, mode)?;
         }
         Expr::AugAssign { target, value, .. } => {
-            validate_assign_target(target, source)?;
-            validate_expr(value, source)?;
+            validate_assign_target_mode(target, source, mode)?;
+            validate_expr_mode(value, source, mode)?;
         }
         Expr::PrefixIncr { target, .. } | Expr::PostfixIncr { target, .. } => {
-            validate_assign_target(target, source)?;
+            validate_assign_target_mode(target, source, mode)?;
         }
         Expr::Compare {
             left, comparators, ..
         } => {
-            validate_expr(left, source)?;
+            validate_expr_mode(left, source, mode)?;
             for expr in comparators {
-                validate_expr(expr, source)?;
+                validate_expr_mode(expr, source, mode)?;
             }
         }
         Expr::IfExpr {
             test, body, orelse, ..
         } => {
-            validate_expr(test, source)?;
-            validate_expr(body, source)?;
-            validate_expr(orelse, source)?;
+            validate_expr_mode(test, source, mode)?;
+            validate_expr_mode(body, source, mode)?;
+            validate_expr_mode(orelse, source, mode)?;
         }
         Expr::TryExpr { expr, fallback, .. } => {
-            validate_expr(expr, source)?;
+            validate_expr_mode(expr, source, mode)?;
             if let Some(fallback) = fallback {
-                validate_expr(fallback, source)?;
+                validate_expr_mode(fallback, source, mode)?;
             }
         }
         Expr::Yield { value, .. } => {
             if let Some(value) = value {
-                validate_expr(value, source)?;
+                validate_expr_mode(value, source, mode)?;
             }
         }
         Expr::YieldFrom { expr, .. } => {
-            validate_expr(expr, source)?;
+            validate_expr_mode(expr, source, mode)?;
         }
         Expr::Lambda { params, body, .. } => {
             for param in params {
-                validate_param(param, source)?;
+                validate_param_mode(param, source, mode)?;
             }
-            validate_block(body, source)?;
+            validate_block_mode(body, source, mode)?;
         }
         Expr::Compound { expressions, .. } => {
             for expr in expressions {
-                validate_expr(expr, source)?;
+                validate_expr_mode(expr, source, mode)?;
             }
         }
         Expr::Regex { pattern, .. } => {
-            validate_regex_pattern(pattern, source)?;
+            validate_regex_pattern_mode(pattern, source, mode)?;
         }
         Expr::RegexMatch { value, pattern, .. } => {
-            validate_expr(value, source)?;
-            validate_regex_pattern(pattern, source)?;
+            validate_expr_mode(value, source, mode)?;
+            validate_regex_pattern_mode(pattern, source, mode)?;
         }
         Expr::Subprocess { parts, .. } => {
             for part in parts {
-                validate_fstring_part(part, source)?;
+                validate_fstring_part_mode(part, source, mode)?;
             }
         }
         Expr::StructuredAccessor { .. }
@@ -956,47 +631,47 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
         | Expr::Bool { .. }
         | Expr::None { .. } => {}
         Expr::Call { func, args, .. } => {
-            validate_expr(func, source)?;
+            validate_expr_mode(func, source, mode)?;
             for arg in args {
-                validate_argument(arg, source)?;
+                validate_argument_mode(arg, source, mode)?;
             }
         }
         Expr::Attribute { value, .. } => {
-            validate_expr(value, source)?;
+            validate_expr_mode(value, source, mode)?;
         }
         Expr::Index { value, index, .. } => {
-            validate_expr(value, source)?;
-            validate_expr(index, source)?;
+            validate_expr_mode(value, source, mode)?;
+            validate_expr_mode(index, source, mode)?;
         }
         Expr::Paren { expr, .. } => {
-            validate_expr(expr, source)?;
+            validate_expr_mode(expr, source, mode)?;
         }
         Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
             for expr in elements {
-                validate_expr(expr, source)?;
+                validate_expr_mode(expr, source, mode)?;
             }
         }
         Expr::Dict { entries, .. } => {
             for (key, value) in entries {
-                validate_expr(key, source)?;
-                validate_expr(value, source)?;
+                validate_expr_mode(key, source, mode)?;
+                validate_expr_mode(value, source, mode)?;
             }
         }
         Expr::Slice { start, end, .. } => {
             if let Some(start) = start {
-                validate_expr(start, source)?;
+                validate_expr_mode(start, source, mode)?;
             }
             if let Some(end) = end {
-                validate_expr(end, source)?;
+                validate_expr_mode(end, source, mode)?;
             }
         }
         Expr::ListComp {
             element, iter, ifs, ..
         } => {
-            validate_expr(element, source)?;
-            validate_expr(iter, source)?;
+            validate_expr_mode(element, source, mode)?;
+            validate_expr_mode(iter, source, mode)?;
             for expr in ifs {
-                validate_expr(expr, source)?;
+                validate_expr_mode(expr, source, mode)?;
             }
         }
         Expr::DictComp {
@@ -1006,32 +681,40 @@ fn validate_expr(expr: &Expr, source: &str) -> Result<(), ParseError> {
             ifs,
             ..
         } => {
-            validate_expr(key, source)?;
-            validate_expr(value, source)?;
-            validate_expr(iter, source)?;
+            validate_expr_mode(key, source, mode)?;
+            validate_expr_mode(value, source, mode)?;
+            validate_expr_mode(iter, source, mode)?;
             for expr in ifs {
-                validate_expr(expr, source)?;
+                validate_expr_mode(expr, source, mode)?;
             }
         }
     }
     Ok(())
 }
 
-fn validate_regex_pattern(pattern: &RegexPattern, source: &str) -> Result<(), ParseError> {
+fn validate_regex_pattern_mode(
+    pattern: &RegexPattern,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     if let RegexPattern::Interpolated(parts) = pattern {
         for part in parts {
-            validate_fstring_part(part, source)?;
+            validate_fstring_part_mode(part, source, mode)?;
         }
     }
     Ok(())
 }
 
-fn validate_fstring_part(part: &FStringPart, source: &str) -> Result<(), ParseError> {
+fn validate_fstring_part_mode(
+    part: &FStringPart,
+    source: &str,
+    mode: ValidationMode,
+) -> Result<(), ParseError> {
     if let FStringPart::Expr(expr) = part {
-        validate_expr(&expr.expr, source)?;
+        validate_expr_mode(&expr.expr, source, mode)?;
         if let Some(spec) = &expr.format_spec {
             for spec_part in spec {
-                validate_fstring_part(spec_part, source)?;
+                validate_fstring_part_mode(spec_part, source, mode)?;
             }
         }
     }

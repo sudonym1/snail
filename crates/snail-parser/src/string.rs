@@ -217,6 +217,55 @@ pub fn parse_fstring_expr(
 
 type FStringExprParts<'a> = (&'a str, usize, FStringConversion, Option<(&'a str, usize)>);
 
+#[derive(Default)]
+struct DelimiterDepth {
+    paren: usize,
+    bracket: usize,
+    brace: usize,
+}
+
+impl DelimiterDepth {
+    fn expr_top_level(&self) -> bool {
+        self.paren == 0 && self.bracket == 0 && self.brace == 0
+    }
+}
+
+fn try_skip_string_literal(bytes: &[u8], i: usize) -> Option<Option<usize>> {
+    let current = *bytes.get(i)?;
+    match current {
+        b'\'' | b'"' => Some(skip_string_literal(bytes, i)),
+        b'r' | b'b' => {
+            if let Some(next) = bytes.get(i + 1) {
+                if *next == b'\'' || *next == b'"' {
+                    return Some(skip_string_literal(bytes, i));
+                }
+                if (*next == b'r' || *next == b'b')
+                    && current != *next
+                    && bytes
+                        .get(i + 2)
+                        .is_some_and(|third| *third == b'\'' || *third == b'"')
+                {
+                    return Some(skip_string_literal(bytes, i));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn update_delimiter_depth(depth: &mut DelimiterDepth, byte: u8) {
+    match byte {
+        b'(' => depth.paren += 1,
+        b')' => depth.paren = depth.paren.saturating_sub(1),
+        b'[' => depth.bracket += 1,
+        b']' => depth.bracket = depth.bracket.saturating_sub(1),
+        b'{' => depth.brace += 1,
+        b'}' => depth.brace = depth.brace.saturating_sub(1),
+        _ => {}
+    }
+}
+
 fn split_fstring_expr<'a>(
     expr_text: &'a str,
     expr_offset: usize,
@@ -224,117 +273,59 @@ fn split_fstring_expr<'a>(
 ) -> Result<FStringExprParts<'a>, ParseError> {
     let bytes = expr_text.as_bytes();
     let mut i = 0usize;
-    let mut paren = 0usize;
-    let mut bracket = 0usize;
-    let mut brace = 0usize;
+    let mut depth = DelimiterDepth::default();
     let mut conversion = FStringConversion::None;
     let mut expr_end = expr_text.len();
     let mut format_spec: Option<(&'a str, usize)> = None;
     let mut conversion_pos: Option<usize> = None;
 
     while i < bytes.len() {
-        match bytes[i] {
-            b'r' | b'b' => {
-                if let Some(next) = bytes.get(i + 1) {
-                    if *next == b'\'' || *next == b'"' {
-                        if let Some(end) = skip_string_literal(bytes, i) {
-                            i = end;
-                            continue;
-                        } else {
-                            return Err(error_with_span(
-                                "unterminated string in f-string expression",
-                                span_from_offset(expr_offset + i, expr_offset + i + 1, source),
-                                source,
-                            ));
-                        }
-                    } else if (*next == b'r' || *next == b'b')
-                        && bytes[i] != *next
-                        && let Some(third) = bytes.get(i + 2)
-                        && (*third == b'\'' || *third == b'"')
-                    {
-                        if let Some(end) = skip_string_literal(bytes, i) {
-                            i = end;
-                            continue;
-                        } else {
-                            return Err(error_with_span(
-                                "unterminated string in f-string expression",
-                                span_from_offset(expr_offset + i, expr_offset + i + 1, source),
-                                source,
-                            ));
-                        }
-                    }
-                }
-                i += 1;
+        if bytes[i] == b'!' && depth.expr_top_level() {
+            if bytes.get(i + 1) == Some(&b'=') {
+                i += 2;
+                continue;
             }
-            b'\'' | b'"' => {
-                if let Some(end) = skip_string_literal(bytes, i) {
-                    i = end;
-                } else {
+            let conv_char = bytes.get(i + 1).copied();
+            let parsed = match conv_char {
+                Some(b'r') => FStringConversion::Repr,
+                Some(b's') => FStringConversion::Str,
+                Some(b'a') => FStringConversion::Ascii,
+                _ => {
                     return Err(error_with_span(
-                        "unterminated string in f-string expression",
-                        span_from_offset(expr_offset + i, expr_offset + i + 1, source),
+                        "invalid f-string conversion (expected !r, !s, or !a)",
+                        span_from_offset(
+                            expr_offset + i,
+                            expr_offset + (i + 1).min(expr_text.len()),
+                            source,
+                        ),
                         source,
                     ));
                 }
-            }
-            b'(' => {
-                paren += 1;
-                i += 1;
-            }
-            b')' => {
-                paren = paren.saturating_sub(1);
-                i += 1;
-            }
-            b'[' => {
-                bracket += 1;
-                i += 1;
-            }
-            b']' => {
-                bracket = bracket.saturating_sub(1);
-                i += 1;
-            }
-            b'{' => {
-                brace += 1;
-                i += 1;
-            }
-            b'}' => {
-                brace = brace.saturating_sub(1);
-                i += 1;
-            }
-            b'!' if paren == 0 && bracket == 0 && brace == 0 => {
-                if bytes.get(i + 1) == Some(&b'=') {
-                    i += 2;
-                    continue;
-                }
-                let conv_char = bytes.get(i + 1).copied();
-                let parsed = match conv_char {
-                    Some(b'r') => FStringConversion::Repr,
-                    Some(b's') => FStringConversion::Str,
-                    Some(b'a') => FStringConversion::Ascii,
-                    _ => {
-                        return Err(error_with_span(
-                            "invalid f-string conversion (expected !r, !s, or !a)",
-                            span_from_offset(
-                                expr_offset + i,
-                                expr_offset + (i + 1).min(expr_text.len()),
-                                source,
-                            ),
-                            source,
-                        ));
-                    }
-                };
-                conversion = parsed;
-                conversion_pos = Some(i);
-                expr_end = i;
-                break;
-            }
-            b':' if paren == 0 && bracket == 0 && brace == 0 => {
-                expr_end = i;
-                format_spec = Some((&expr_text[i + 1..], expr_offset + i + 1));
-                i = bytes.len();
-            }
-            _ => i += 1,
+            };
+            conversion = parsed;
+            conversion_pos = Some(i);
+            expr_end = i;
+            break;
         }
+        if bytes[i] == b':' && depth.expr_top_level() {
+            expr_end = i;
+            format_spec = Some((&expr_text[i + 1..], expr_offset + i + 1));
+            i = bytes.len();
+            continue;
+        }
+        if let Some(end) = try_skip_string_literal(bytes, i) {
+            if let Some(end) = end {
+                i = end;
+                continue;
+            }
+            return Err(error_with_span(
+                "unterminated string in f-string expression",
+                span_from_offset(expr_offset + i, expr_offset + i + 1, source),
+                source,
+            ));
+        }
+        update_delimiter_depth(&mut depth, bytes[i]);
+        i += 1;
     }
 
     if let Some(conv_pos) = conversion_pos {
@@ -379,74 +370,23 @@ fn split_fstring_expr<'a>(
 pub fn find_fstring_expr_end(content: &str, start: usize) -> Option<usize> {
     let bytes = content.as_bytes();
     let mut i = start;
-    let mut paren = 0usize;
-    let mut bracket = 0usize;
-    let mut brace = 1usize;
+    let mut depth = DelimiterDepth {
+        brace: 1,
+        ..DelimiterDepth::default()
+    };
     while i < bytes.len() {
-        match bytes[i] {
-            b'r' | b'b' => {
-                // Check for string prefix combinations: r, b, rb, br
-                if let Some(next) = bytes.get(i + 1) {
-                    if *next == b'\'' || *next == b'"' {
-                        // r"..." or b"..."
-                        if let Some(end) = skip_string_literal(bytes, i) {
-                            i = end;
-                            continue;
-                        } else {
-                            return None;
-                        }
-                    } else if (*next == b'r' || *next == b'b') && bytes[i] != *next {
-                        // Could be rb"..." or br"..."
-                        if let Some(third) = bytes.get(i + 2)
-                            && (*third == b'\'' || *third == b'"')
-                        {
-                            if let Some(end) = skip_string_literal(bytes, i) {
-                                i = end;
-                                continue;
-                            } else {
-                                return None;
-                            }
-                        }
-                    }
-                }
-                i += 1;
+        if let Some(end) = try_skip_string_literal(bytes, i) {
+            if let Some(end) = end {
+                i = end;
+                continue;
             }
-            b'\'' | b'"' => {
-                if let Some(end) = skip_string_literal(bytes, i) {
-                    i = end;
-                } else {
-                    return None;
-                }
-            }
-            b'(' => {
-                paren += 1;
-                i += 1;
-            }
-            b')' => {
-                paren = paren.saturating_sub(1);
-                i += 1;
-            }
-            b'[' => {
-                bracket += 1;
-                i += 1;
-            }
-            b']' => {
-                bracket = bracket.saturating_sub(1);
-                i += 1;
-            }
-            b'{' => {
-                brace += 1;
-                i += 1;
-            }
-            b'}' => {
-                if paren == 0 && bracket == 0 && brace == 1 {
-                    return Some(i);
-                }
-                brace = brace.saturating_sub(1);
-                i += 1;
-            }
-            _ => i += 1,
+            return None;
         }
+        if bytes[i] == b'}' && depth.paren == 0 && depth.bracket == 0 && depth.brace == 1 {
+            return Some(i);
+        }
+        update_delimiter_depth(&mut depth, bytes[i]);
+        i += 1;
     }
     None
 }

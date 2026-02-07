@@ -1,5 +1,5 @@
-use pest::iterators::Pair;
-use snail_ast::{Expr, FStringPart, RegexPattern, SubprocessKind};
+use pest::iterators::{Pair, Pairs};
+use snail_ast::{Expr, FStringPart, RegexPattern, SourceSpan, SubprocessKind};
 use snail_error::ParseError;
 
 use crate::Rule;
@@ -37,35 +37,30 @@ pub fn parse_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseEr
 
 pub fn parse_tuple_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut elements = Vec::new();
-    for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::expr {
-            elements.push(crate::expr::parse_expr_pair(inner, source)?);
-        }
-    }
+    let elements = parse_collection_elements(pair, source)?;
     Ok(Expr::Tuple { elements, span })
 }
 
 pub fn parse_list_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut elements = Vec::new();
-    for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::expr {
-            elements.push(crate::expr::parse_expr_pair(inner, source)?);
-        }
-    }
+    let elements = parse_collection_elements(pair, source)?;
     Ok(Expr::List { elements, span })
 }
 
 pub fn parse_set_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
+    let elements = parse_collection_elements(pair, source)?;
+    Ok(Expr::Set { elements, span })
+}
+
+fn parse_collection_elements(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Expr>, ParseError> {
     let mut elements = Vec::new();
     for inner in pair.into_inner() {
         if inner.as_rule() == Rule::expr {
             elements.push(crate::expr::parse_expr_pair(inner, source)?);
         }
     }
-    Ok(Expr::Set { elements, span })
+    Ok(elements)
 }
 
 pub fn parse_dict_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -96,14 +91,9 @@ pub fn parse_dict_entry(pair: Pair<'_, Rule>, source: &str) -> Result<(Expr, Exp
 pub fn parse_list_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
-    let element_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing list comp expr", span.clone(), source))?;
-    let comp_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing list comp for", span.clone(), source))?;
-    let element = crate::expr::parse_expr_pair(element_pair, source)?;
-    let (target, iter, ifs) = parse_comp_for(comp_pair, source)?;
+    let element = parse_required_comp_expr(&mut inner, &span, source, "missing list comp expr")?;
+    let (target, iter, ifs) =
+        parse_required_comp_for(&mut inner, &span, source, "missing list comp for")?;
     Ok(Expr::ListComp {
         element: Box::new(element),
         target,
@@ -116,18 +106,10 @@ pub fn parse_list_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
 pub fn parse_dict_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
-    let key_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing dict comp key", span.clone(), source))?;
-    let value_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing dict comp value", span.clone(), source))?;
-    let comp_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing dict comp for", span.clone(), source))?;
-    let key = crate::expr::parse_expr_pair(key_pair, source)?;
-    let value = crate::expr::parse_expr_pair(value_pair, source)?;
-    let (target, iter, ifs) = parse_comp_for(comp_pair, source)?;
+    let key = parse_required_comp_expr(&mut inner, &span, source, "missing dict comp key")?;
+    let value = parse_required_comp_expr(&mut inner, &span, source, "missing dict comp value")?;
+    let (target, iter, ifs) =
+        parse_required_comp_for(&mut inner, &span, source, "missing dict comp for")?;
     Ok(Expr::DictComp {
         key: Box::new(key),
         value: Box::new(value),
@@ -136,6 +118,30 @@ pub fn parse_dict_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         ifs,
         span,
     })
+}
+
+fn parse_required_comp_expr(
+    inner: &mut Pairs<'_, Rule>,
+    span: &SourceSpan,
+    source: &str,
+    missing_message: &str,
+) -> Result<Expr, ParseError> {
+    let expr_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span(missing_message, span.clone(), source))?;
+    crate::expr::parse_expr_pair(expr_pair, source)
+}
+
+fn parse_required_comp_for(
+    inner: &mut Pairs<'_, Rule>,
+    span: &SourceSpan,
+    source: &str,
+    missing_message: &str,
+) -> Result<(String, Expr, Vec<Expr>), ParseError> {
+    let comp_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span(missing_message, span.clone(), source))?;
+    parse_comp_for(comp_pair, source)
 }
 
 pub fn parse_comp_for(
