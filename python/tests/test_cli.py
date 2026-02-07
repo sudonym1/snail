@@ -1095,6 +1095,98 @@ def test_env_map_missing_fallback(
     assert captured.out == "''\n"
 
 
+def test_runtime_run_subprocess_capture_normalizes_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_subprocess = importlib.import_module("snail.runtime.subprocess")
+    calls: dict[str, object] = {}
+
+    class _Completed:
+        stdout = "ok\n"
+
+    def fake_run(cmd, **kwargs):
+        calls["cmd"] = cmd
+        calls["kwargs"] = kwargs
+        return _Completed()
+
+    monkeypatch.setattr(runtime_subprocess.subprocess, "run", fake_run)
+    completed = runtime_subprocess._run_subprocess("echo hi", 123, capture=True)
+
+    assert completed.stdout == "ok\n"
+    assert calls["cmd"] == "echo hi"
+    assert calls["kwargs"] == {
+        "shell": True,
+        "check": True,
+        "text": True,
+        "stdout": subprocess.PIPE,
+        "input": "123",
+    }
+
+
+def test_runtime_run_subprocess_status_without_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_subprocess = importlib.import_module("snail.runtime.subprocess")
+    calls: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        calls["cmd"] = cmd
+        calls["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(runtime_subprocess.subprocess, "run", fake_run)
+    runtime_subprocess._run_subprocess("echo hi", capture=False)
+
+    assert calls["cmd"] == "echo hi"
+    assert calls["kwargs"] == {
+        "shell": True,
+        "check": True,
+        "text": True,
+    }
+
+
+def test_subprocess_capture_error_fallback_reraises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_subprocess = importlib.import_module("snail.runtime.subprocess")
+    err = subprocess.CalledProcessError(2, "bad capture")
+
+    def fake_run_subprocess(cmd: str, input_data=None, *, capture: bool):
+        raise err
+
+    monkeypatch.setattr(runtime_subprocess, "_run_subprocess", fake_run_subprocess)
+    capture = runtime_subprocess.SubprocessCapture("bad capture")
+
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
+        capture("input")
+    assert excinfo.value is err
+
+    fallback = getattr(excinfo.value, "__fallback__", None)
+    assert callable(fallback)
+    with pytest.raises(subprocess.CalledProcessError) as fallback_exc:
+        fallback()
+    assert fallback_exc.value is err
+
+
+def test_subprocess_status_error_fallback_returns_returncode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_subprocess = importlib.import_module("snail.runtime.subprocess")
+    err = subprocess.CalledProcessError(7, "bad status")
+
+    def fake_run_subprocess(cmd: str, input_data=None, *, capture: bool):
+        raise err
+
+    monkeypatch.setattr(runtime_subprocess, "_run_subprocess", fake_run_subprocess)
+    status = runtime_subprocess.SubprocessStatus("bad status")
+
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
+        status()
+    fallback = getattr(excinfo.value, "__fallback__", None)
+    assert callable(fallback)
+    assert fallback() == 7
+
+
 # --- Tests for byte strings ---
 
 

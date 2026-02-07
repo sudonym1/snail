@@ -1,7 +1,29 @@
 from __future__ import annotations
 
 import subprocess
+from typing import Any, cast
 
+
+def _run_subprocess(cmd: str, input_data=None, *, capture: bool):
+    if isinstance(input_data, bytes):
+        input_data = input_data.decode()
+    elif input_data is not None and not isinstance(input_data, str):
+        input_data = str(input_data)
+
+    kwargs: dict[str, object] = {
+        "shell": True,
+        "check": True,
+        "text": True,
+    }
+
+    if capture:
+        kwargs["stdout"] = subprocess.PIPE
+
+    if input_data is not None:
+        kwargs["input"] = input_data
+
+    # mypy cannot resolve subprocess.run overloads from dynamic kwargs.
+    return subprocess.run(cmd, **cast(Any, kwargs))
 
 class SubprocessCapture:
     def __init__(self, cmd: str) -> None:
@@ -9,25 +31,7 @@ class SubprocessCapture:
 
     def __call__(self, input_data=None):
         try:
-            if input_data is None:
-                completed = subprocess.run(
-                    self.cmd,
-                    shell=True,
-                    check=True,
-                    text=True,
-                    stdout=subprocess.PIPE,
-                )
-            else:
-                if not isinstance(input_data, (str, bytes)):
-                    input_data = str(input_data)
-                completed = subprocess.run(
-                    self.cmd,
-                    shell=True,
-                    check=True,
-                    text=True,
-                    input=input_data,
-                    stdout=subprocess.PIPE,
-                )
+            completed = _run_subprocess(self.cmd, input_data, capture=True)
             return completed.stdout.rstrip("\n")
         except subprocess.CalledProcessError as exc:
 
@@ -44,18 +48,7 @@ class SubprocessStatus:
 
     def __call__(self, input_data=None):
         try:
-            if input_data is None:
-                subprocess.run(self.cmd, shell=True, check=True)
-            else:
-                if not isinstance(input_data, (str, bytes)):
-                    input_data = str(input_data)
-                subprocess.run(
-                    self.cmd,
-                    shell=True,
-                    check=True,
-                    text=True,
-                    input=input_data,
-                )
+            _run_subprocess(self.cmd, input_data, capture=False)
             return 0
         except subprocess.CalledProcessError as exc:
 

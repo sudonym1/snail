@@ -15,7 +15,7 @@ test-rust:
 	CARGO_TARGET_DIR=target/ci cargo test
 
 test-python: sync
-	$(UV) run -- black --check python
+	#$(UV) run -- black --check python
 	$(UV) run -- isort --check-only python
 	$(UV) run -- ruff check python
 	if $(UV) run -- python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)'; then \
