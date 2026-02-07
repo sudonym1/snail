@@ -1713,6 +1713,52 @@ def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) ->
     assert "map or awk mode" in str(excinfo.value)
 
 
+def test_map_identifiers_require_map_mode_in_fstring_interpolation() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(['print("{$src}")'])
+    assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_identifiers_require_map_mode_in_subprocess_interpolation() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["x = $(echo {$src})"])
+    assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_identifiers_require_map_mode_in_regex_interpolation() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(['print("x" in /{$src}/)'])
+    assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_identifiers_require_map_mode_in_lambda_call_arguments() -> None:
+    for source in [
+        "f = def() { g($src) }",
+        "f = def() { g(k=$src) }",
+        "f = def() { g(*$src) }",
+        "f = def() { g(**$src) }",
+    ]:
+        with pytest.raises(SyntaxError) as excinfo:
+            main([source])
+        assert "map or awk mode" in str(excinfo.value)
+
+
+def test_map_begin_end_flags_reject_map_vars_fd_text(tmp_path: Path) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("alpha")
+    for begin_snippet in ["print($fd)", "print($text)"]:
+        with pytest.raises(SyntaxError):
+            main(
+                [
+                    "--map",
+                    "-b",
+                    begin_snippet,
+                    "print($src)",
+                    str(file_a),
+                ]
+            )
+
+
 def test_awk_and_map_mutually_exclusive(capsys: pytest.CaptureFixture[str]) -> None:
     """Test that --awk and --map cannot be used together."""
     result = main(["--awk", "--map", "print('test')"])
