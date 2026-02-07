@@ -184,6 +184,21 @@ Snail → Parser → AST → Lowering → Python AST → in-process exec
 
 **Note on virtual environments:** Python tools run inside the uv-managed environment; prefer `uv run -- ...` for Python commands.
 
+## Handling Test Failures During Language Design Changes
+
+When language behavior is being redesigned, existing tests may encode old expectations.
+
+- Treat failing tests as a signal to validate design intent first, not as an automatic order to change production code.
+- Before writing a fix, classify each failure as exactly one of:
+  - Implementation bug relative to current design
+  - Outdated/incomplete test relative to current design
+  - Unclear or undecided design
+- If the test is outdated, update tests (and user-facing docs like `docs/REFERENCE.md` when relevant) to match the intended behavior before or alongside code changes.
+- If design intent is unclear, stop and ask for clarification instead of inventing behavior.
+- Do not add one-off production special cases whose only purpose is to satisfy a stale or overly narrow test assertion.
+- Prefer coherent rule changes (parser/lowering/runtime) plus broad test updates over ad hoc conditional logic.
+- When changing tests, document why the expectation changed so future agents do not reintroduce obsolete behavior.
+
 ## Important Development Notes
 
 - **Always update `examples/all_syntax.snail`** when adding new syntax features
