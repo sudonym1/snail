@@ -6,9 +6,8 @@ mod lower;
 mod profiling;
 
 pub use lower::{
-    lower_awk_program, lower_awk_program_with_auto_print, lower_map_program,
-    lower_map_program_with_auto_print, lower_map_program_with_begin_end, lower_program,
-    lower_program_with_auto_print, lower_program_with_begin_end,
+    lower_awk, lower_awk_main, lower_map, lower_map_auto, lower_map_main, lower_program,
+    lower_program_auto, lower_program_main,
 };
 pub use pyo3::prelude::{PyObject, Python};
 
@@ -21,10 +20,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 use snail_ast::CompileMode;
 use snail_error::{ParseError, format_snail_error};
-use snail_parser::{
-    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
-    parse_program_with_begin_end,
-};
+use snail_parser::{parse, parse_awk, parse_awk_cli, parse_map};
 use std::time::Instant;
 
 fn parse_mode(mode: &str) -> PyResult<CompileMode> {
@@ -67,9 +63,8 @@ fn compile_source(
 
     let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
     let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
-    let module =
-        compiler::compile_source(py, source, mode, &begin_refs, &end_refs, auto_print)
-            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+    let module = compiler::compile_source(py, source, mode, &begin_refs, &end_refs, auto_print)
+        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
 
     if profile {
         log_profile("compile_snail_source", compile_start.elapsed());
@@ -303,8 +298,7 @@ fn parse_ast_py(
         |err: ParseError| PySyntaxError::new_err(format_snail_error(&err.into(), filename));
     match parse_mode(mode)? {
         CompileMode::Snail => {
-            let (program, begin_blocks, end_blocks) =
-                parse_program_with_begin_end(source).map_err(err_to_syntax)?;
+            let (program, begin_blocks, end_blocks) = parse(source).map_err(err_to_syntax)?;
             let (begin_blocks, end_blocks) =
                 merge_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
                     .map_err(err_to_syntax)?;
@@ -323,13 +317,11 @@ fn parse_ast_py(
         CompileMode::Awk => {
             let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
             let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
-            let program = parse_awk_program_with_begin_end(source, &begin_refs, &end_refs)
-                .map_err(err_to_syntax)?;
+            let program = parse_awk_cli(source, &begin_refs, &end_refs).map_err(err_to_syntax)?;
             Ok(format!("{:#?}", program))
         }
         CompileMode::Map => {
-            let (program, begin_blocks, end_blocks) =
-                parse_map_program_with_begin_end(source).map_err(err_to_syntax)?;
+            let (program, begin_blocks, end_blocks) = parse_map(source).map_err(err_to_syntax)?;
             let (begin_blocks, end_blocks) =
                 merge_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
                     .map_err(err_to_syntax)?;
@@ -352,13 +344,13 @@ fn parse_ast_py(
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>"))]
 fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
     match parse_mode(mode)? {
-        CompileMode::Snail => parse_program_with_begin_end(source)
+        CompileMode::Snail => parse(source)
             .map(|_| ())
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
-        CompileMode::Awk => parse_awk_program(source)
+        CompileMode::Awk => parse_awk(source)
             .map(|_| ())
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
-        CompileMode::Map => parse_map_program_with_begin_end(source)
+        CompileMode::Map => parse_map(source)
             .map(|_| ())
             .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
     }

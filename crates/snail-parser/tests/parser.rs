@@ -5,7 +5,7 @@ use snail_ast::{
     Argument, AssignTarget, AugAssignOp, BinaryOp, Condition, Expr, ImportFromItems, IncrOp,
     Parameter, Stmt, StringDelimiter,
 };
-use snail_parser::parse_program;
+use snail_parser::parse_main as parse_program;
 
 #[test]
 fn parses_basic_program() {

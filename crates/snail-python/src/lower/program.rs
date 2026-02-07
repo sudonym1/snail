@@ -3,28 +3,28 @@ use pyo3::types::PyList;
 use snail_ast::*;
 use snail_error::LowerError;
 
-use super::awk::lower_awk_file_loop_with_auto_print;
+use super::awk::lower_awk_file_loop;
 use super::desugar::LambdaHoister;
 use super::helpers::{assign_name, name_expr, number_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
-use super::stmt::lower_block_with_auto_print;
+use super::stmt::lower_block_auto;
 use super::validate::{
     validate_yield_usage_awk, validate_yield_usage_blocks, validate_yield_usage_program,
 };
 
-pub fn lower_program(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
-    lower_program_with_auto_print(py, program, false)
+pub fn lower_program_main(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
+    lower_program_auto(py, program, false)
 }
 
-pub fn lower_program_with_auto_print(
+pub fn lower_program_auto(
     py: Python<'_>,
     program: &Program,
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
-    lower_program_with_begin_end(py, program, &[], &[], auto_print_last)
+    lower_program(py, program, &[], &[], auto_print_last)
 }
 
-pub fn lower_program_with_begin_end(
+pub fn lower_program(
     py: Python<'_>,
     program: &Program,
     begin_blocks: &[Vec<Stmt>],
@@ -49,28 +49,26 @@ pub fn lower_program_with_begin_end(
     let mut body = Vec::new();
 
     for block in begin_blocks {
-        let lowered =
-            lower_block_with_auto_print(&builder, block.as_slice(), auto_print_last, &span)?;
+        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, &span)?;
         body.extend(lowered);
     }
 
-    let main_body = lower_block_with_auto_print(&builder, &program.stmts, auto_print_last, &span)?;
+    let main_body = lower_block_auto(&builder, &program.stmts, auto_print_last, &span)?;
     body.extend(main_body);
 
     for block in end_blocks {
-        let lowered =
-            lower_block_with_auto_print(&builder, block.as_slice(), auto_print_last, &span)?;
+        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, &span)?;
         body.extend(lowered);
     }
 
     builder.module(body, &span).map_err(py_err_to_lower)
 }
 
-pub fn lower_awk_program(py: Python<'_>, program: &AwkProgram) -> Result<PyObject, LowerError> {
-    lower_awk_program_with_auto_print(py, program, false)
+pub fn lower_awk_main(py: Python<'_>, program: &AwkProgram) -> Result<PyObject, LowerError> {
+    lower_awk(py, program, false)
 }
 
-pub fn lower_awk_program_with_auto_print(
+pub fn lower_awk(
     py: Python<'_>,
     program: &AwkProgram,
     auto_print: bool,
@@ -118,7 +116,7 @@ pub fn lower_awk_program_with_auto_print(
 
     let mut main_body = Vec::new();
     for block in &program.begin_blocks {
-        let lowered = lower_block_with_auto_print(&builder, block, auto_print, &span)?;
+        let lowered = lower_block_auto(&builder, block, auto_print, &span)?;
         main_body.extend(lowered);
     }
 
@@ -201,7 +199,7 @@ pub fn lower_awk_program_with_auto_print(
         )
         .map_err(py_err_to_lower)?;
 
-    let file_loop = lower_awk_file_loop_with_auto_print(&builder, &program, &span, auto_print)?;
+    let file_loop = lower_awk_file_loop(&builder, &program, &span, auto_print)?;
     let for_loop = builder
         .call_node(
             "For",
@@ -222,7 +220,7 @@ pub fn lower_awk_program_with_auto_print(
     main_body.push(for_loop);
 
     for block in &program.end_blocks {
-        let lowered = lower_block_with_auto_print(&builder, block, auto_print, &span)?;
+        let lowered = lower_block_auto(&builder, block, auto_print, &span)?;
         main_body.extend(lowered);
     }
 

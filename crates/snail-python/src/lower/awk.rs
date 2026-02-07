@@ -7,9 +7,9 @@ use super::constants::*;
 use super::expr::{lower_expr, lower_regex_match};
 use super::helpers::{assign_name, name_expr, number_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
-use super::stmt::lower_block_with_auto_print;
+use super::stmt::lower_block_auto;
 
-pub(crate) fn lower_awk_file_loop_with_auto_print(
+pub(crate) fn lower_awk_file_loop(
     builder: &AstBuilder<'_>,
     program: &AwkProgram,
     span: &SourceSpan,
@@ -185,7 +185,7 @@ pub(crate) fn lower_awk_file_loop_with_auto_print(
         )
         .map_err(py_err_to_lower)?;
 
-    let line_loop = lower_awk_line_loop_with_auto_print(
+    let line_loop = lower_awk_line_loop(
         builder,
         program,
         span,
@@ -213,7 +213,7 @@ pub(crate) fn lower_awk_file_loop_with_auto_print(
     Ok(file_loop)
 }
 
-pub(crate) fn lower_awk_line_loop_with_auto_print(
+pub(crate) fn lower_awk_line_loop(
     builder: &AstBuilder<'_>,
     program: &AwkProgram,
     span: &SourceSpan,
@@ -397,11 +397,7 @@ pub(crate) fn lower_awk_line_loop_with_auto_print(
         span,
     )?);
 
-    loop_body.extend(lower_awk_rules_with_auto_print(
-        builder,
-        &program.rules,
-        auto_print,
-    )?);
+    loop_body.extend(lower_awk_rules(builder, &program.rules, auto_print)?);
 
     builder
         .call_node(
@@ -422,7 +418,7 @@ pub(crate) fn lower_awk_line_loop_with_auto_print(
         .map_err(py_err_to_lower)
 }
 
-pub(crate) fn lower_awk_rules_with_auto_print(
+pub(crate) fn lower_awk_rules(
     builder: &AstBuilder<'_>,
     rules: &[AwkRule],
     auto_print: bool,
@@ -430,7 +426,7 @@ pub(crate) fn lower_awk_rules_with_auto_print(
     let mut stmts = Vec::new();
     for rule in rules {
         let mut action = if rule.has_explicit_action() {
-            lower_block_with_auto_print(
+            lower_block_auto(
                 builder,
                 rule.action.as_ref().unwrap(),
                 auto_print,

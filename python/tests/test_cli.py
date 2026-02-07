@@ -1014,6 +1014,15 @@ def test_begin_end_regular_mode_file_and_cli_order(
     ]
 
 
+def test_begin_end_regular_mode_oneliner_autoprint(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = main(["1 END { print('done') }"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["1", "done"]
+
+
 # --- Tests for auto-import ---
 
 

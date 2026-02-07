@@ -7,22 +7,22 @@ use super::constants::*;
 use super::desugar::LambdaHoister;
 use super::helpers::{assign_name, name_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
-use super::stmt::lower_block_with_auto_print;
+use super::stmt::lower_block_auto;
 use super::validate::{validate_yield_usage_blocks, validate_yield_usage_program};
 
-pub fn lower_map_program(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
-    lower_map_program_with_auto_print(py, program, false)
+pub fn lower_map_main(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
+    lower_map_auto(py, program, false)
 }
 
-pub fn lower_map_program_with_auto_print(
+pub fn lower_map_auto(
     py: Python<'_>,
     program: &Program,
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
-    lower_map_program_with_begin_end(py, program, &[], &[], auto_print_last)
+    lower_map(py, program, &[], &[], auto_print_last)
 }
 
-pub fn lower_map_program_with_begin_end(
+pub fn lower_map(
     py: Python<'_>,
     program: &Program,
     begin_blocks: &[Vec<Stmt>],
@@ -105,8 +105,7 @@ pub fn lower_map_program_with_begin_end(
 
     // Begin blocks
     for block in begin_blocks {
-        let lowered =
-            lower_block_with_auto_print(&builder, block.as_slice(), auto_print_last, &span)?;
+        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, &span)?;
         body.extend(lowered);
     }
 
@@ -116,8 +115,7 @@ pub fn lower_map_program_with_begin_end(
 
     // End blocks
     for block in end_blocks {
-        let lowered =
-            lower_block_with_auto_print(&builder, block.as_slice(), auto_print_last, &span)?;
+        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, &span)?;
         body.extend(lowered);
     }
 
@@ -214,8 +212,7 @@ fn lower_map_file_loop(
     )?);
 
     // Lower user code
-    let user_code =
-        lower_block_with_auto_print(builder, &program.stmts, auto_print_last, &program.span)?;
+    let user_code = lower_block_auto(builder, &program.stmts, auto_print_last, &program.span)?;
     with_body.extend(user_code);
 
     // __SnailLazyFile(__snail_src, 'r')

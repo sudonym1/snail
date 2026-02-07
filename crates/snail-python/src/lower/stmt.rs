@@ -348,7 +348,7 @@ pub(crate) fn lower_block(
     lower_block_with_tail(builder, block, TailBehavior::None, span)
 }
 
-pub(crate) fn lower_block_with_auto_print(
+pub(crate) fn lower_block_auto(
     builder: &AstBuilder<'_>,
     block: &[Stmt],
     auto_print: bool,

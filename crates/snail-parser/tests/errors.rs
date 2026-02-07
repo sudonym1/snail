@@ -1,10 +1,7 @@
 mod common;
 
 use common::*;
-use snail_parser::{
-    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
-    parse_program, parse_program_with_begin_end,
-};
+use snail_parser::{parse, parse_awk, parse_awk_cli, parse_main, parse_map};
 
 #[test]
 fn reports_parse_error_with_location() {
@@ -128,7 +125,7 @@ fn parser_rejects_invalid_expression_in_binary_op() {
 #[test]
 fn parser_rejects_missing_except_after_try() {
     let source = "try { x = 1 }";
-    match parse_program(source) {
+    match parse_main(source) {
         Ok(_) => {}
         Err(err) => {
             let message = err.to_string();
@@ -208,21 +205,23 @@ fn parser_rejects_invalid_parameter_syntax() {
 #[test]
 fn program_begin_end_parsed_as_blocks() {
     let (program, begin_blocks, end_blocks) =
-        parse_program_with_begin_end("BEGIN { print(1) }\nprint(2)\nEND { print(3) }")
-            .expect("should parse");
+        parse("BEGIN { print(1) }\nprint(2)\nEND { print(3) }").expect("should parse");
     assert_eq!(program.stmts.len(), 1);
     assert_eq!(begin_blocks.len(), 1);
+    assert_eq!(end_blocks.len(), 1);
+
+    let (program, begin_blocks, end_blocks) = parse("x END { foo; }").expect("should parse");
+    assert_eq!(program.stmts.len(), 1);
+    assert!(begin_blocks.is_empty());
     assert_eq!(end_blocks.len(), 1);
 }
 
 #[test]
 fn program_begin_end_rejects_awk_map_vars() {
-    let err =
-        parse_program_with_begin_end("BEGIN { print($0) }").expect_err("should reject awk vars");
+    let err = parse("BEGIN { print($0) }").expect_err("should reject awk vars");
     assert!(err.to_string().contains("$0"));
 
-    let err =
-        parse_program_with_begin_end("BEGIN { print($src) }").expect_err("should reject map vars");
+    let err = parse("BEGIN { print($src) }").expect_err("should reject map vars");
     assert!(err.to_string().contains("$src"));
 }
 
@@ -230,8 +229,8 @@ fn program_begin_end_rejects_awk_map_vars() {
 
 #[test]
 fn awk_begin_end_parsed_as_blocks() {
-    let program = parse_awk_program("BEGIN { print(1) } /foo/ { print($0) } END { print(2) }")
-        .expect("should parse");
+    let program =
+        parse_awk("BEGIN { print(1) } /foo/ { print($0) } END { print(2) }").expect("should parse");
     assert_eq!(program.rules.len(), 1);
     assert_eq!(program.begin_blocks.len(), 1);
     assert_eq!(program.end_blocks.len(), 1);
@@ -239,7 +238,7 @@ fn awk_begin_end_parsed_as_blocks() {
 
 #[test]
 fn awk_parses_simple_rules() {
-    let program = parse_awk_program("/foo/ { print($0) }").expect("should parse");
+    let program = parse_awk("/foo/ { print($0) }").expect("should parse");
     assert_eq!(program.rules.len(), 1);
     assert!(program.begin_blocks.is_empty());
     assert!(program.end_blocks.is_empty());
@@ -247,9 +246,8 @@ fn awk_parses_simple_rules() {
 
 #[test]
 fn awk_with_begin_end_injects_blocks() {
-    let program =
-        parse_awk_program_with_begin_end("/foo/ { print($0) }", &["x = 1", "y = 2"], &["print(x)"])
-            .expect("should parse");
+    let program = parse_awk_cli("/foo/ { print($0) }", &["x = 1", "y = 2"], &["print(x)"])
+        .expect("should parse");
 
     assert_eq!(program.rules.len(), 1);
     assert_eq!(program.begin_blocks.len(), 2);
@@ -258,7 +256,7 @@ fn awk_with_begin_end_injects_blocks() {
 
 #[test]
 fn awk_with_empty_begin_end() {
-    let program = parse_awk_program_with_begin_end("/foo/", &[], &[]).expect("should parse");
+    let program = parse_awk_cli("/foo/", &[], &[]).expect("should parse");
     assert_eq!(program.rules.len(), 1);
     assert!(program.begin_blocks.is_empty());
     assert!(program.end_blocks.is_empty());
@@ -266,15 +264,14 @@ fn awk_with_empty_begin_end() {
 
 #[test]
 fn awk_begin_end_rejects_awk_vars() {
-    let err = parse_awk_program("BEGIN { print($0) }").expect_err("should reject awk vars");
+    let err = parse_awk("BEGIN { print($0) }").expect_err("should reject awk vars");
     assert!(err.to_string().contains("$0"));
 }
 
 #[test]
 fn map_begin_end_parsed_as_blocks() {
     let (program, begin_blocks, end_blocks) =
-        parse_map_program_with_begin_end("BEGIN { print(1) } print($src) END { print(2) }")
-            .expect("should parse");
+        parse_map("BEGIN { print(1) } print($src) END { print(2) }").expect("should parse");
     assert_eq!(program.stmts.len(), 1);
     assert_eq!(begin_blocks.len(), 1);
     assert_eq!(end_blocks.len(), 1);
@@ -282,15 +279,14 @@ fn map_begin_end_parsed_as_blocks() {
 
 #[test]
 fn map_begin_end_rejects_map_vars() {
-    let err = parse_map_program_with_begin_end("BEGIN { print($src) }\nprint($src)")
+    let err = parse_map("BEGIN { print($src) }\nprint($src)")
         .expect_err("should reject map vars in BEGIN/END");
     assert!(err.to_string().contains("$src"));
 }
 
 #[test]
 fn map_requires_separators_between_simple_statements() {
-    let err = parse_map_program_with_begin_end("print($src) print($src)")
-        .expect_err("should reject missing separators");
+    let err = parse_map("print($src) print($src)").expect_err("should reject missing separators");
     assert!(err.to_string().contains("expected statement separator"));
 }
 
