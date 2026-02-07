@@ -3,101 +3,56 @@ use crate::lower::{
     lower_program_with_begin_end,
 };
 use pyo3::prelude::*;
-use snail_ast::{CompileMode, Stmt};
-use snail_error::{ParseError, SnailError};
+use snail_ast::{CompileMode, Program, Stmt};
+use snail_error::{LowerError, ParseError, SnailError};
 use snail_parser::{
-    parse_awk_program, parse_awk_program_with_begin_end, parse_map_program_with_begin_end,
-    parse_program, parse_program_with_begin_end,
+    parse_awk_program_with_begin_end, parse_map_program_with_begin_end, parse_program,
+    parse_program_with_begin_end,
 };
 
 type BlockList = Vec<Vec<Stmt>>;
 type BeginEndBlocks = (BlockList, BlockList);
+type ParseProgramWithBeginEnd = fn(&str) -> Result<(Program, BlockList, BlockList), ParseError>;
+type LowerProgramWithBeginEnd =
+    fn(Python<'_>, &Program, &[Vec<Stmt>], &[Vec<Stmt>], bool) -> Result<PyObject, LowerError>;
 
-pub fn compile_snail_source_with_auto_print(
+pub(crate) fn compile_source(
     py: Python<'_>,
-    source: &str,
+    main_source: &str,
     mode: CompileMode,
+    begin_sources: &[&str],
+    end_sources: &[&str],
     auto_print_last: bool,
 ) -> Result<PyObject, SnailError> {
     match mode {
-        CompileMode::Snail => {
-            let (program, begin_blocks, end_blocks) = parse_program_with_begin_end(source)?;
-            let module = lower_program_with_begin_end(
-                py,
-                &program,
-                &begin_blocks,
-                &end_blocks,
-                auto_print_last,
-            )?;
-            Ok(module)
-        }
+        CompileMode::Snail => compile_program_mode_with_begin_end(
+            py,
+            main_source,
+            begin_sources,
+            end_sources,
+            auto_print_last,
+            parse_program_with_begin_end,
+            lower_program_with_begin_end,
+        ),
         CompileMode::Awk => {
-            let program = parse_awk_program(source)?;
+            let program =
+                parse_awk_program_with_begin_end(main_source, begin_sources, end_sources)?;
             let module = lower_awk_program_with_auto_print(py, &program, auto_print_last)?;
             Ok(module)
         }
-        CompileMode::Map => {
-            let (program, begin_blocks, end_blocks) = parse_map_program_with_begin_end(source)?;
-            let module = lower_map_program_with_begin_end(
-                py,
-                &program,
-                &begin_blocks,
-                &end_blocks,
-                auto_print_last,
-            )?;
-            Ok(module)
-        }
+        CompileMode::Map => compile_program_mode_with_begin_end(
+            py,
+            main_source,
+            begin_sources,
+            end_sources,
+            auto_print_last,
+            parse_map_program_with_begin_end,
+            lower_map_program_with_begin_end,
+        ),
     }
 }
 
-pub fn compile_snail_source_with_begin_end(
-    py: Python<'_>,
-    main_source: &str,
-    begin_sources: &[&str],
-    end_sources: &[&str],
-    auto_print_last: bool,
-) -> Result<PyObject, SnailError> {
-    let (program, begin_blocks, end_blocks) = parse_program_with_begin_end(main_source)?;
-    let begin_blocks = merge_cli_begin_blocks(begin_sources, begin_blocks)?;
-    let end_blocks = merge_cli_end_blocks(end_sources, end_blocks)?;
-    let module =
-        lower_program_with_begin_end(py, &program, &begin_blocks, &end_blocks, auto_print_last)?;
-    Ok(module)
-}
-
-pub fn compile_awk_source_with_begin_end(
-    py: Python<'_>,
-    main_source: &str,
-    begin_sources: &[&str],
-    end_sources: &[&str],
-    auto_print_last: bool,
-) -> Result<PyObject, SnailError> {
-    let program = parse_awk_program_with_begin_end(main_source, begin_sources, end_sources)?;
-    let module = lower_awk_program_with_auto_print(py, &program, auto_print_last)?;
-    Ok(module)
-}
-
-pub fn compile_map_source_with_begin_end(
-    py: Python<'_>,
-    main_source: &str,
-    begin_sources: &[&str],
-    end_sources: &[&str],
-    auto_print_last: bool,
-) -> Result<PyObject, SnailError> {
-    let (program, begin_blocks, end_blocks) = parse_map_program_with_begin_end(main_source)?;
-    let begin_blocks = merge_cli_begin_blocks(begin_sources, begin_blocks)?;
-    let end_blocks = merge_cli_end_blocks(end_sources, end_blocks)?;
-    let module = lower_map_program_with_begin_end(
-        py,
-        &program,
-        &begin_blocks,
-        &end_blocks,
-        auto_print_last,
-    )?;
-    Ok(module)
-}
-
-pub fn merge_map_cli_blocks(
+pub(crate) fn merge_cli_blocks(
     begin_sources: &[String],
     end_sources: &[String],
     begin_blocks: BlockList,
@@ -108,6 +63,22 @@ pub fn merge_map_cli_blocks(
     let begin_blocks = merge_cli_begin_blocks(&begin_refs, begin_blocks)?;
     let end_blocks = merge_cli_end_blocks(&end_refs, end_blocks)?;
     Ok((begin_blocks, end_blocks))
+}
+
+fn compile_program_mode_with_begin_end(
+    py: Python<'_>,
+    main_source: &str,
+    begin_sources: &[&str],
+    end_sources: &[&str],
+    auto_print_last: bool,
+    parse_program: ParseProgramWithBeginEnd,
+    lower_program: LowerProgramWithBeginEnd,
+) -> Result<PyObject, SnailError> {
+    let (program, begin_blocks, end_blocks) = parse_program(main_source)?;
+    let begin_blocks = merge_cli_begin_blocks(begin_sources, begin_blocks)?;
+    let end_blocks = merge_cli_end_blocks(end_sources, end_blocks)?;
+    let module = lower_program(py, &program, &begin_blocks, &end_blocks, auto_print_last)?;
+    Ok(module)
 }
 
 fn merge_cli_begin_blocks(

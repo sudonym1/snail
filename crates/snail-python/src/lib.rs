@@ -12,11 +12,7 @@ pub use lower::{
 };
 pub use pyo3::prelude::{PyObject, Python};
 
-use compiler::{
-    compile_awk_source_with_begin_end, compile_map_source_with_begin_end,
-    compile_snail_source_with_auto_print, compile_snail_source_with_begin_end,
-    merge_map_cli_blocks,
-};
+use compiler::merge_cli_blocks;
 use linecache::{display_filename, register_linecache, strip_display_prefix};
 use profiling::{log_profile, profile_enabled};
 use pyo3::Bound;
@@ -69,28 +65,11 @@ fn compile_source(
     let total_start = Instant::now();
     let compile_start = Instant::now();
 
-    // If we have begin/end code, use the specialized function
-    let module = if !begin_code.is_empty() || !end_code.is_empty() {
-        let begin_refs: Vec<&str> = begin_code.iter().map(|s| s.as_str()).collect();
-        let end_refs: Vec<&str> = end_code.iter().map(|s| s.as_str()).collect();
-        match mode {
-            CompileMode::Awk => {
-                compile_awk_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
-                    .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
-            }
-            CompileMode::Map => {
-                compile_map_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
-                    .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
-            }
-            CompileMode::Snail => {
-                compile_snail_source_with_begin_end(py, source, &begin_refs, &end_refs, auto_print)
-                    .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
-            }
-        }
-    } else {
-        compile_snail_source_with_auto_print(py, source, mode, auto_print)
-            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?
-    };
+    let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
+    let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
+    let module =
+        compiler::compile_source(py, source, mode, &begin_refs, &end_refs, auto_print)
+            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
 
     if profile {
         log_profile("compile_snail_source", compile_start.elapsed());
@@ -327,7 +306,7 @@ fn parse_ast_py(
             let (program, begin_blocks, end_blocks) =
                 parse_program_with_begin_end(source).map_err(err_to_syntax)?;
             let (begin_blocks, end_blocks) =
-                merge_map_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
+                merge_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
                     .map_err(err_to_syntax)?;
 
             if begin_blocks.is_empty() && end_blocks.is_empty() {
@@ -342,21 +321,17 @@ fn parse_ast_py(
             Ok(format!("{:#?}", snail_ast))
         }
         CompileMode::Awk => {
-            let program = if begin_code.is_empty() && end_code.is_empty() {
-                parse_awk_program(source).map_err(err_to_syntax)?
-            } else {
-                let begin_refs: Vec<&str> = begin_code.iter().map(|s| s.as_str()).collect();
-                let end_refs: Vec<&str> = end_code.iter().map(|s| s.as_str()).collect();
-                parse_awk_program_with_begin_end(source, &begin_refs, &end_refs)
-                    .map_err(err_to_syntax)?
-            };
+            let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
+            let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
+            let program = parse_awk_program_with_begin_end(source, &begin_refs, &end_refs)
+                .map_err(err_to_syntax)?;
             Ok(format!("{:#?}", program))
         }
         CompileMode::Map => {
             let (program, begin_blocks, end_blocks) =
                 parse_map_program_with_begin_end(source).map_err(err_to_syntax)?;
             let (begin_blocks, end_blocks) =
-                merge_map_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
+                merge_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
                     .map_err(err_to_syntax)?;
 
             if begin_blocks.is_empty() && end_blocks.is_empty() {
