@@ -283,6 +283,35 @@ fn awk_begin_end_rejects_awk_vars() {
 }
 
 #[test]
+fn awk_begin_end_rejects_additional_reserved_vars() {
+    for (source, token) in [
+        ("BEGIN { print($1) } /foo/ { print($0) }", "$1"),
+        ("BEGIN { print($n) } /foo/ { print($0) }", "$n"),
+        ("BEGIN { print($fn) } /foo/ { print($0) }", "$fn"),
+        ("BEGIN { print($m) } /foo/ { print($0) }", "$m"),
+        ("BEGIN { print($f) } /foo/ { print($0) }", "$f"),
+        ("BEGIN { print($src) } /foo/ { print($0) }", "$src"),
+        ("BEGIN { print($fd) } /foo/ { print($0) }", "$fd"),
+        ("BEGIN { print($text) } /foo/ { print($0) }", "$text"),
+    ] {
+        let err = parse_awk(source).expect_err("BEGIN/END should reject reserved variables");
+        let message = err.to_string();
+        assert!(message.contains(token), "{source:?} => {message:?}");
+    }
+}
+
+#[test]
+fn awk_cli_begin_end_rejects_reserved_vars() {
+    let err = parse_awk_cli("/foo/ { print($0) }", &["print($src)"], &[])
+        .expect_err("CLI BEGIN should reject reserved variables");
+    assert!(err.to_string().contains("$src"));
+
+    let err = parse_awk_cli("/foo/ { print($0) }", &[], &["print($n)"])
+        .expect_err("CLI END should reject reserved variables");
+    assert!(err.to_string().contains("$n"));
+}
+
+#[test]
 fn map_begin_end_parsed_as_blocks() {
     let (program, begin_blocks, end_blocks) =
         parse_map("BEGIN { print(1) } print($src) END { print(2) }").expect("should parse");
@@ -350,12 +379,18 @@ fn valid_fstring_expressions_still_work() {
     parse_ok(r#"s = "{x.y.z}""#);
     parse_ok(r#"s = "{a + b * c}""#);
     parse_ok(r#"s = "{items[0]}""#);
+    parse_ok(r#"s = "{items[1:2]}""#);
+    parse_ok(r#"s = "{%{"k": 1}}""#);
     parse_ok(r#"s = "{f(g(h()))}""#);
 }
 
 #[test]
 fn rejects_map_only_variables_in_regular_mode() {
-    for (source, token) in [("value = $fd", "$fd"), ("value = $text", "$text")] {
+    for (source, token) in [
+        ("value = $fd", "$fd"),
+        ("value = $text", "$text"),
+        ("x = risky():$fd?", "$fd"),
+    ] {
         assert_regular_mode_error(source, token, "--map");
     }
 }
@@ -368,6 +403,23 @@ fn rejects_additional_awk_only_variables_in_regular_mode() {
         ("value = $f", "$f"),
     ] {
         assert_regular_mode_error(source, token, "--awk");
+    }
+}
+
+#[test]
+fn rejects_reserved_names_in_assignment_target_positions_in_regular_mode() {
+    for (source, token, mode_hint) in [
+        ("items[$n] = 1", "$n", "--awk"),
+        ("items[$1] = 1", "$1", "--awk"),
+        ("items[$n] += 1", "$n", "--awk"),
+        ("items[$1]++", "$1", "--awk"),
+        ("++items[$n]", "$n", "--awk"),
+        ("items[$src] = 1", "$src", "map or awk mode"),
+        ("items[$fd] += 1", "$fd", "--map"),
+        ("items[$text]++", "$text", "--map"),
+        ("++items[$src]", "$src", "map or awk mode"),
+    ] {
+        assert_regular_mode_error(source, token, mode_hint);
     }
 }
 
@@ -428,8 +480,21 @@ fn rejects_reserved_names_in_fstring_subprocess_regex_interpolation() {
 }
 
 #[test]
-fn rejects_awk_name_in_nested_format_spec() {
+fn rejects_awk_field_indices_in_interpolation_contexts_regular_mode() {
+    for (source, token) in [
+        ("s = \"{$1}\"", "$1"),
+        ("out = $(echo {$0})", "$0"),
+        ("ok = \"x\" in /{$1}/", "$1"),
+    ] {
+        assert_regular_mode_error(source, token, "--awk");
+    }
+}
+
+#[test]
+fn rejects_reserved_names_in_nested_format_spec() {
     assert_regular_mode_error("s = \"{value:{$n}.{prec}f}\"", "$n", "--awk");
+    assert_regular_mode_error("s = \"{value:{$src}.{prec}f}\"", "$src", "map or awk mode");
+    assert_regular_mode_error("s = \"{value:{$fd}.{prec}f}\"", "$fd", "--map");
 }
 
 #[test]
@@ -474,10 +539,33 @@ fn map_rejects_awk_vars_in_nested_expr_contexts() {
         "items = [$n for n in nums if n > 0]",
         "items = [n for n in nums if $n]",
         "s = \"{$n}\"",
+        "s = \"{$1}\"",
         "ok = \"x\" in /{$n}/",
+        "ok = \"x\" in /{$1}/",
+        "out = $(echo {$0})",
         "x = items[$1]",
+        "x = risky():$n?",
     ] {
-        let token = if source.contains("$1") { "$1" } else { "$n" };
+        let token = if source.contains("$1") {
+            "$1"
+        } else if source.contains("$0") {
+            "$0"
+        } else {
+            "$n"
+        };
+        assert_map_mode_error(source, token, "--awk");
+    }
+}
+
+#[test]
+fn map_rejects_awk_names_in_assignment_target_positions() {
+    for (source, token) in [
+        ("items[$n] = 1", "$n"),
+        ("items[$1] = 1", "$1"),
+        ("items[$n] += 1", "$n"),
+        ("items[$1]++", "$1"),
+        ("++items[$n]", "$n"),
+    ] {
         assert_map_mode_error(source, token, "--awk");
     }
 }
@@ -487,7 +575,11 @@ fn map_begin_end_rejects_map_and_awk_vars_comprehensively() {
     for (source, token) in [
         ("BEGIN { print($fd) }\nprint($src)", "$fd"),
         ("END { print($text) }\nprint($src)", "$text"),
+        ("BEGIN { print($0) }\nprint($src)", "$0"),
         ("BEGIN { print($n) }\nprint($src)", "$n"),
+        ("BEGIN { print($fn) }\nprint($src)", "$fn"),
+        ("BEGIN { print($m) }\nprint($src)", "$m"),
+        ("BEGIN { print($f) }\nprint($src)", "$f"),
         ("BEGIN { print($1) }\nprint($src)", "$1"),
     ] {
         let err = parse_map(source).expect_err("BEGIN/END variables should be rejected");

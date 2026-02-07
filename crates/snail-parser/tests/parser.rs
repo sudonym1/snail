@@ -1342,3 +1342,9 @@ fn simple_stmt_still_requires_separator() {
     let source = "a b";
     parse_err(source);
 }
+
+#[test]
+fn compact_try_stmt_still_requires_separator() {
+    let err = parse_err("x = risky()? y = 2");
+    assert!(err.to_string().contains("expected statement separator"));
+}
