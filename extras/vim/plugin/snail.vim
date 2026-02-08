@@ -52,9 +52,11 @@ local configs = parsers
 if type(parsers.get_parser_configs) == "function" then
   configs = parsers.get_parser_configs()
 end
-if not configs.snail then
-  configs.snail = {
+local snail_config = configs.snail or parsers.snail
+if not snail_config then
+  snail_config = {
     install_info = {
+      path = vim.g.snail_treesitter_dir,
       url = vim.g.snail_treesitter_dir,
       files = { "src/parser.c" },
       generate_requires_npm = false,
@@ -63,6 +65,8 @@ if not configs.snail then
     filetype = "snail",
   }
 end
+configs.snail = snail_config
+parsers.snail = snail_config
 vim.g.snail_treesitter_registered = 1
 EOF
   endfunction
@@ -80,6 +84,14 @@ EOF
   endfunction
 
   call s:snail_treesitter_try()
+
+  " nvim-treesitter reloads parser definitions during :TSInstall/:TSUpdate.
+  " Re-register Snail after that reload so TSInstall snail stays available.
+  augroup snail_treesitter_refresh
+    autocmd!
+    autocmd User TSUpdate call <SID>snail_register_treesitter()
+  augroup END
+
   if !g:snail_treesitter_registered
     augroup snail_treesitter_register
       autocmd!

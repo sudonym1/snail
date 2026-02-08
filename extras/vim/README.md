@@ -30,13 +30,13 @@ A Vim/Neovim plugin for the Snail programming language, providing Tree-sitter-ba
 ### Using vim-plug
 
 ```vim
-Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }
+Plug 'sudonym1/snail'
 ```
 
 ### Using packer.nvim
 
 ```lua
-use { 'sudonym1/snail', rtp = 'extras/vim' }
+use 'sudonym1/snail'
 ```
 
 ### Using lazy.nvim
@@ -44,27 +44,14 @@ use { 'sudonym1/snail', rtp = 'extras/vim' }
 ```lua
 {
   'sudonym1/snail',
-  lazy = false,
-  rtp = 'extras/vim',
+  lazy = false, -- optional; start plugin by default
 }
 ```
 
-If your lazy.nvim version does not honor `rtp`, use this fallback:
+### Legacy Setup
 
-```lua
-{
-  'sudonym1/snail',
-  lazy = false,
-  config = function()
-    local base = vim.fn.stdpath("data") .. "/lazy/snail"
-    local rtp = base .. "/extras/vim"
-    if vim.loop.fs_stat(rtp) then
-      vim.opt.rtp:append(rtp)
-      vim.cmd("runtime plugin/snail.vim")
-    end
-  end,
-}
-```
+Older Snail versions required `rtp = 'extras/vim'`. Current versions include
+an automatic bootstrap, so no extra runtimepath config is needed.
 
 ### Manual Installation
 

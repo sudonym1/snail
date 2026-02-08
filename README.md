@@ -313,8 +313,18 @@ Documentation is WIP
 Vim/Neovim plugin with Tree-sitter-based highlighting (Neovim), formatting, and run commands:
 
 ```vim
-Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }
+Plug 'sudonym1/snail'
 ```
+
+```lua
+-- lazy.nvim
+{
+  'sudonym1/snail',
+  lazy = false, -- optional
+}
+```
+
+Then run `:TSInstall snail`.
 
 See [extras/vim/README.md](extras/vim/README.md) for details. Tree-sitter grammar available in `extras/tree-sitter-snail/`.
 

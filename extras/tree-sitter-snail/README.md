@@ -25,17 +25,36 @@ Tree-sitter grammar for the Snail programming language.
    Add this to your Neovim configuration:
 
    ```lua
-   local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
-   parser_config.snail = {
-     install_info = {
-       url = "~/path/to/snail/extras/tree-sitter-snail",
-       files = {"src/parser.c"},
-       branch = "main",
-       generate_requires_npm = false,
-       requires_generate_from_grammar = false,
-     },
-     filetype = "snail",
-   }
+   local function register_snail_parser()
+     local parser_dir = vim.fn.expand("~/path/to/snail/extras/tree-sitter-snail")
+     local parsers = require("nvim-treesitter.parsers")
+     local parser_configs = type(parsers.get_parser_configs) == "function"
+       and parsers.get_parser_configs() or parsers
+     local snail_parser = parser_configs.snail or parsers.snail
+
+     if not snail_parser then
+       snail_parser = {
+         install_info = {
+           path = parser_dir,
+           url = parser_dir, -- compatibility fallback for older nvim-treesitter
+           files = { "src/parser.c" },
+           branch = "main",
+           generate_requires_npm = false,
+           requires_generate_from_grammar = false,
+         },
+         filetype = "snail",
+       }
+     end
+
+     parser_configs.snail = snail_parser
+     parsers.snail = snail_parser
+   end
+
+   register_snail_parser()
+   vim.api.nvim_create_autocmd("User", {
+     pattern = "TSUpdate",
+     callback = register_snail_parser,
+   })
    ```
 
    Then run `:TSInstall snail` in Neovim.
@@ -56,20 +75,20 @@ Tree-sitter grammar for the Snail programming language.
 3. **Install the Snail Neovim plugin**
 
    ```lua
-   -- Using lazy.nvim
+   -- Using lazy.nvim (preferred)
    {
      'sudonym1/snail',
-     config = function()
-       vim.opt.rtp:append(vim.fn.expand('~/path/to/snail/extras/vim'))
-     end
+     lazy = false, -- optional
    }
    ```
 
    Or with vim-plug:
 
    ```vim
-   Plug 'sudonym1/snail', { 'rtp': 'extras/vim' }
+   Plug 'sudonym1/snail'
    ```
+
+   Then run `:TSInstall snail` in Neovim.
 
 ### For other editors
 
