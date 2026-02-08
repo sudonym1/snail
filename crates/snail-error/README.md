@@ -17,6 +17,7 @@ This crate provides unified error handling across all stages of Snail compilatio
 ## Dependencies
 
 - **snail-ast**: Uses `SourceSpan` to provide precise error locations
+- **thiserror**: Derives `Error` and conversion boilerplate for unified error enums
 
 ## Used By
 
