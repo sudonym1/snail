@@ -2135,6 +2135,28 @@ def test_map_mode_fd_access(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     assert "first line" in captured.out
 
 
+def test_map_mode_fd_iteration_delegates_to_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("first line\nsecond line\n")
+    result = main(["--map", "for line in $fd { print(line.strip()) }", str(file_a)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["first line", "second line"]
+
+
+def test_map_mode_text_forwards_string_methods(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("hello map mode")
+    result = main(["--map", "print($text.upper())", str(file_a)])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["HELLO MAP MODE"]
+
+
 def test_map_mode_lazy_text(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Test that $text is lazy (can use $fd first, then $text is empty)."""
     file_a = tmp_path / "a.txt"
