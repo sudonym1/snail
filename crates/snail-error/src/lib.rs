@@ -1,8 +1,8 @@
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fmt;
-use std::fmt::Write as _;
 
 use snail_ast::SourceSpan;
+use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct ParseError {
@@ -23,27 +23,24 @@ impl ParseError {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}", self.message)?;
-        if let Some(span) = &self.span {
-            writeln!(f, "--> {}:{}", span.start.line, span.start.column)?;
-            if let Some(line) = &self.line_text {
-                writeln!(f, "{line}")?;
-                let mut caret = String::new();
-                let col = span.start.column.saturating_sub(1);
-                caret.push_str(&" ".repeat(col));
-                caret.push('^');
-                writeln!(f, "{caret}")?;
-            }
-        }
-        Ok(())
+        write_parse_error(
+            f,
+            self,
+            ParseRenderOptions {
+                filename: None,
+                include_error_prefix: false,
+            },
+        )
     }
 }
 
-impl Error for ParseError {}
+impl StdError for ParseError {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum LowerError {
+    #[error("{0}")]
     Message(String),
+    #[error("pipeline calls may include at most one placeholder")]
     MultiplePlaceholders { span: SourceSpan },
 }
 
@@ -57,53 +54,20 @@ impl LowerError {
     }
 }
 
-impl fmt::Display for LowerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LowerError::Message(message) => write!(f, "{message}"),
-            LowerError::MultiplePlaceholders { .. } => {
-                write!(f, "pipeline calls may include at most one placeholder")
-            }
-        }
-    }
-}
-
-impl Error for LowerError {}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum SnailError {
-    Parse(ParseError),
-    Lower(LowerError),
-}
-
-impl fmt::Display for SnailError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SnailError::Parse(err) => write!(f, "{err}"),
-            SnailError::Lower(err) => write!(f, "{err}"),
-        }
-    }
-}
-
-impl Error for SnailError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            SnailError::Parse(err) => Some(err),
-            SnailError::Lower(err) => Some(err),
-        }
-    }
-}
-
-impl From<ParseError> for SnailError {
-    fn from(value: ParseError) -> Self {
-        SnailError::Parse(value)
-    }
-}
-
-impl From<LowerError> for SnailError {
-    fn from(value: LowerError) -> Self {
-        SnailError::Lower(value)
-    }
+    #[error("{0}")]
+    Parse(
+        #[from]
+        #[source]
+        ParseError,
+    ),
+    #[error("{0}")]
+    Lower(
+        #[from]
+        #[source]
+        LowerError,
+    ),
 }
 
 pub fn format_snail_error(err: &SnailError, filename: &str) -> String {
@@ -114,23 +78,76 @@ pub fn format_snail_error(err: &SnailError, filename: &str) -> String {
 }
 
 fn format_parse_error(err: &ParseError, filename: &str) -> String {
+    render_parse_error(
+        err,
+        ParseRenderOptions {
+            filename: Some(filename),
+            include_error_prefix: true,
+        },
+    )
+}
+
+#[derive(Clone, Copy)]
+struct ParseRenderOptions<'a> {
+    filename: Option<&'a str>,
+    include_error_prefix: bool,
+}
+
+fn render_parse_error(err: &ParseError, options: ParseRenderOptions<'_>) -> String {
     let mut out = String::new();
-    let _ = writeln!(&mut out, "error: {}", err.message);
+    let _ = write_parse_error(&mut out, err, options);
+    out
+}
+
+fn write_parse_error(
+    out: &mut impl fmt::Write,
+    err: &ParseError,
+    options: ParseRenderOptions<'_>,
+) -> fmt::Result {
+    if options.include_error_prefix {
+        writeln!(out, "error: {}", err.message)?;
+    } else {
+        writeln!(out, "{}", err.message)?;
+    }
+
     if let Some(span) = &err.span {
-        let _ = writeln!(
-            &mut out,
+        write_parse_location(out, span, options.filename)?;
+        write_parse_snippet(out, span, err.line_text.as_deref())?;
+    }
+
+    Ok(())
+}
+
+fn write_parse_location(
+    out: &mut impl fmt::Write,
+    span: &SourceSpan,
+    filename: Option<&str>,
+) -> fmt::Result {
+    match filename {
+        Some(filename) => writeln!(
+            out,
             "--> {}:{}:{}",
             filename, span.start.line, span.start.column
-        );
-        if let Some(line) = &err.line_text {
-            let _ = writeln!(&mut out, " |");
-            let _ = writeln!(&mut out, "{:>4} | {}", span.start.line, line);
-            let mut caret = String::new();
-            let col = span.start.column.saturating_sub(1);
-            caret.push_str(&" ".repeat(col));
-            caret.push('^');
-            let _ = writeln!(&mut out, " | {}", caret);
-        }
+        ),
+        None => writeln!(out, "--> {}:{}", span.start.line, span.start.column),
     }
-    out
+}
+
+fn write_parse_snippet(
+    out: &mut impl fmt::Write,
+    span: &SourceSpan,
+    line_text: Option<&str>,
+) -> fmt::Result {
+    let Some(line) = line_text else {
+        return Ok(());
+    };
+
+    writeln!(out, " |")?;
+    writeln!(out, "{:>4} | {line}", span.start.line)?;
+    writeln!(out, " | {}", render_caret(span.start.column))
+}
+
+fn render_caret(column: usize) -> String {
+    let padding = " ".repeat(column.saturating_sub(1));
+    format!("{padding}^")
 }

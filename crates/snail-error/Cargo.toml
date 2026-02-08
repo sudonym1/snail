@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 snail-ast = { path = "../snail-ast" }
+thiserror = "2"
