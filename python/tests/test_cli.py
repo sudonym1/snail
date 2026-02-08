@@ -197,6 +197,22 @@ def _stdin_devnull(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         yield
 
 
+def set_stdin(
+    monkeypatch: pytest.MonkeyPatch, text: str, is_tty: bool | None = None
+) -> None:
+    stdin = io.StringIO(text)
+    monkeypatch.setattr(sys, "stdin", stdin)
+    if is_tty is not None:
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: is_tty)
+
+
+def run_cli(
+    capsys: pytest.CaptureFixture[str], args: list[str] | tuple[str, ...]
+) -> tuple[int, pytest.CaptureResult[str]]:
+    result = main(list(args))
+    return result, capsys.readouterr()
+
+
 def test_no_print(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["-P", "1 + 1"]) == 0
     captured = capsys.readouterr()
@@ -1031,35 +1047,31 @@ def test_augmented_ops_index_coverage(op: str, expected: int | float) -> None:
 def test_combined_short_flags_awk(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO("foo\n"))
-    assert main(["-aP", "/foo/ { print($0) }"]) == 0
-    captured = capsys.readouterr()
+    set_stdin(monkeypatch, "foo\n")
+    result, captured = run_cli(capsys, ["-aP", "/foo/ { print($0) }"])
+    assert result == 0
     assert captured.out == "foo\n"
 
 
-def test_combined_short_flag_with_value(
+@pytest.mark.parametrize(
+    "attached_file_arg",
+    [
+        pytest.param(False, id="separate-file-arg"),
+        pytest.param(True, id="attached-file-arg"),
+    ],
+)
+def test_combined_short_flag_with_file_value(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    attached_file_arg: bool,
 ) -> None:
     script = tmp_path / "script.snail"
     script.write_text("/foo/ { print($0) }\n")
-    monkeypatch.setattr(sys, "stdin", io.StringIO("foo\nbar\n"))
-    assert main(["-af", str(script)]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == "foo\n"
-
-
-def test_combined_short_flag_with_attached_value(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    script = tmp_path / "script.snail"
-    script.write_text("/foo/ { print($0) }\n")
-    monkeypatch.setattr(sys, "stdin", io.StringIO("foo\nbar\n"))
-    assert main([f"-af{script}"]) == 0
-    captured = capsys.readouterr()
+    set_stdin(monkeypatch, "foo\nbar\n")
+    args = [f"-af{script}"] if attached_file_arg else ["-af", str(script)]
+    result, captured = run_cli(capsys, args)
+    assert result == 0
     assert captured.out == "foo\n"
 
 
@@ -1067,9 +1079,9 @@ def test_combined_short_flag_with_attached_field_separator(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO("a,b\n"))
-    assert main(["-aF,", "{ print($1) }"]) == 0
-    captured = capsys.readouterr()
+    set_stdin(monkeypatch, "a,b\n")
+    result, captured = run_cli(capsys, ["-aF,", "{ print($1) }"])
+    assert result == 0
     assert captured.out == "a\n"
 
 
@@ -1110,33 +1122,37 @@ def test_unknown_flag_in_combination(capsys: pytest.CaptureFixture[str]) -> None
     assert "unknown option: -X" in captured.err
 
 
-def test_awk_mode(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    ("stdin_text", "is_tty", "expected_result", "expected_out", "expected_err"),
+    [
+        pytest.param("foo\nbar\n", None, 0, "foo\n", None, id="awk-has-input"),
+        pytest.param(
+            "",
+            True,
+            1,
+            None,
+            'Missing input (see "snail --help")',
+            id="awk-tty-no-input",
+        ),
+        pytest.param("", False, 0, None, None, id="awk-nontty-no-input"),
+    ],
+)
+def test_awk_input_handling(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    stdin_text: str,
+    is_tty: bool | None,
+    expected_result: int,
+    expected_out: str | None,
+    expected_err: str | None,
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO("foo\nbar\n"))
-    assert main(["--awk", "/foo/ { print($0) }"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == "foo\n"
-
-
-def test_awk_requires_input_when_stdin_is_tty(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    result = main(["--awk", "/foo/ { print($0) }"])
-    assert result == 1
-    captured = capsys.readouterr()
-    assert 'Missing input (see "snail --help")' in captured.err
-
-
-def test_awk_does_not_require_input_when_stdin_is_not_a_tty(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
-    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
-    result = main(["--awk", "/foo/ { print($0) }"])
-    assert result == 0
+    set_stdin(monkeypatch, stdin_text, is_tty=is_tty)
+    result, captured = run_cli(capsys, ["--awk", "/foo/ { print($0) }"])
+    assert result == expected_result
+    if expected_out is not None:
+        assert captured.out == expected_out
+    if expected_err is not None:
+        assert expected_err in captured.err
 
 
 def test_awk_src_current_file(
@@ -1226,39 +1242,43 @@ def test_awk_identifiers_require_awk_mode() -> None:
     assert "--awk" in str(excinfo.value)
 
 
-def test_awk_begin_flag(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    "begin_flag",
+    [
+        pytest.param("-b", id="short-begin"),
+        pytest.param("--begin", id="long-begin"),
+    ],
+)
+def test_awk_begin_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    begin_flag: str,
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
-    assert main(["--awk", "-b", "print('start')", "{ print($0) }"]) == 0
-    captured = capsys.readouterr()
+    set_stdin(monkeypatch, "line\n")
+    result, captured = run_cli(
+        capsys, ["--awk", begin_flag, "print('start')", "{ print($0) }"]
+    )
+    assert result == 0
     assert captured.out == "start\nline\n"
 
 
-def test_awk_begin_long_flag(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    "end_flag",
+    [
+        pytest.param("-e", id="short-end"),
+        pytest.param("--end", id="long-end"),
+    ],
+)
+def test_awk_end_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    end_flag: str,
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
-    assert main(["--awk", "--begin", "print('start')", "{ print($0) }"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == "start\nline\n"
-
-
-def test_awk_end_flag(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
-    assert main(["--awk", "-e", "print('done')", "{ print($0) }"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == "line\ndone\n"
-
-
-def test_awk_end_long_flag(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO("line\n"))
-    assert main(["--awk", "--end", "print('done')", "{ print($0) }"]) == 0
-    captured = capsys.readouterr()
+    set_stdin(monkeypatch, "line\n")
+    result, captured = run_cli(
+        capsys, ["--awk", end_flag, "print('done')", "{ print($0) }"]
+    )
+    assert result == 0
     assert captured.out == "line\ndone\n"
 
 
@@ -1413,54 +1433,50 @@ def test_begin_end_regular_mode_oneliner_autoprint(
 # --- Tests for auto-import ---
 
 
-def test_auto_import_sys(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that sys is available without explicit import."""
-    assert main(["-P", "print(sys.version_info.major)"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip().isdigit()
+@pytest.mark.parametrize(
+    ("script", "check_mode", "expected"),
+    [
+        pytest.param("print(sys.version_info.major)", "isdigit", "", id="sys"),
+        pytest.param("print(os.name)", "membership", ("posix", "nt"), id="os"),
+        pytest.param('sys = "custom"\nprint(sys)', "equals", "custom", id="shadow"),
+        pytest.param("print(Path('.').resolve())", "startswith", "/", id="path"),
+    ],
+)
+def test_auto_import_enabled_variants(
+    capsys: pytest.CaptureFixture[str],
+    script: str,
+    check_mode: str,
+    expected: str | tuple[str, ...],
+) -> None:
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    output = captured.out.strip()
+    if check_mode == "isdigit":
+        assert output.isdigit()
+    elif check_mode == "membership":
+        assert output in expected
+    elif check_mode == "equals":
+        assert output == expected
+    else:
+        assert output.startswith(expected)
 
 
-def test_auto_import_os(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that os is available without explicit import."""
-    assert main(["-P", "print(os.name)"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip() in ("posix", "nt")
-
-
-def test_no_auto_import_flag(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that --no-auto-import disables auto-import."""
+@pytest.mark.parametrize(
+    ("args", "expected_name"),
+    [
+        pytest.param(
+            ["--no-auto-import", "print(sys.version)"], "sys", id="long-flag-sys"
+        ),
+        pytest.param(["-I", "print(os.name)"], "os", id="short-flag-os"),
+        pytest.param(["-I", "print(Path('.'))"], "Path", id="short-flag-path"),
+    ],
+)
+def test_auto_import_disabled_variants(
+    args: list[str], expected_name: str
+) -> None:
     with pytest.raises(NameError) as excinfo:
-        main(["--no-auto-import", "print(sys.version)"])
-    assert "sys" in str(excinfo.value)
-
-
-def test_no_auto_import_short_flag(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that -I disables auto-import."""
-    with pytest.raises(NameError) as excinfo:
-        main(["-I", "print(os.name)"])
-    assert "os" in str(excinfo.value)
-
-
-def test_auto_import_user_shadow(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that user can shadow auto-imported names."""
-    assert main(["-P", 'sys = "custom"\nprint(sys)']) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip() == "custom"
-
-
-def test_auto_import_path(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that Path is available without explicit import."""
-    assert main(["-P", "print(Path('.').resolve())"]) == 0
-    captured = capsys.readouterr()
-    # Should print an absolute path
-    assert captured.out.strip().startswith("/")
-
-
-def test_no_auto_import_path(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that -I disables Path auto-import."""
-    with pytest.raises(NameError) as excinfo:
-        main(["-I", "print(Path('.'))"])
-    assert "Path" in str(excinfo.value)
+        main(args)
+    assert expected_name in str(excinfo.value)
 
 
 # --- Tests for $env ---
@@ -1645,47 +1661,30 @@ def test_subprocess_status_error_fallback_returns_returncode(
 # --- Tests for byte strings ---
 
 
-def test_byte_string_basic(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that byte strings are parsed and executed correctly."""
-    script = 'x = b"hello"\nprint(x)'
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip() == "b'hello'"
-
-
-def test_byte_string_interpolation(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that byte strings support interpolation (unlike Python)."""
-    script = 'y = "world"\nx = b"hello {y}"\nprint(x)'
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    # Should interpolate and encode
-    assert captured.out.strip() == "b'hello world'"
-
-
-def test_raw_byte_string(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test raw byte strings."""
-    script = r'x = rb"\n"' + "\nprint(len(x))"
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    # rb"\n" should be 2 bytes: backslash and n
-    assert captured.out.strip() == "2"
-
-
-def test_byte_string_operations(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test byte string operations work correctly."""
-    script = 'x = b"hello" + b" world"\nprint(x)'
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip() == "b'hello world'"
-
-
-def test_byte_string_br_prefix(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test br prefix for raw byte strings."""
-    script = r'x = br"\t"' + "\nprint(len(x))"
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    # br"\t" should be 2 bytes: backslash and t
-    assert captured.out.strip() == "2"
+@pytest.mark.parametrize(
+    ("script", "expected"),
+    [
+        pytest.param('x = b"hello"\nprint(x)', "b'hello'", id="basic"),
+        pytest.param(
+            'y = "world"\nx = b"hello {y}"\nprint(x)',
+            "b'hello world'",
+            id="interpolation",
+        ),
+        pytest.param(r'x = rb"\n"' + "\nprint(len(x))", "2", id="raw-rb"),
+        pytest.param(
+            'x = b"hello" + b" world"\nprint(x)',
+            "b'hello world'",
+            id="operations",
+        ),
+        pytest.param(r'x = br"\t"' + "\nprint(len(x))", "2", id="raw-br"),
+    ],
+)
+def test_byte_string_variants(
+    capsys: pytest.CaptureFixture[str], script: str, expected: str
+) -> None:
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == expected
 
 
 def test_fstring_conversion_and_format_spec(capsys: pytest.CaptureFixture[str]) -> None:
