@@ -1,12 +1,14 @@
 # snail-lower
 
-Compatibility shim that re-exports lowering APIs from `snail-python`.
+Internal interface crate that re-exports lowering APIs from `snail-python`.
 
 ## Purpose
 
-This crate preserves the historical `snail-lower` API surface for downstream
-tests and tools, while keeping the actual lowering implementation inside
-`snail-python` (the only crate that depends directly on pyo3).
+This crate is a thin pass-through layer over `snail-python`, which owns the
+lowering implementation and pyo3 integration.
+
+`snail-lower` is internal to the Snail workspace and does not guarantee a
+stable external API surface. Its exports may change as `snail-python` evolves.
 
 ## Key Components
 
