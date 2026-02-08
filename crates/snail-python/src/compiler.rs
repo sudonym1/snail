@@ -78,18 +78,29 @@ fn merge_cli_begin_blocks(
     cli_sources: &[&str],
     existing: BlockList,
 ) -> Result<BlockList, ParseError> {
-    let mut cli_blocks = parse_cli_blocks(cli_sources)?;
-    cli_blocks.extend(existing);
-    Ok(cli_blocks)
+    merge_cli_blocks_with_position(cli_sources, existing, true)
 }
 
 fn merge_cli_end_blocks(
     cli_sources: &[&str],
-    mut existing: BlockList,
+    existing: BlockList,
 ) -> Result<BlockList, ParseError> {
-    let cli_blocks = parse_cli_blocks(cli_sources)?;
-    existing.extend(cli_blocks);
-    Ok(existing)
+    merge_cli_blocks_with_position(cli_sources, existing, false)
+}
+
+fn merge_cli_blocks_with_position(
+    cli_sources: &[&str],
+    mut existing: BlockList,
+    prepend: bool,
+) -> Result<BlockList, ParseError> {
+    let mut cli_blocks = parse_cli_blocks(cli_sources)?;
+    if prepend {
+        cli_blocks.extend(existing);
+        Ok(cli_blocks)
+    } else {
+        existing.extend(cli_blocks);
+        Ok(existing)
+    }
 }
 
 fn parse_cli_blocks(sources: &[&str]) -> Result<BlockList, ParseError> {

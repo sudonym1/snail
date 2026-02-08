@@ -159,6 +159,27 @@ def test_parse_ast_api_map_begin_end() -> None:
     assert "Assign" in result
 
 
+@pytest.mark.parametrize(
+    "api_name", ["compile", "compile_ast", "exec", "parse_ast", "parse"]
+)
+def test_native_api_unknown_mode_error(api_name: str) -> None:
+    api = getattr(snail, api_name)
+    with pytest.raises(RuntimeError, match=r"unknown mode: bad"):
+        api("x = 1", mode="bad")
+
+
+def test_exec_api_system_exit_none_returns_zero() -> None:
+    assert snail.exec("raise SystemExit()", auto_print=False) == 0
+
+
+def test_exec_api_system_exit_int_returns_code() -> None:
+    assert snail.exec("raise SystemExit(3)", auto_print=False) == 3
+
+
+def test_exec_api_system_exit_non_int_returns_one() -> None:
+    assert snail.exec("raise SystemExit('boom')", auto_print=False) == 1
+
+
 def test_traceback_highlights_inline_snail() -> None:
     with pytest.raises(NameError) as excinfo:
         main(["x"])
