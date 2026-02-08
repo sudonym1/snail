@@ -36,6 +36,9 @@ fn rerun_if_changed(path: PathBuf) {
 }
 
 fn main() {
+    // Ensure extension-module builds use the correct linker flags (notably on macOS).
+    pyo3_build_config::add_extension_module_link_args();
+
     let manifest_dir = env::var("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."));

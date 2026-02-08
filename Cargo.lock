@@ -344,6 +344,7 @@ name = "snail-python"
 version = "0.7.10"
 dependencies = [
  "pyo3",
+ "pyo3-build-config",
  "snail-ast",
  "snail-error",
  "snail-parser",

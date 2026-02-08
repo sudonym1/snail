@@ -13,3 +13,6 @@ pyo3 = { version = "0.21", features = ["extension-module", "abi3-py38"] }
 snail-ast = { path = "../snail-ast" }
 snail-error = { path = "../snail-error" }
 snail-parser = { path = "../snail-parser" }
+
+[build-dependencies]
+pyo3-build-config = "0.21"
