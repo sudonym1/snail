@@ -180,6 +180,81 @@ def test_exec_api_system_exit_non_int_returns_one() -> None:
     assert snail.exec("raise SystemExit('boom')", auto_print=False) == 1
 
 
+@pytest.mark.parametrize(
+    ("mode", "source", "cli_begin", "file_begin", "file_end", "cli_end"),
+    [
+        (
+            "snail",
+            "BEGIN { print('snail-file-begin') }\nprint('body')\nEND { print('snail-file-end') }",
+            "snail-cli-begin",
+            "snail-file-begin",
+            "snail-file-end",
+            "snail-cli-end",
+        ),
+        (
+            "map",
+            "BEGIN { print('map-file-begin') }\nprint($src)\nEND { print('map-file-end') }",
+            "map-cli-begin",
+            "map-file-begin",
+            "map-file-end",
+            "map-cli-end",
+        ),
+    ],
+)
+def test_parse_ast_api_begin_end_merge_order(
+    mode: str,
+    source: str,
+    cli_begin: str,
+    file_begin: str,
+    file_end: str,
+    cli_end: str,
+) -> None:
+    result = snail.parse_ast(
+        source,
+        mode=mode,
+        begin_code=[f"print('{cli_begin}')"],
+        end_code=[f"print('{cli_end}')"],
+    )
+    assert "begin_blocks" in result
+    assert "end_blocks" in result
+    assert result.index(f'value: "{cli_begin}"') < result.index(f'value: "{file_begin}"')
+    assert result.index(f'value: "{file_end}"') < result.index(f'value: "{cli_end}"')
+
+
+@pytest.mark.parametrize(
+    ("mode", "source"),
+    [
+        ("snail", "print('body')"),
+        ("map", "print($src)"),
+    ],
+)
+def test_parse_ast_api_ignores_whitespace_only_begin_end_code(
+    mode: str, source: str
+) -> None:
+    result = snail.parse_ast(
+        source,
+        mode=mode,
+        begin_code=["   ", "\n\t", "\n   \n"],
+        end_code=["\n", " \t ", "\n\n"],
+    )
+    assert result.lstrip().startswith("Program {")
+    assert "begin_blocks" not in result
+    assert "end_blocks" not in result
+
+
+def test_compile_api_traceback_uses_explicit_filename() -> None:
+    filename = "compile-api-trace.snail"
+    code = snail.compile("raise ValueError('boom')", filename=filename)
+
+    with pytest.raises(ValueError) as excinfo:
+        exec(code, {})
+
+    filenames = [
+        frame.filename for frame in traceback.extract_tb(excinfo.value.__traceback__)
+    ]
+    assert f"snail:{filename}" in filenames
+
+
 def test_traceback_highlights_inline_snail() -> None:
     with pytest.raises(NameError) as excinfo:
         main(["x"])
