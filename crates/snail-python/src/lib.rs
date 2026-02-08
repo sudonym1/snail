@@ -21,7 +21,15 @@ use pyo3::types::{PyDict, PyList, PyModule};
 use snail_ast::CompileMode;
 use snail_error::{ParseError, format_snail_error};
 use snail_parser::{parse, parse_awk, parse_awk_cli, parse_map};
+use std::fmt::Debug;
 use std::time::Instant;
+
+type ProgramWithBlocks = (
+    snail_ast::Program,
+    Vec<Vec<snail_ast::Stmt>>,
+    Vec<Vec<snail_ast::Stmt>>,
+);
+type ParseProgramFn = fn(&str) -> Result<ProgramWithBlocks, ParseError>;
 
 fn parse_mode(mode: &str) -> PyResult<CompileMode> {
     match mode {
@@ -31,6 +39,65 @@ fn parse_mode(mode: &str) -> PyResult<CompileMode> {
         _ => Err(PyRuntimeError::new_err(format!(
             "unknown mode: {mode} (expected 'snail', 'awk', or 'map')"
         ))),
+    }
+}
+
+fn parse_error_to_syntax(err: ParseError, filename: &str) -> PyErr {
+    PySyntaxError::new_err(format_snail_error(&err.into(), filename))
+}
+
+fn compile_source_to_code(
+    py: Python<'_>,
+    source: &str,
+    mode: CompileMode,
+    auto_print: bool,
+    filename: &str,
+    begin_code: &[String],
+    end_code: &[String],
+) -> PyResult<PyObject> {
+    let profile = profile_enabled();
+    let python_ast = compile_source(py, source, mode, auto_print, filename, begin_code, end_code)?;
+    let display = display_filename(filename);
+    let linecache_start = Instant::now();
+    register_linecache(py, &display, source)?;
+    if profile {
+        log_profile("register_linecache", linecache_start.elapsed());
+    }
+    let compile_start = Instant::now();
+    let builtins = py.import_bound("builtins")?;
+    let code = builtins
+        .getattr("compile")?
+        .call1((python_ast, display, "exec"))?;
+    if profile {
+        log_profile("py_compile", compile_start.elapsed());
+    }
+    Ok(code.unbind())
+}
+
+fn parse_program_ast(
+    source: &str,
+    filename: &str,
+    begin_code: &[String],
+    end_code: &[String],
+    parse_program: ParseProgramFn,
+) -> PyResult<ProgramWithBlocks> {
+    let (program, begin_blocks, end_blocks) =
+        parse_program(source).map_err(|err| parse_error_to_syntax(err, filename))?;
+    merge_cli_blocks(begin_code, end_code, begin_blocks, end_blocks)
+        .map_err(|err| parse_error_to_syntax(err, filename))
+        .map(|(begin_blocks, end_blocks)| (program, begin_blocks, end_blocks))
+}
+
+fn format_program_ast<Ast: Debug>(
+    program: snail_ast::Program,
+    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
+    end_blocks: Vec<Vec<snail_ast::Stmt>>,
+    wrap: impl FnOnce(snail_ast::Program, Vec<Vec<snail_ast::Stmt>>, Vec<Vec<snail_ast::Stmt>>) -> Ast,
+) -> String {
+    if begin_blocks.is_empty() && end_blocks.is_empty() {
+        format!("{:#?}", program)
+    } else {
+        format!("{:#?}", wrap(program, begin_blocks, end_blocks))
     }
 }
 
@@ -134,32 +201,19 @@ fn compile_py(
 ) -> PyResult<PyObject> {
     let profile = profile_enabled();
     let total_start = Instant::now();
-    let mode = parse_mode(mode)?;
-    let python_ast = compile_source(
+    let code = compile_source_to_code(
         py,
         source,
-        mode,
+        parse_mode(mode)?,
         auto_print,
         filename,
         &begin_code,
         &end_code,
     )?;
-    let display = display_filename(filename);
-    let linecache_start = Instant::now();
-    register_linecache(py, &display, source)?;
     if profile {
-        log_profile("register_linecache", linecache_start.elapsed());
-    }
-    let compile_start = Instant::now();
-    let builtins = py.import_bound("builtins")?;
-    let code = builtins
-        .getattr("compile")?
-        .call1((python_ast, display, "exec"))?;
-    if profile {
-        log_profile("py_compile", compile_start.elapsed());
         log_profile("compile_py_total", total_start.elapsed());
     }
-    Ok(code.unbind())
+    Ok(code)
 }
 
 #[pyfunction(name = "compile_ast")]
@@ -173,17 +227,15 @@ fn compile_ast_py(
     begin_code: Vec<String>,
     end_code: Vec<String>,
 ) -> PyResult<PyObject> {
-    let mode = parse_mode(mode)?;
-    let python_ast = compile_source(
+    compile_source(
         py,
         source,
-        mode,
+        parse_mode(mode)?,
         auto_print,
         filename,
         &begin_code,
         &end_code,
-    )?;
-    Ok(python_ast)
+    )
 }
 
 #[pyfunction(name = "exec")]
@@ -204,30 +256,16 @@ fn exec_py(
 ) -> PyResult<i32> {
     let profile = profile_enabled();
     let total_start = Instant::now();
-    let mode = parse_mode(mode)?;
-    let python_ast = compile_source(
+    let code = compile_source_to_code(
         py,
         source,
-        mode,
+        parse_mode(mode)?,
         auto_print,
         filename,
         &begin_code,
         &end_code,
     )?;
-    let display = display_filename(filename);
-    let linecache_start = Instant::now();
-    register_linecache(py, &display, source)?;
-    if profile {
-        log_profile("register_linecache", linecache_start.elapsed());
-    }
-    let compile_start = Instant::now();
     let builtins = py.import_bound("builtins")?;
-    let code = builtins
-        .getattr("compile")?
-        .call1((python_ast, display, "exec"))?;
-    if profile {
-        log_profile("py_compile", compile_start.elapsed());
-    }
     let globals_start = Instant::now();
     let globals = prepare_globals(
         py,
@@ -242,7 +280,7 @@ fn exec_py(
     }
 
     let exec_start = Instant::now();
-    let exec_result = builtins.getattr("exec")?.call1((code.as_any(), &globals));
+    let exec_result = builtins.getattr("exec")?.call1((code.bind(py), &globals));
     if profile {
         log_profile("py_exec", exec_start.elapsed());
     }
@@ -294,48 +332,41 @@ fn parse_ast_py(
     begin_code: Vec<String>,
     end_code: Vec<String>,
 ) -> PyResult<String> {
-    let err_to_syntax =
-        |err: ParseError| PySyntaxError::new_err(format_snail_error(&err.into(), filename));
     match parse_mode(mode)? {
         CompileMode::Snail => {
-            let (program, begin_blocks, end_blocks) = parse(source).map_err(err_to_syntax)?;
-            let (begin_blocks, end_blocks) =
-                merge_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
-                    .map_err(err_to_syntax)?;
-
-            if begin_blocks.is_empty() && end_blocks.is_empty() {
-                return Ok(format!("{:#?}", program));
-            }
-
-            let snail_ast = SnailAst {
+            let (program, begin_blocks, end_blocks) =
+                parse_program_ast(source, filename, &begin_code, &end_code, parse)?;
+            Ok(format_program_ast(
                 program,
                 begin_blocks,
                 end_blocks,
-            };
-            Ok(format!("{:#?}", snail_ast))
+                |program, begin_blocks, end_blocks| SnailAst {
+                    program,
+                    begin_blocks,
+                    end_blocks,
+                },
+            ))
         }
         CompileMode::Awk => {
             let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
             let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
-            let program = parse_awk_cli(source, &begin_refs, &end_refs).map_err(err_to_syntax)?;
+            let program = parse_awk_cli(source, &begin_refs, &end_refs)
+                .map_err(|err| parse_error_to_syntax(err, filename))?;
             Ok(format!("{:#?}", program))
         }
         CompileMode::Map => {
-            let (program, begin_blocks, end_blocks) = parse_map(source).map_err(err_to_syntax)?;
-            let (begin_blocks, end_blocks) =
-                merge_cli_blocks(&begin_code, &end_code, begin_blocks, end_blocks)
-                    .map_err(err_to_syntax)?;
-
-            if begin_blocks.is_empty() && end_blocks.is_empty() {
-                return Ok(format!("{:#?}", program));
-            }
-
-            let map_ast = MapAst {
+            let (program, begin_blocks, end_blocks) =
+                parse_program_ast(source, filename, &begin_code, &end_code, parse_map)?;
+            Ok(format_program_ast(
                 program,
                 begin_blocks,
                 end_blocks,
-            };
-            Ok(format!("{:#?}", map_ast))
+                |program, begin_blocks, end_blocks| MapAst {
+                    program,
+                    begin_blocks,
+                    end_blocks,
+                },
+            ))
         }
     }
 }
@@ -346,13 +377,13 @@ fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
     match parse_mode(mode)? {
         CompileMode::Snail => parse(source)
             .map(|_| ())
-            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
+            .map_err(|err| parse_error_to_syntax(err, filename)),
         CompileMode::Awk => parse_awk(source)
             .map(|_| ())
-            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
+            .map_err(|err| parse_error_to_syntax(err, filename)),
         CompileMode::Map => parse_map(source)
             .map(|_| ())
-            .map_err(|err| PySyntaxError::new_err(format_snail_error(&err.into(), filename))),
+            .map_err(|err| parse_error_to_syntax(err, filename)),
     }
 }
 

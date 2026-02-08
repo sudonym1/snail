@@ -5,6 +5,25 @@ use snail_error::LowerError;
 
 use super::py_ast::{AstBuilder, py_err_to_lower, set_location};
 
+fn parse_literal_expr(
+    builder: &AstBuilder<'_>,
+    source: &str,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let expr = builder
+        .py()
+        .import_bound("ast")
+        .and_then(|ast| ast.getattr("parse"))
+        .and_then(|parse| parse.call1((source,)))
+        .and_then(|module| module.getattr("body"))
+        .and_then(|body| body.get_item(0))
+        .and_then(|expr_stmt| expr_stmt.getattr("value"));
+
+    let expr = expr.map_err(py_err_to_lower)?;
+    set_location(&expr, span).map_err(py_err_to_lower)?;
+    Ok(expr.into_py(builder.py()))
+}
+
 pub(crate) fn assign_name(
     builder: &AstBuilder<'_>,
     name: &str,
@@ -61,18 +80,7 @@ pub(crate) fn string_expr(
         (false, StringDelimiter::TripleSingle) => format!("'''{}'''", value),
         (false, StringDelimiter::TripleDouble) => format!("\"\"\"{}\"\"\"", value),
     };
-    let expr = builder
-        .py()
-        .import_bound("ast")
-        .and_then(|ast| ast.getattr("parse"))
-        .and_then(|parse| parse.call1((rendered,)))
-        .and_then(|module| module.getattr("body"))
-        .and_then(|body| body.get_item(0))
-        .and_then(|expr_stmt| expr_stmt.getattr("value"));
-
-    let expr = expr.map_err(py_err_to_lower)?;
-    set_location(&expr, span).map_err(py_err_to_lower)?;
-    Ok(expr.into_py(builder.py()))
+    parse_literal_expr(builder, &rendered, span)
 }
 
 pub(crate) fn byte_string_expr(
@@ -92,18 +100,7 @@ pub(crate) fn byte_string_expr(
         (false, StringDelimiter::TripleSingle) => format!("b'''{}'''", value),
         (false, StringDelimiter::TripleDouble) => format!("b\"\"\"{}\"\"\"", value),
     };
-    let expr = builder
-        .py()
-        .import_bound("ast")
-        .and_then(|ast| ast.getattr("parse"))
-        .and_then(|parse| parse.call1((rendered,)))
-        .and_then(|module| module.getattr("body"))
-        .and_then(|body| body.get_item(0))
-        .and_then(|expr_stmt| expr_stmt.getattr("value"));
-
-    let expr = expr.map_err(py_err_to_lower)?;
-    set_location(&expr, span).map_err(py_err_to_lower)?;
-    Ok(expr.into_py(builder.py()))
+    parse_literal_expr(builder, &rendered, span)
 }
 
 pub(crate) fn number_expr(
@@ -111,18 +108,7 @@ pub(crate) fn number_expr(
     value: &str,
     span: &SourceSpan,
 ) -> Result<PyObject, LowerError> {
-    let expr = builder
-        .py()
-        .import_bound("ast")
-        .and_then(|ast| ast.getattr("parse"))
-        .and_then(|parse| parse.call1((value,)))
-        .and_then(|module| module.getattr("body"))
-        .and_then(|body| body.get_item(0))
-        .and_then(|expr_stmt| expr_stmt.getattr("value"));
-
-    let expr = expr.map_err(py_err_to_lower)?;
-    set_location(&expr, span).map_err(py_err_to_lower)?;
-    Ok(expr.into_py(builder.py()))
+    parse_literal_expr(builder, value, span)
 }
 
 pub(crate) fn regex_pattern_expr(
