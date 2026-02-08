@@ -1151,8 +1151,26 @@ def test_awk_input_handling(
     assert result == expected_result
     if expected_out is not None:
         assert captured.out == expected_out
+    else:
+        assert captured.out == ""
     if expected_err is not None:
         assert expected_err in captured.err
+    else:
+        assert captured.err == ""
+
+
+def test_awk_file_dash_reads_stdin_when_stdin_is_tty(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = tmp_path / "script.snail"
+    script.write_text("{ print($0) }\n")
+    set_stdin(monkeypatch, "foo\nbar\n", is_tty=True)
+    result, captured = run_cli(capsys, ["--awk", "-f", str(script), "-"])
+    assert result == 0
+    assert captured.out == "foo\nbar\n"
+    assert captured.err == ""
 
 
 def test_awk_src_current_file(
