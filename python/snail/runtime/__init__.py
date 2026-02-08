@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib
 import re
-from typing import Optional
+from typing import Any, Callable, Optional
 
 __all__ = ["install_helpers", "AutoImportDict", "AUTO_IMPORT_NAMES"]
 
@@ -36,191 +36,107 @@ class AutoImportDict(dict):
         raise KeyError(key)
 
 
-_compact_try = None
-_regex_search = None
-_regex_compile = None
-_subprocess_capture = None
-_subprocess_status = None
-_jmespath_query = None
-_js = None
-_lazy_text_class = None
-_lazy_file_class = None
-_incr_attr = None
-_incr_index = None
-_aug_attr = None
-_aug_index = None
-_env_map = None
+_GETTER_CACHE: dict[str, Any] = {}
+_GETTERS: dict[str, Callable[[], Any]] = {}
+_LAZY_WRAPPERS: dict[str, Callable[..., Any]] = {}
 _awk_split_cache: dict[tuple[str, bool], re.Pattern[str]] = {}
 
+_GETTER_REGISTRY: dict[str, tuple[str, str, bool]] = {
+    "_get_compact_try": (".compact_try", "compact_try", False),
+    "_get_regex_search": (".regex", "regex_search", False),
+    "_get_regex_compile": (".regex", "regex_compile", False),
+    "_get_subprocess_capture": (".subprocess", "SubprocessCapture", False),
+    "_get_subprocess_status": (".subprocess", "SubprocessStatus", False),
+    "_get_jmespath_query": (".structured_accessor", "__snail_jmespath_query", False),
+    "_get_js": (".structured_accessor", "js", False),
+    "_get_lazy_text_class": (".lazy_text", "LazyText", False),
+    "_get_lazy_file_class": (".lazy_file", "LazyFile", False),
+    "_get_env_map": (".env", "EnvMap", True),
+    "_get_incr_attr": (".augmented", "__snail_incr_attr", False),
+    "_get_incr_index": (".augmented", "__snail_incr_index", False),
+    "_get_aug_attr": (".augmented", "__snail_aug_attr", False),
+    "_get_aug_index": (".augmented", "__snail_aug_index", False),
+}
 
-def _get_compact_try():
-    global _compact_try
-    if _compact_try is None:
-        from .compact_try import compact_try
+_LAZY_WRAPPER_REGISTRY: dict[str, str] = {
+    "_lazy_compact_try": "_get_compact_try",
+    "_lazy_regex_search": "_get_regex_search",
+    "_lazy_regex_compile": "_get_regex_compile",
+    "_lazy_subprocess_capture": "_get_subprocess_capture",
+    "_lazy_subprocess_status": "_get_subprocess_status",
+    "_lazy_jmespath_query": "_get_jmespath_query",
+    "_lazy_js": "_get_js",
+    "_lazy_incr_attr": "_get_incr_attr",
+    "_lazy_incr_index": "_get_incr_index",
+    "_lazy_aug_attr": "_get_aug_attr",
+    "_lazy_aug_index": "_get_aug_index",
+}
 
-        _compact_try = compact_try
-    return _compact_try
+_INSTALL_LAZY_HELPER_REGISTRY: dict[str, str] = {
+    "__snail_compact_try": "_lazy_compact_try",
+    "__snail_regex_search": "_lazy_regex_search",
+    "__snail_regex_compile": "_lazy_regex_compile",
+    "__SnailSubprocessCapture": "_lazy_subprocess_capture",
+    "__SnailSubprocessStatus": "_lazy_subprocess_status",
+    "__snail_jmespath_query": "_lazy_jmespath_query",
+    "__snail_incr_attr": "_lazy_incr_attr",
+    "__snail_incr_index": "_lazy_incr_index",
+    "__snail_aug_attr": "_lazy_aug_attr",
+    "__snail_aug_index": "_lazy_aug_index",
+    "js": "_lazy_js",
+}
 
-
-def _get_regex_search():
-    global _regex_search
-    if _regex_search is None:
-        from .regex import regex_search
-
-        _regex_search = regex_search
-    return _regex_search
-
-
-def _get_regex_compile():
-    global _regex_compile
-    if _regex_compile is None:
-        from .regex import regex_compile
-
-        _regex_compile = regex_compile
-    return _regex_compile
-
-
-def _get_subprocess_capture():
-    global _subprocess_capture
-    if _subprocess_capture is None:
-        from .subprocess import SubprocessCapture
-
-        _subprocess_capture = SubprocessCapture
-    return _subprocess_capture
-
-
-def _get_subprocess_status():
-    global _subprocess_status
-    if _subprocess_status is None:
-        from .subprocess import SubprocessStatus
-
-        _subprocess_status = SubprocessStatus
-    return _subprocess_status
-
-
-def _get_jmespath_query():
-    global _jmespath_query
-    if _jmespath_query is None:
-        from .structured_accessor import __snail_jmespath_query
-
-        _jmespath_query = __snail_jmespath_query
-    return _jmespath_query
+_INSTALL_EAGER_HELPER_REGISTRY: dict[str, str] = {
+    "__snail_env": "_get_env_map",
+    "__SnailLazyText": "_get_lazy_text_class",
+    "__SnailLazyFile": "_get_lazy_file_class",
+}
 
 
-def _get_js():
-    global _js
-    if _js is None:
-        from .structured_accessor import js
-
-        _js = js
-    return _js
+def _load_helper(module_name: str, attr_name: str) -> Any:
+    module = importlib.import_module(module_name, package=__name__)
+    return getattr(module, attr_name)
 
 
-def _get_lazy_text_class():
-    global _lazy_text_class
-    if _lazy_text_class is None:
-        from .lazy_text import LazyText
+def _make_cached_getter(
+    getter_name: str, module_name: str, attr_name: str, *, instantiate: bool
+) -> Callable[[], Any]:
+    def getter() -> Any:
+        value = _GETTER_CACHE.get(getter_name)
+        if value is None:
+            loaded = _load_helper(module_name, attr_name)
+            value = loaded() if instantiate else loaded
+            _GETTER_CACHE[getter_name] = value
+        return value
 
-        _lazy_text_class = LazyText
-    return _lazy_text_class
-
-
-def _get_lazy_file_class():
-    global _lazy_file_class
-    if _lazy_file_class is None:
-        from .lazy_file import LazyFile
-
-        _lazy_file_class = LazyFile
-    return _lazy_file_class
+    getter.__name__ = getter_name
+    getter.__qualname__ = getter_name
+    return getter
 
 
-def _get_env_map():
-    global _env_map
-    if _env_map is None:
-        from .env import EnvMap
+def _make_lazy_wrapper(wrapper_name: str, getter_name: str) -> Callable[..., Any]:
+    getter = _GETTERS[getter_name]
 
-        _env_map = EnvMap()
-    return _env_map
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        return getter()(*args, **kwargs)
 
-
-def _get_incr_attr():
-    global _incr_attr
-    if _incr_attr is None:
-        from .augmented import __snail_incr_attr
-
-        _incr_attr = __snail_incr_attr
-    return _incr_attr
+    wrapper.__name__ = wrapper_name
+    wrapper.__qualname__ = wrapper_name
+    return wrapper
 
 
-def _get_incr_index():
-    global _incr_index
-    if _incr_index is None:
-        from .augmented import __snail_incr_index
-
-        _incr_index = __snail_incr_index
-    return _incr_index
-
-
-def _get_aug_attr():
-    global _aug_attr
-    if _aug_attr is None:
-        from .augmented import __snail_aug_attr
-
-        _aug_attr = __snail_aug_attr
-    return _aug_attr
+for _getter_name, (_module_name, _attr_name, _instantiate) in _GETTER_REGISTRY.items():
+    _getter = _make_cached_getter(
+        _getter_name, _module_name, _attr_name, instantiate=_instantiate
+    )
+    _GETTERS[_getter_name] = _getter
+    globals()[_getter_name] = _getter
 
 
-def _get_aug_index():
-    global _aug_index
-    if _aug_index is None:
-        from .augmented import __snail_aug_index
-
-        _aug_index = __snail_aug_index
-    return _aug_index
-
-
-def _lazy_compact_try(expr_fn, fallback_fn=None):
-    return _get_compact_try()(expr_fn, fallback_fn)
-
-
-def _lazy_regex_search(value, pattern):
-    return _get_regex_search()(value, pattern)
-
-
-def _lazy_regex_compile(pattern):
-    return _get_regex_compile()(pattern)
-
-
-def _lazy_subprocess_capture(cmd: str):
-    return _get_subprocess_capture()(cmd)
-
-
-def _lazy_subprocess_status(cmd: str):
-    return _get_subprocess_status()(cmd)
-
-
-def _lazy_jmespath_query(query: str):
-    return _get_jmespath_query()(query)
-
-
-def _lazy_js(input_data=None):
-    return _get_js()(input_data)
-
-
-def _lazy_incr_attr(obj, attr: str, delta: int, pre: bool):
-    return _get_incr_attr()(obj, attr, delta, pre)
-
-
-def _lazy_incr_index(obj, index, delta: int, pre: bool):
-    return _get_incr_index()(obj, index, delta, pre)
-
-
-def _lazy_aug_attr(obj, attr: str, value, op: str):
-    return _get_aug_attr()(obj, attr, value, op)
-
-
-def _lazy_aug_index(obj, index, value, op: str):
-    return _get_aug_index()(obj, index, value, op)
+for _wrapper_name, _getter_name in _LAZY_WRAPPER_REGISTRY.items():
+    _wrapper = _make_lazy_wrapper(_wrapper_name, _getter_name)
+    _LAZY_WRAPPERS[_wrapper_name] = _wrapper
+    globals()[_wrapper_name] = _wrapper
 
 
 def __snail_awk_split_internal(
@@ -273,23 +189,15 @@ def __snail_contains_not__(left, right):
 
 
 def install_helpers(globals_dict: dict) -> None:
-    globals_dict["__snail_compact_try"] = _lazy_compact_try
-    globals_dict["__snail_regex_search"] = _lazy_regex_search
-    globals_dict["__snail_regex_compile"] = _lazy_regex_compile
-    globals_dict["__SnailSubprocessCapture"] = _lazy_subprocess_capture
-    globals_dict["__SnailSubprocessStatus"] = _lazy_subprocess_status
-    globals_dict["__snail_jmespath_query"] = _lazy_jmespath_query
+    for helper_name, wrapper_name in _INSTALL_LAZY_HELPER_REGISTRY.items():
+        globals_dict[helper_name] = _LAZY_WRAPPERS[wrapper_name]
+
     globals_dict["__snail_partial"] = __snail_partial
     globals_dict["__snail_contains__"] = __snail_contains__
     globals_dict["__snail_contains_not__"] = __snail_contains_not__
-    globals_dict["__snail_incr_attr"] = _lazy_incr_attr
-    globals_dict["__snail_incr_index"] = _lazy_incr_index
-    globals_dict["__snail_aug_attr"] = _lazy_aug_attr
-    globals_dict["__snail_aug_index"] = _lazy_aug_index
     globals_dict["__snail_awk_split"] = __snail_awk_split
     globals_dict["__snail_awk_field_separators"] = None
     globals_dict["__snail_awk_include_whitespace"] = False
-    globals_dict["__snail_env"] = _get_env_map()
-    globals_dict["js"] = _lazy_js
-    globals_dict["__SnailLazyText"] = _get_lazy_text_class()
-    globals_dict["__SnailLazyFile"] = _get_lazy_file_class()
+
+    for helper_name, getter_name in _INSTALL_EAGER_HELPER_REGISTRY.items():
+        globals_dict[helper_name] = _GETTERS[getter_name]()
