@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import importlib
 import importlib.util
+import inspect
 import io
 import json
 import os
@@ -1698,23 +1699,114 @@ def test_regex_match_non_string_value_raises() -> None:
 
 
 def test_runtime_helpers_installed_in_exec_globals() -> None:
-    runtime = importlib.import_module("snail.runtime")
+    runtime = importlib.reload(importlib.import_module("snail.runtime"))
+    runtime_env = importlib.import_module("snail.runtime.env")
     globals_dict: dict[str, object] = {}
     runtime.install_helpers(globals_dict)
 
-    helper_names = [
+    expected_keys = {
+        "__snail_compact_try",
+        "__snail_regex_search",
+        "__snail_regex_compile",
+        "__SnailSubprocessCapture",
+        "__SnailSubprocessStatus",
+        "__snail_jmespath_query",
+        "__snail_partial",
+        "__snail_contains__",
+        "__snail_contains_not__",
         "__snail_incr_attr",
         "__snail_incr_index",
         "__snail_aug_attr",
         "__snail_aug_index",
+        "__snail_awk_split",
+        "__snail_awk_field_separators",
+        "__snail_awk_include_whitespace",
+        "__snail_env",
+        "js",
+        "__SnailLazyText",
+        "__SnailLazyFile",
+    }
+    assert set(globals_dict) == expected_keys
+
+    lazy_wrapper_names = [
+        "__snail_compact_try",
         "__snail_regex_search",
         "__snail_regex_compile",
-        "__snail_contains__",
-        "__snail_contains_not__",
+        "__SnailSubprocessCapture",
+        "__SnailSubprocessStatus",
+        "__snail_jmespath_query",
+        "__snail_incr_attr",
+        "__snail_incr_index",
+        "__snail_aug_attr",
+        "__snail_aug_index",
+        "js",
     ]
-    for name in helper_names:
-        assert name in globals_dict
+    for name in lazy_wrapper_names:
         assert callable(globals_dict[name])
+        assert not inspect.isclass(globals_dict[name])
+
+    assert callable(globals_dict["__snail_partial"])
+    assert callable(globals_dict["__snail_contains__"])
+    assert callable(globals_dict["__snail_contains_not__"])
+    assert callable(globals_dict["__snail_awk_split"])
+    assert globals_dict["__snail_awk_field_separators"] is None
+    assert globals_dict["__snail_awk_include_whitespace"] is False
+    assert isinstance(globals_dict["__snail_env"], runtime_env.EnvMap)
+    assert inspect.isclass(globals_dict["__SnailLazyText"])
+    assert inspect.isclass(globals_dict["__SnailLazyFile"])
+
+    globals_dict_again: dict[str, object] = {}
+    runtime.install_helpers(globals_dict_again)
+    assert globals_dict["__snail_env"] is globals_dict_again["__snail_env"]
+
+
+def test_runtime_lazy_helpers_import_on_first_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = importlib.reload(importlib.import_module("snail.runtime"))
+
+    lazy_module_names = [
+        "snail.runtime.compact_try",
+        "snail.runtime.regex",
+        "snail.runtime.subprocess",
+        "snail.runtime.structured_accessor",
+        "snail.runtime.augmented",
+    ]
+    for module_name in lazy_module_names:
+        monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    tracked_relative_imports = {
+        ".compact_try",
+        ".regex",
+        ".subprocess",
+        ".structured_accessor",
+        ".augmented",
+    }
+    import_calls: list[str] = []
+    original_import_module = runtime.importlib.import_module
+
+    def trace_import(name: str, package: Optional[str] = None):
+        if package == runtime.__name__ and name in tracked_relative_imports:
+            import_calls.append(name)
+        return original_import_module(name, package)
+
+    monkeypatch.setattr(runtime.importlib, "import_module", trace_import)
+
+    globals_dict: dict[str, object] = {}
+    runtime.install_helpers(globals_dict)
+
+    assert import_calls == []
+    for module_name in lazy_module_names:
+        assert module_name not in sys.modules
+
+    regex_compile = globals_dict["__snail_regex_compile"]
+    assert callable(regex_compile)
+    regex_compile("a+")
+    assert import_calls.count(".regex") == 1
+    assert "snail.runtime.regex" in sys.modules
+
+    regex_compile("b+")
+    assert import_calls.count(".regex") == 1
 
 
 def test_runtime_run_subprocess_capture_normalizes_input(
