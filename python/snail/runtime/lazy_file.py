@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import sys
 
+from .lazy_proxy import LazyProxy
 
-class LazyFile:
+
+class LazyFile(LazyProxy):
     """Context manager that opens the file on first access."""
 
     __slots__ = ("_path", "_mode", "_kwargs", "_fd", "_closed", "_owns_fd")
@@ -42,11 +44,8 @@ class LazyFile:
             self._fd.close()
         return False
 
-    def __getattr__(self, name):
-        return getattr(self._ensure_open(), name)
-
-    def __iter__(self):
-        return iter(self._ensure_open())
+    def _proxy_target(self):
+        return self._ensure_open()
 
     def __next__(self):
-        return next(self._ensure_open())
+        return next(self._proxy_target())

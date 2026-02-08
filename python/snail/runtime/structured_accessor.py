@@ -17,79 +17,74 @@ def _append_transpiled_char(out: list[str], ch: str) -> None:
     out.append(ch)
 
 
+def _consume_passthrough_quoted_segment(
+    query: str, i: int, quote: str, out: list[str]
+) -> int:
+    while i < len(query):
+        ch = query[i]
+        out.append(ch)
+        i += 1
+        if ch == "\\" and i < len(query):
+            out.append(query[i])
+            i += 1
+            continue
+        if ch == quote:
+            return i
+    return i
+
+
+def _consume_transpiled_double_quoted_segment(
+    query: str, i: int, out: list[str]
+) -> int:
+    out.append("'")
+    i += 1
+    while i < len(query):
+        ch = query[i]
+        if ch == '"':
+            out.append("'")
+            return i + 1
+        if ch == "\\" and i + 1 < len(query):
+            nxt = query[i + 1]
+            if nxt == '"':
+                _append_transpiled_char(out, '"')
+                i += 2
+                continue
+            if nxt == "\\":
+                _append_transpiled_char(out, "\\")
+                i += 2
+                continue
+            _append_transpiled_char(out, "\\")
+            i += 1
+            continue
+        _append_transpiled_char(out, ch)
+        i += 1
+    return i
+
+
 def _transpile_jmespath_query(query: str) -> str:
     out: list[str] = []
-    state = "normal"
     i = 0
     while i < len(query):
         ch = query[i]
-        if state == "normal":
-            if ch == "\\" and i + 1 < len(query) and query[i + 1] == '"':
-                out.append('"')
-                i += 2
-                continue
-            if ch == "'":
-                state = "single"
-                out.append(ch)
-                i += 1
-                continue
-            if ch == "`":
-                state = "backtick"
-                out.append(ch)
-                i += 1
-                continue
-            if ch == '"':
-                state = "double"
-                out.append("'")
-                i += 1
-                continue
-            out.append(ch)
-            i += 1
+        if ch == "\\" and i + 1 < len(query) and query[i + 1] == '"':
+            out.append('"')
+            i += 2
             continue
 
-        if state == "single":
-            out.append(ch)
-            if ch == "\\" and i + 1 < len(query):
-                out.append(query[i + 1])
-                i += 2
-                continue
-            if ch == "'":
-                state = "normal"
-            i += 1
+        if ch == "'":
+            i = _consume_passthrough_quoted_segment(query, i, "'", out)
             continue
 
-        if state == "backtick":
-            out.append(ch)
-            if ch == "\\" and i + 1 < len(query):
-                out.append(query[i + 1])
-                i += 2
-                continue
-            if ch == "`":
-                state = "normal"
-            i += 1
+        if ch == "`":
+            i = _consume_passthrough_quoted_segment(query, i, "`", out)
             continue
 
-        if state == "double":
-            if ch == '"':
-                out.append("'")
-                state = "normal"
-                i += 1
-                continue
-            if ch == "\\" and i + 1 < len(query):
-                nxt = query[i + 1]
-                if nxt == '"':
-                    _append_transpiled_char(out, '"')
-                    i += 2
-                    continue
-                if nxt == "\\":
-                    _append_transpiled_char(out, "\\")
-                    i += 2
-                    continue
-                _append_transpiled_char(out, "\\")
-                i += 1
-                continue
-            _append_transpiled_char(out, ch)
-            i += 1
+        if ch == '"':
+            i = _consume_transpiled_double_quoted_segment(query, i, out)
+            continue
+
+        out.append(ch)
+        i += 1
 
     return "".join(out)
 
@@ -128,6 +123,13 @@ def _parse_jsonl(content: str):
     return items
 
 
+def _loads_json_or_jsonl(content: str):
+    try:
+        return _json.loads(content)
+    except _json.JSONDecodeError:
+        return _parse_jsonl(content)
+
+
 def js(input_data=None):
     """Parse JSON from various input sources.
 
@@ -154,20 +156,13 @@ def js(input_data=None):
             if _os.path.exists(input_data):
                 with open(input_data, "r", encoding="utf-8") as handle:
                     content = handle.read()
-                try:
-                    return _json.loads(content)
-                except _json.JSONDecodeError:
-                    return _parse_jsonl(content)
-            else:
-                return _parse_jsonl(input_data)
+                return _loads_json_or_jsonl(content)
+            return _parse_jsonl(input_data)
     elif hasattr(input_data, "read"):
         content = input_data.read()
         if isinstance(content, bytes):
             content = content.decode("utf-8")
-        try:
-            return _json.loads(content)
-        except _json.JSONDecodeError:
-            return _parse_jsonl(content)
+        return _loads_json_or_jsonl(content)
     elif isinstance(input_data, (dict, list, int, float, bool)) or input_data is None:
         return input_data
     else:

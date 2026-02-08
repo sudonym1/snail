@@ -4,6 +4,7 @@ import ast
 import importlib
 import importlib.util
 import io
+import json
 import os
 import re
 import shlex
@@ -420,6 +421,28 @@ def test_js_does_not_require_input_when_stdin_is_not_a_tty(
     assert captured.out == ""
 
 
+def test_js_existing_path_preferred_after_json_decode_failure(tmp_path: Path) -> None:
+    runtime_structured = importlib.import_module("snail.runtime.structured_accessor")
+    data_path = tmp_path / "payload.json"
+    data_path.write_text('{"name": "from-file"}')
+
+    assert runtime_structured.js(str(data_path)) == {"name": "from-file"}
+
+
+def test_js_invalid_jsonl_line_raises_json_decode_error() -> None:
+    runtime_structured = importlib.import_module("snail.runtime.structured_accessor")
+
+    with pytest.raises(json.JSONDecodeError):
+        runtime_structured.js('{"ok": 1}\nnot-json')
+
+
+def test_js_file_like_bytes_jsonl_fallback() -> None:
+    runtime_structured = importlib.import_module("snail.runtime.structured_accessor")
+
+    data = io.BytesIO(b'{"name": "Ada"}\n\n{"name": "Lin"}\n')
+    assert runtime_structured.js(data) == [{"name": "Ada"}, {"name": "Lin"}]
+
+
 def test_jmespath_double_quotes_string_literal(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -460,6 +483,20 @@ def test_jmespath_escaped_double_quotes_for_identifier(
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
     assert captured.out == "1\n"
+
+
+def test_jmespath_backtick_json_literal_preserved(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = "\n".join(
+        [
+            'data = js(%{"items": [%{"id": 1}, %{"id": 2}]})',
+            "print(data | $[items[?id==`1`].id])",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "[1]\n"
 
 
 def test_pipeline_placeholder(capsys: pytest.CaptureFixture[str]) -> None:
@@ -1661,6 +1698,48 @@ def test_subprocess_status_error_fallback_returns_returncode(
     fallback = getattr(excinfo.value, "__fallback__", None)
     assert callable(fallback)
     assert fallback() == 7
+
+
+def test_lazy_text_reads_once_and_caches() -> None:
+    runtime_lazy_text = importlib.import_module("snail.runtime.lazy_text")
+
+    class CountingReader:
+        def __init__(self):
+            self.calls = 0
+
+        def read(self):
+            self.calls += 1
+            return "hello"
+
+    reader = CountingReader()
+    lazy = runtime_lazy_text.LazyText(reader)
+
+    assert str(lazy) == "hello"
+    assert len(lazy) == 5
+    assert "ell" in lazy
+    assert str(lazy) == "hello"
+    assert reader.calls == 1
+
+
+def test_lazy_file_dash_does_not_close_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_lazy_file = importlib.import_module("snail.runtime.lazy_file")
+
+    class TrackingStdin(io.StringIO):
+        def __init__(self, value: str):
+            super().__init__(value)
+            self.close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+            super().close()
+
+    fake_stdin = TrackingStdin("stdin data")
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+
+    with runtime_lazy_file.LazyFile("-", "r") as fd:
+        assert fd.read() == "stdin data"
+
+    assert fake_stdin.close_calls == 0
 
 
 # --- Tests for byte strings ---

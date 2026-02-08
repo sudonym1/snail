@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from .lazy_proxy import LazyProxy
 
-class LazyText:
+
+class LazyText(LazyProxy):
     """Lazily reads file content on first access."""
 
     __slots__ = ("_fd", "_text")
@@ -17,8 +19,11 @@ class LazyText:
             self._text = self._fd.read()
         return self._text
 
-    def __str__(self):
+    def _proxy_target(self):
         return self._ensure_loaded()
+
+    def __str__(self):
+        return self._proxy_target()
 
     def __repr__(self):
         return repr(str(self))
@@ -34,9 +39,6 @@ class LazyText:
     def __len__(self):
         return len(str(self))
 
-    def __iter__(self):
-        return iter(str(self))
-
     def __contains__(self, item):
         return item in str(self)
 
@@ -45,6 +47,3 @@ class LazyText:
 
     def __radd__(self, other):
         return other + str(self)
-
-    def __getattr__(self, name):
-        return getattr(str(self), name)
