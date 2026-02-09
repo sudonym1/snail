@@ -292,7 +292,7 @@ def test_traceback_highlights_library_snail() -> None:
 
 @pytest.fixture(autouse=True)
 def _stdin_devnull(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    with open("/dev/null", "r") as handle:
+    with open(os.devnull, "r") as handle:
         monkeypatch.setattr(sys, "stdin", handle)
         yield
 
@@ -1595,7 +1595,7 @@ def test_begin_end_regular_mode_oneliner_autoprint(
         pytest.param("print(sys.version_info.major)", "isdigit", "", id="sys"),
         pytest.param("print(os.name)", "membership", ("posix", "nt"), id="os"),
         pytest.param('sys = "custom"\nprint(sys)', "equals", "custom", id="shadow"),
-        pytest.param("print(Path('.').resolve())", "startswith", "/", id="path"),
+        pytest.param("print(Path('.').resolve())", "isabs", "", id="path"),
     ],
 )
 def test_auto_import_enabled_variants(
@@ -1613,6 +1613,8 @@ def test_auto_import_enabled_variants(
         assert output in expected
     elif check_mode == "equals":
         assert output == expected
+    elif check_mode == "isabs":
+        assert Path(output).is_absolute()
     else:
         assert output.startswith(expected)
 

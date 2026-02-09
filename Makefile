@@ -2,10 +2,6 @@
 
 UV ?= uv
 
-# Any use of snail will be automatically dropped in the case where snail isn't
-# on the path.
-SNAIL := $(if $(shell command -v snail 2>/dev/null),snail,bash -c 'cat > /dev/null' --)
-
 # Default target: test, build, and install
 all: test build install
 
@@ -33,7 +29,7 @@ develop: sync
 # Run all tests
 test: test-rust test-python develop
 	$(UV) run -- python -m pytest python/tests
-	sha1sum CLAUDE.md AGENTS.md | $(UV) run -- $(SNAIL) -a '{assert $$1 == prev:$$1?, "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"; prev=$$1}'
+	$(UV) run -- python -c 'from pathlib import Path; import hashlib; files=["CLAUDE.md", "AGENTS.md"]; digests=[hashlib.sha1(Path(f).read_bytes()).hexdigest() for f in files]; assert digests[0] == digests[1], "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"'
 
 # Build release wheels
 build: sync
