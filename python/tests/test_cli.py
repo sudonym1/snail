@@ -219,7 +219,9 @@ def test_parse_ast_api_begin_end_merge_order(
     )
     assert "begin_blocks" in result
     assert "end_blocks" in result
-    assert result.index(f'value: "{cli_begin}"') < result.index(f'value: "{file_begin}"')
+    assert result.index(f'value: "{cli_begin}"') < result.index(
+        f'value: "{file_begin}"'
+    )
     assert result.index(f'value: "{file_end}"') < result.index(f'value: "{cli_end}"')
 
 
@@ -931,7 +933,9 @@ def test_increment_attr_chain_single_evaluation(
     assert captured.out == "pre 11 11 1\npost 11 10 1\n"
 
 
-def test_assignment_target_attr_index_chains(capsys: pytest.CaptureFixture[str]) -> None:
+def test_assignment_target_attr_index_chains(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     script = "\n".join(
         [
             "class Cell {",
@@ -942,7 +946,7 @@ def test_assignment_target_attr_index_chains(capsys: pytest.CaptureFixture[str])
             "class Box {",
             "    def __init__(self) {",
             "        self.items = [Cell(0)]",
-            "        self.meta = %{\"count\": 0}",
+            '        self.meta = %{"count": 0}',
             "    }",
             "}",
             "box = Box()",
@@ -1623,9 +1627,7 @@ def test_auto_import_enabled_variants(
         pytest.param(["-I", "print(Path('.'))"], "Path", id="short-flag-path"),
     ],
 )
-def test_auto_import_disabled_variants(
-    args: list[str], expected_name: str
-) -> None:
+def test_auto_import_disabled_variants(args: list[str], expected_name: str) -> None:
     with pytest.raises(NameError) as excinfo:
         main(args)
     assert expected_name in str(excinfo.value)
@@ -1996,7 +1998,7 @@ def test_fstring_invalid_conversion_reports_syntax_error() -> None:
 
 def test_fstring_unterminated_expression_reports_syntax_error() -> None:
     with pytest.raises(SyntaxError) as excinfo:
-        main(["s = \"{'abc}\""])
+        main(['s = "{\'abc}"'])
     assert "unterminated f-string expression" in str(excinfo.value)
 
 
