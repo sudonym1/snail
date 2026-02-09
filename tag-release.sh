@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -exuo pipefail
 
+SED=$(type -p gsed || type -p sed)
 release_tag=${1?"usage: $0 vX.Y.Z"}
 release_version=${release_tag#v}
 
@@ -12,7 +13,7 @@ fi
 
 update_package_version() {
   local file_path=$1
-  sed -i "s/^version = \"[0-9.]*\"/version = \"${release_version}\"/" "${file_path}"
+  $SED -i "s/^version = \"[0-9.]*\"/version = \"${release_version}\"/" "${file_path}"
 }
 
 # Update project version and all crate versions.
@@ -20,7 +21,7 @@ update_package_version pyproject.toml
 for cargo_file in crates/*/Cargo.toml extras/tree-sitter-snail/Cargo.toml; do
   update_package_version "${cargo_file}"
 done
-sed -i "s/^pkgver=.*$/pkgver=${release_version}/" extras/arch/PKGBUILD
+$SED -i "s/^pkgver=.*$/pkgver=${release_version}/" extras/arch/PKGBUILD
 
 # Ensure CLI pulls the PyPI name for version metadata.
 grep -q 'version("snail-lang")' python/snail/__init__.py
