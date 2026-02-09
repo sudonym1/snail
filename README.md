@@ -324,7 +324,8 @@ Plug 'sudonym1/snail'
 }
 ```
 
-Then run `:TSInstall snail`.
+Open any `.snail` file and the parser will auto-install if needed.
+Manual fallback: `:TSInstall snail`.
 
 See [extras/vim/README.md](extras/vim/README.md) for details. Tree-sitter grammar available in `extras/tree-sitter-snail/`.
 

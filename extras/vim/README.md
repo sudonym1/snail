@@ -80,7 +80,8 @@ let g:snail_format_on_save = 1
 
 Tree-sitter is required for syntax highlighting, code folding, and parsing.
 Vim does not provide syntax highlighting for Snail. The plugin auto-registers
-the Snail parser with nvim-treesitter when running in Neovim.
+the Snail parser with nvim-treesitter when running in Neovim, and will
+automatically install it when missing.
 
 ### Quick Setup
 
@@ -88,11 +89,15 @@ the Snail parser with nvim-treesitter when running in Neovim.
 
 2. **Restart Neovim** to load the Snail plugin.
 
-3. **Install the parser:**
+3. **Open any `.snail` file**. The parser will auto-install if needed.
 
-   ```vim
-   :TSInstall snail
-   ```
+If you want to disable automatic installation, set:
+
+```vim
+let g:snail_treesitter_auto_install = 0
+```
+
+You can still install manually with `:TSInstall snail`.
 
 See `extras/tree-sitter-snail/README.md` for grammar details.
 

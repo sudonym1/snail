@@ -57,7 +57,8 @@ Tree-sitter grammar for the Snail programming language.
    })
    ```
 
-   Then run `:TSInstall snail` in Neovim.
+   Open any `.snail` file and Snail will auto-install the parser if needed.
+   Manual fallback: `:TSInstall snail`.
 
 2. **Option B: Manual compilation**
 
@@ -88,7 +89,8 @@ Tree-sitter grammar for the Snail programming language.
    Plug 'sudonym1/snail'
    ```
 
-   Then run `:TSInstall snail` in Neovim.
+   Open any `.snail` file and Snail will auto-install the parser if needed.
+   Manual fallback: `:TSInstall snail`.
 
 ### For other editors
 

@@ -58,8 +58,12 @@ Manual installation:
     - Neovim: ~/.config/nvim/
 
 Tree-sitter (Neovim only):
-    The plugin auto-registers the Snail parser with nvim-treesitter.
-    Restart Neovim, then install the parser with: >
+    The plugin auto-registers the Snail parser with nvim-treesitter and
+    auto-installs it when missing.
+    To disable auto-install: >
+        let g:snail_treesitter_auto_install = 0
+<
+    Manual fallback: >
         :TSInstall snail
 <
 
@@ -72,6 +76,13 @@ g:snail_format_on_save~
     Default: 0 (disabled)
 >
     let g:snail_format_on_save = 1
+<
+                                                *g:snail_treesitter_auto_install*
+g:snail_treesitter_auto_install~
+    Enable automatic Tree-sitter parser installation in Neovim.
+    Default: 1 (enabled)
+>
+    let g:snail_treesitter_auto_install = 0
 <
 ==============================================================================
 4. SYNTAX HIGHLIGHTING (TREE-SITTER)                              *snail-syntax*
