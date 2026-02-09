@@ -2072,7 +2072,7 @@ def _parse_snail_header(header: str) -> tuple[str, Optional[str]]:
 def _collect_readme_snail_sources(
     path: Path,
 ) -> list[tuple[str, int, str, Optional[str]]]:
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     sources: list[tuple[str, int, str, Optional[str]]] = []
 
     fence_re = re.compile(
@@ -2097,7 +2097,7 @@ _README_SNIPPET_IDS = [
 
 
 def _collect_readme_oneliners(path: Path) -> list[tuple[int, str, list[str]]]:
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     oneliners: list[tuple[int, str, list[str]]] = []
     fence_re = re.compile(r"```bash\n(?P<body>.*?)\n```", re.S)
     for match in fence_re.finditer(content):
