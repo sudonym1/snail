@@ -292,7 +292,7 @@ def test_traceback_highlights_library_snail() -> None:
 
 @pytest.fixture(autouse=True)
 def _stdin_devnull(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    with open("/dev/null", "r") as handle:
+    with open(os.devnull, "r") as handle:
         monkeypatch.setattr(sys, "stdin", handle)
         yield
 
@@ -1595,7 +1595,7 @@ def test_begin_end_regular_mode_oneliner_autoprint(
         pytest.param("print(sys.version_info.major)", "isdigit", "", id="sys"),
         pytest.param("print(os.name)", "membership", ("posix", "nt"), id="os"),
         pytest.param('sys = "custom"\nprint(sys)', "equals", "custom", id="shadow"),
-        pytest.param("print(Path('.').resolve())", "startswith", "/", id="path"),
+        pytest.param("print(Path('.').resolve())", "isabs", "", id="path"),
     ],
 )
 def test_auto_import_enabled_variants(
@@ -1613,6 +1613,8 @@ def test_auto_import_enabled_variants(
         assert output in expected
     elif check_mode == "equals":
         assert output == expected
+    elif check_mode == "isabs":
+        assert Path(output).is_absolute()
     else:
         assert output.startswith(expected)
 
@@ -2070,7 +2072,7 @@ def _parse_snail_header(header: str) -> tuple[str, Optional[str]]:
 def _collect_readme_snail_sources(
     path: Path,
 ) -> list[tuple[str, int, str, Optional[str]]]:
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     sources: list[tuple[str, int, str, Optional[str]]] = []
 
     fence_re = re.compile(
@@ -2095,7 +2097,7 @@ _README_SNIPPET_IDS = [
 
 
 def _collect_readme_oneliners(path: Path) -> list[tuple[int, str, list[str]]]:
-    content = path.read_text()
+    content = path.read_text(encoding="utf-8")
     oneliners: list[tuple[int, str, list[str]]] = []
     fence_re = re.compile(r"```bash\n(?P<body>.*?)\n```", re.S)
     for match in fence_re.finditer(content):
@@ -2231,6 +2233,7 @@ def test_readme_snail_oneliners(
 
     monkeypatch.setattr(subprocess, "run", _fake_run)
     if mode == "awk":
+        set_stdin(monkeypatch, "", is_tty=False)
         assert main(["--awk", *argv]) == 0, f"failed at {path}:{line_no}"
     elif mode == "map":
         map_file = _ensure_readme_map_file(tmp_path)
