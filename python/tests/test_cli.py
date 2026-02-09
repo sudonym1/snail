@@ -2233,6 +2233,7 @@ def test_readme_snail_oneliners(
 
     monkeypatch.setattr(subprocess, "run", _fake_run)
     if mode == "awk":
+        set_stdin(monkeypatch, "", is_tty=False)
         assert main(["--awk", *argv]) == 0, f"failed at {path}:{line_no}"
     elif mode == "map":
         map_file = _ensure_readme_map_file(tmp_path)
