@@ -1692,6 +1692,76 @@ fn newline_before_infix_operator_continues_expression() {
 }
 
 #[test]
+fn newline_before_dot_continues_attribute_access() {
+    let program = parse_ok("value = obj\n.attr");
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Attribute {
+            value: inner, attr, ..
+        } => {
+            expect_name(inner.as_ref(), "obj");
+            assert_eq!(attr, "attr");
+        }
+        other => panic!("Expected attribute expression, got {other:?}"),
+    }
+}
+
+#[test]
+fn newline_before_dot_continues_attribute_assignment_target() {
+    let program = parse_ok("obj\n.attr = 1");
+    assert_eq!(program.stmts.len(), 1);
+
+    let (targets, value) = expect_assign(&program.stmts[0]);
+    match &targets[0] {
+        AssignTarget::Attribute {
+            value: inner, attr, ..
+        } => {
+            expect_name(inner.as_ref(), "obj");
+            assert_eq!(attr, "attr");
+        }
+        other => panic!("Expected attribute target, got {other:?}"),
+    }
+    expect_number(value, "1");
+}
+
+#[test]
+fn newline_after_dot_continues_attribute_access() {
+    let program = parse_ok("value = obj.\nattr");
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Attribute {
+            value: inner, attr, ..
+        } => {
+            expect_name(inner.as_ref(), "obj");
+            assert_eq!(attr, "attr");
+        }
+        other => panic!("Expected attribute expression, got {other:?}"),
+    }
+}
+
+#[test]
+fn newline_after_dot_continues_attribute_assignment_target() {
+    let program = parse_ok("obj.\nattr = 1");
+    assert_eq!(program.stmts.len(), 1);
+
+    let (targets, value) = expect_assign(&program.stmts[0]);
+    match &targets[0] {
+        AssignTarget::Attribute {
+            value: inner, attr, ..
+        } => {
+            expect_name(inner.as_ref(), "obj");
+            assert_eq!(attr, "attr");
+        }
+        other => panic!("Expected attribute target, got {other:?}"),
+    }
+    expect_number(value, "1");
+}
+
+#[test]
 fn compact_try_stmt_still_requires_separator() {
     let err = parse_err("x = risky()? y = 2");
     assert!(err.to_string().contains("expected statement separator"));

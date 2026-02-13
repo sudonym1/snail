@@ -118,7 +118,7 @@ assign_target_tuple = { assign_target_item ~ line_cont ~ "," ~ line_cont ~ (assi
 assign_target_item = _{ assign_target_star | assign_target }
 assign_target_star = { "*" ~ assign_target }
 assign_target = _{ assign_target_ref | assign_list | assign_tuple }
-assign_target_ref = { assign_target_atom ~ (attribute | index)* }
+assign_target_ref = { assign_target_atom ~ ((line_cont ~ attribute) | index)* }
 assign_target_atom = { identifier | "(" ~ line_cont ~ assign_target_ref ~ line_cont ~ ")" }
 assign_list = { "[" ~ line_cont ~ assign_target_items? ~ line_cont ~ "]" }
 assign_target_items = { assign_target_item ~ (line_cont ~ "," ~ line_cont ~ assign_target_item)* ~ (line_cont ~ ",")? }
@@ -143,7 +143,7 @@ try_fallback = { ":" ~ try_fallback_unary }
 // Fallback expression grammar (mirrors unary/power/primary but without try_suffix)
 try_fallback_unary = { ((prefix_incr | unary_op) ~ line_cont)* ~ try_fallback_power }
 try_fallback_power = { try_fallback_primary ~ (line_cont ~ pow_op ~ line_cont ~ try_fallback_primary)* }
-try_fallback_primary = { atom ~ (call | attribute | index | postfix_incr)* }
+try_fallback_primary = { atom ~ (call | (line_cont ~ attribute) | index | postfix_incr)* }
 
 // Ternary conditional
 if_expr = { or_expr ~ (line_cont ~ "if" ~ line_cont ~ or_expr ~ line_cont ~ "else" ~ line_cont ~ if_expr)? }
@@ -177,7 +177,7 @@ power = { primary ~ (line_cont ~ pow_op ~ line_cont ~ primary)* }
 pow_op = { "**" }
 
 // Primary expressions: atoms with postfix operations
-primary = { atom ~ (call | attribute | index | try_suffix | postfix_incr)* }
+primary = { atom ~ (call | (line_cont ~ attribute) | index | try_suffix | postfix_incr)* }
 postfix_incr = { "++" | "--" }
 
 // Function calls with positional, keyword, *args, **kwargs
@@ -189,7 +189,7 @@ star_arg = { "*" ~ line_cont ~ expr }
 kw_star_arg = { "**" ~ line_cont ~ expr }
 
 // Attribute access and indexing/slicing
-attribute = { "." ~ (identifier | attribute_index) }
+attribute = { "." ~ line_cont ~ (identifier | attribute_index) }
 attribute_index = @{ ASCII_DIGIT+ }
 index = { "[" ~ line_cont ~ slice ~ line_cont ~ "]" }
 slice = { slice_expr | expr }
