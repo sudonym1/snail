@@ -115,7 +115,7 @@ def _print_help(file=None) -> None:
     print(_DESCRIPTION, file=file)
     print("", file=file)
     print("options:", file=file)
-    print("  -f <file>               read Snail source from file", file=file)
+    print("  -f <file>               read Snail source from file ('-' for stdin)", file=file)
     print("  -a, --awk               awk mode", file=file)
     print("  -m, --map               map mode (process files one at a time)", file=file)
     print(
@@ -346,12 +346,23 @@ def main(argv: Optional[list[str]] = None) -> int:
         from pathlib import Path
 
         path = Path(namespace.file)
-        try:
-            source = path.read_text()
-        except OSError as exc:
-            print(f"failed to read {path}: {exc}", file=sys.stderr)
-            return 1
-        filename = str(path)
+        if str(path) == "-":
+            try:
+                is_tty = sys.stdin.isatty()
+            except Exception:
+                is_tty = False
+            if is_tty:
+                print("no input provided", file=sys.stderr)
+                return 1
+            source = sys.stdin.read()
+            filename = "<stdin>"
+        else:
+            try:
+                source = path.read_text()
+            except OSError as exc:
+                print(f"failed to read {path}: {exc}", file=sys.stderr)
+                return 1
+            filename = str(path)
         args = [filename, *namespace.args]
     else:
         if not namespace.args:

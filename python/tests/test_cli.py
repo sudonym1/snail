@@ -325,6 +325,22 @@ def test_inline_print(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "hi\n"
 
 
+def test_stdin_program(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    set_stdin(monkeypatch, "print('hi')\n")
+    assert main(["-f", "-"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "hi\n"
+
+
+def test_stdin_program_requires_non_tty(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    set_stdin(monkeypatch, "", is_tty=True)
+    assert main(["-f", "-"]) == 1
+    captured = capsys.readouterr()
+    assert "no input provided" in captured.err
+
+
 def test_implicit_return_function(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [
