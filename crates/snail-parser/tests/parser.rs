@@ -207,6 +207,196 @@ fn parses_while_let() {
 }
 
 #[test]
+fn parses_for_header_with_newlines() {
+    let source = "for\nx\nin\nrange(1) { }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::For {
+            target, iter, body, ..
+        } => {
+            assert!(matches!(target, AssignTarget::Name { name, .. } if name == "x"));
+            match iter {
+                Expr::Call { func, args, .. } => {
+                    expect_name(func.as_ref(), "range");
+                    assert_eq!(args.len(), 1);
+                    match &args[0] {
+                        Argument::Positional { value, .. } => expect_number(value, "1"),
+                        other => panic!("Expected positional argument, got {other:?}"),
+                    }
+                }
+                other => panic!("Expected call expression, got {other:?}"),
+            }
+            assert!(body.is_empty());
+        }
+        other => panic!("Expected for statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_multiline_if_while_with_headers() {
+    let source = "if\nTrue\n{ pass }\nwhile\nFalse\n{ pass }\nwith\nctx\n{ pass }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 3);
+
+    match &program.stmts[0] {
+        Stmt::If { cond, body, .. } => {
+            expect_condition_expr(cond);
+            assert_eq!(body.len(), 1);
+            assert!(matches!(&body[0], Stmt::Pass { .. }));
+        }
+        other => panic!("Expected if statement, got {other:?}"),
+    }
+
+    match &program.stmts[1] {
+        Stmt::While { cond, body, .. } => {
+            expect_condition_expr(cond);
+            assert_eq!(body.len(), 1);
+            assert!(matches!(&body[0], Stmt::Pass { .. }));
+        }
+        other => panic!("Expected while statement, got {other:?}"),
+    }
+
+    match &program.stmts[2] {
+        Stmt::With { items, body, .. } => {
+            assert_eq!(items.len(), 1);
+            expect_name(&items[0].context, "ctx");
+            assert!(items[0].target.is_none());
+            assert_eq!(body.len(), 1);
+            assert!(matches!(&body[0], Stmt::Pass { .. }));
+        }
+        other => panic!("Expected with statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_multiline_def_class_try_headers() {
+    let source = "def\nfoo\n()\n{ pass }\nclass\nC\n{ pass }\ntry\n{ pass }\nexcept\nException\n{ pass }\nfinally\n{ pass }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 3);
+
+    match &program.stmts[0] {
+        Stmt::Def {
+            name, params, body, ..
+        } => {
+            assert_eq!(name, "foo");
+            assert!(params.is_empty());
+            assert_eq!(body.len(), 1);
+            assert!(matches!(&body[0], Stmt::Pass { .. }));
+        }
+        other => panic!("Expected def statement, got {other:?}"),
+    }
+
+    match &program.stmts[1] {
+        Stmt::Class { name, body, .. } => {
+            assert_eq!(name, "C");
+            assert_eq!(body.len(), 1);
+            assert!(matches!(&body[0], Stmt::Pass { .. }));
+        }
+        other => panic!("Expected class statement, got {other:?}"),
+    }
+
+    match &program.stmts[2] {
+        Stmt::Try {
+            body,
+            handlers,
+            finally_body,
+            ..
+        } => {
+            assert_eq!(body.len(), 1);
+            assert_eq!(handlers.len(), 1);
+            match &handlers[0].type_name {
+                Some(expr) => expect_name(expr, "Exception"),
+                None => panic!("Expected exception type"),
+            }
+            assert!(handlers[0].name.is_none());
+            assert_eq!(handlers[0].body.len(), 1);
+            assert!(matches!(&handlers[0].body[0], Stmt::Pass { .. }));
+
+            let finally_body = finally_body.as_ref().expect("expected finally body");
+            assert_eq!(finally_body.len(), 1);
+            assert!(matches!(&finally_body[0], Stmt::Pass { .. }));
+        }
+        other => panic!("Expected try statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_except_as_with_newlines() {
+    let source = "try { pass }\nexcept Exception\nas\ne\n{ pass }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Try { handlers, .. } => {
+            assert_eq!(handlers.len(), 1);
+            match &handlers[0].type_name {
+                Some(expr) => expect_name(expr, "Exception"),
+                None => panic!("Expected exception type"),
+            }
+            assert_eq!(handlers[0].name.as_deref(), Some("e"));
+        }
+        other => panic!("Expected try statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_multiline_assert_del_import_headers() {
+    let source = "assert\nTrue\n,\n\"ok\"\ndel\nitems[0]\nimport\nos\nfrom\nos\nimport\npath\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 4);
+
+    match &program.stmts[0] {
+        Stmt::Assert { test, message, .. } => {
+            assert!(matches!(test, Expr::Bool { value: true, .. }));
+            match message {
+                Some(Expr::String { value, .. }) => assert_eq!(value, "ok"),
+                other => panic!("Expected assert message, got {other:?}"),
+            }
+        }
+        other => panic!("Expected assert statement, got {other:?}"),
+    }
+
+    match &program.stmts[1] {
+        Stmt::Delete { targets, .. } => {
+            assert_eq!(targets.len(), 1);
+            match &targets[0] {
+                AssignTarget::Index { value, index, .. } => {
+                    expect_name(value.as_ref(), "items");
+                    expect_number(index.as_ref(), "0");
+                }
+                other => panic!("Expected index delete target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected delete statement, got {other:?}"),
+    }
+
+    match &program.stmts[2] {
+        Stmt::Import { items, .. } => {
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0].name, vec!["os"]);
+            assert_eq!(items[0].alias, None);
+        }
+        other => panic!("Expected import statement, got {other:?}"),
+    }
+
+    match &program.stmts[3] {
+        Stmt::ImportFrom { module, items, .. } => {
+            assert_eq!(module.as_ref(), Some(&vec!["os".to_string()]));
+            match items {
+                ImportFromItems::Names(names) => {
+                    assert_eq!(names.len(), 1);
+                    assert_eq!(names[0].name, vec!["path"]);
+                }
+                other => panic!("Expected name imports, got {other:?}"),
+            }
+        }
+        other => panic!("Expected from-import statement, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_destructuring_assignment() {
     let source = "x, y = [1, 2]\n[a, b] = pair\n";
     let program = parse_ok(source);
@@ -267,6 +457,80 @@ fn parses_starred_destructuring_assignment() {
             }
         }
         other => panic!("Expected list target, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_multiline_destructuring_assignment_and_for_targets() {
+    let source = "x,\ny = [1, 2]\n[a,\nb] = pair\nx,\n*rest = values\nfor\nx,\ny\nin\n[(1, 2)]\n{ pass }\nfor\n[a,\nb]\nin\n[[1, 2]]\n{ pass }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 5);
+
+    let (targets, _) = expect_assign(&program.stmts[0]);
+    match &targets[0] {
+        AssignTarget::Tuple { elements, .. } => {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "x"));
+            assert!(matches!(&elements[1], AssignTarget::Name { name, .. } if name == "y"));
+        }
+        other => panic!("Expected tuple target, got {other:?}"),
+    }
+
+    let (targets, _) = expect_assign(&program.stmts[1]);
+    match &targets[0] {
+        AssignTarget::List { elements, .. } => {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "a"));
+            assert!(matches!(&elements[1], AssignTarget::Name { name, .. } if name == "b"));
+        }
+        other => panic!("Expected list target, got {other:?}"),
+    }
+
+    let (targets, _) = expect_assign(&program.stmts[2]);
+    match &targets[0] {
+        AssignTarget::Tuple { elements, .. } => {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "x"));
+            match &elements[1] {
+                AssignTarget::Starred { target, .. } => assert!(
+                    matches!(target.as_ref(), AssignTarget::Name { name, .. } if name == "rest")
+                ),
+                other => panic!("Expected starred target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected tuple target, got {other:?}"),
+    }
+
+    match &program.stmts[3] {
+        Stmt::For { target, body, .. } => {
+            match target {
+                AssignTarget::Tuple { elements, .. } => {
+                    assert_eq!(elements.len(), 2);
+                    assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "x"));
+                    assert!(matches!(&elements[1], AssignTarget::Name { name, .. } if name == "y"));
+                }
+                other => panic!("Expected tuple target, got {other:?}"),
+            }
+            assert_eq!(body.len(), 1);
+            assert!(matches!(&body[0], Stmt::Pass { .. }));
+        }
+        other => panic!("Expected for statement, got {other:?}"),
+    }
+
+    match &program.stmts[4] {
+        Stmt::For { target, body, .. } => {
+            match target {
+                AssignTarget::List { elements, .. } => {
+                    assert_eq!(elements.len(), 2);
+                    assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "a"));
+                    assert!(matches!(&elements[1], AssignTarget::Name { name, .. } if name == "b"));
+                }
+                other => panic!("Expected list target, got {other:?}"),
+            }
+            assert_eq!(body.len(), 1);
+            assert!(matches!(&body[0], Stmt::Pass { .. }));
+        }
+        other => panic!("Expected for statement, got {other:?}"),
     }
 }
 

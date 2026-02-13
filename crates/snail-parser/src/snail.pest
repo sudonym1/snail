@@ -54,30 +54,30 @@ simple_stmt = _{
 block = { "{" ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ "}" }
 
 // Control flow: if/elif/else, while/else, for/else
-if_stmt = { "if" ~ if_cond ~ block ~ (stmt_sep* ~ "elif" ~ if_cond ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
-while_stmt = { "while" ~ while_cond ~ block ~ (stmt_sep* ~ "else" ~ block)? }
-for_stmt = { "for" ~ assign_target_list ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
+if_stmt = { "if" ~ line_cont ~ if_cond ~ line_cont ~ block ~ (stmt_sep* ~ "elif" ~ line_cont ~ if_cond ~ line_cont ~ block)* ~ (stmt_sep* ~ "else" ~ line_cont ~ block)? }
+while_stmt = { "while" ~ line_cont ~ while_cond ~ line_cont ~ block ~ (stmt_sep* ~ "else" ~ line_cont ~ block)? }
+for_stmt = { "for" ~ line_cont ~ assign_target_list ~ line_cont ~ "in" ~ line_cont ~ expr ~ line_cont ~ block ~ (stmt_sep* ~ "else" ~ line_cont ~ block)? }
 if_cond = { let_cond | expr }
 while_cond = { let_cond | expr }
-let_cond = { "let" ~ assign_target_list ~ "=" ~ expr ~ let_guard? }
+let_cond = { "let" ~ line_cont ~ assign_target_list ~ line_cont ~ "=" ~ line_cont ~ expr ~ let_guard? }
 let_guard = { ";" ~ line_cont ~ expr }
 
 // Function and class definitions
-def_stmt = { "def" ~ identifier ~ parameters? ~ block }
-class_stmt = { "class" ~ identifier ~ block }
+def_stmt = { "def" ~ line_cont ~ identifier ~ line_cont ~ parameters? ~ line_cont ~ block }
+class_stmt = { "class" ~ line_cont ~ identifier ~ line_cont ~ block }
 
 // Exception handling: try/except/else/finally
-try_stmt = { "try" ~ block ~ (try_except_tail | try_finally_tail) }
+try_stmt = { "try" ~ line_cont ~ block ~ (try_except_tail | try_finally_tail) }
 try_except_tail = _{ (stmt_sep* ~ except_clause)+ ~ (stmt_sep* ~ else_clause)? ~ (stmt_sep* ~ finally_clause)? }
 try_finally_tail = _{ stmt_sep* ~ finally_clause }
-except_clause = { "except" ~ (expr ~ ("as" ~ identifier)?)? ~ block }
-else_clause = { "else" ~ block }
-finally_clause = { "finally" ~ block }
+except_clause = { "except" ~ line_cont ~ (expr ~ (line_cont ~ "as" ~ line_cont ~ identifier)?)? ~ line_cont ~ block }
+else_clause = { "else" ~ line_cont ~ block }
+finally_clause = { "finally" ~ line_cont ~ block }
 
 // Context managers
-with_stmt = { "with" ~ with_items ~ block }
-with_items = { with_item ~ ("," ~ with_item)* }
-with_item = { expr ~ ("as" ~ assign_target)? }
+with_stmt = { "with" ~ line_cont ~ with_items ~ line_cont ~ block }
+with_items = { with_item ~ (line_cont ~ "," ~ line_cont ~ with_item)* }
+with_item = { expr ~ (line_cont ~ "as" ~ line_cont ~ assign_target)? }
 
 // Function parameters: regular, *args, **kwargs
 parameters = { "(" ~ line_cont ~ param_list? ~ line_cont ~ ")" }
@@ -90,39 +90,39 @@ kw_param = { "**" ~ identifier }
 // Simple statements
 return_stmt = { "return" ~ expr? }
 raise_stmt = { "raise" ~ expr? ~ ("from" ~ expr)? }
-assert_stmt = { "assert" ~ expr ~ ("," ~ expr)? }
-del_stmt = { "del" ~ assign_target ~ ("," ~ assign_target)* }
+assert_stmt = { "assert" ~ line_cont ~ expr ~ (line_cont ~ "," ~ line_cont ~ expr)? }
+del_stmt = { "del" ~ line_cont ~ assign_target ~ (line_cont ~ "," ~ line_cont ~ assign_target)* }
 break_stmt = { "break" }
 continue_stmt = { "continue" }
 pass_stmt = { "pass" }
 
 // Import statements: from/import and import
 import_stmt = _{ import_from | import_names }
-import_from = { "from" ~ import_from_module ~ "import" ~ import_from_items }
-import_names = { "import" ~ import_items }
+import_from = { "from" ~ line_cont ~ import_from_module ~ line_cont ~ "import" ~ line_cont ~ import_from_items }
+import_names = { "import" ~ line_cont ~ import_items }
 import_from_module = { relative_module | dotted_name }
 relative_module = { relative_dots ~ dotted_name? }
 relative_dots = { "."+ }
 import_from_items = { import_star | import_paren_items | import_items }
-import_items = { import_item ~ ("," ~ import_item)* }
+import_items = { import_item ~ (line_cont ~ "," ~ line_cont ~ import_item)* }
 import_items_multiline = { import_item ~ (NEWLINE* ~ "," ~ NEWLINE* ~ import_item)* }
 import_paren_items = { "(" ~ NEWLINE* ~ import_items_multiline ~ NEWLINE* ~ ","? ~ NEWLINE* ~ ")" }
 import_star = { "*" }
-import_item = { dotted_name ~ ("as" ~ identifier)? }
+import_item = { dotted_name ~ (line_cont ~ "as" ~ line_cont ~ identifier)? }
 dotted_name = { identifier ~ ("." ~ identifier)* }
 
 // Assignment and expression statements
 assign_stmt = { assign_target_list ~ "=" ~ line_cont ~ expr }
 assign_target_list = { assign_target_tuple | assign_target }
-assign_target_tuple = { assign_target_item ~ "," ~ (assign_target_item ~ ("," ~ assign_target_item)* ~ ","?)? }
+assign_target_tuple = { assign_target_item ~ line_cont ~ "," ~ line_cont ~ (assign_target_item ~ (line_cont ~ "," ~ line_cont ~ assign_target_item)* ~ (line_cont ~ ",")?)? }
 assign_target_item = _{ assign_target_star | assign_target }
 assign_target_star = { "*" ~ assign_target }
 assign_target = _{ assign_target_ref | assign_list | assign_tuple }
 assign_target_ref = { assign_target_atom ~ (attribute | index)* }
-assign_target_atom = { identifier | "(" ~ assign_target_ref ~ ")" }
-assign_list = { "[" ~ assign_target_items? ~ "]" }
-assign_target_items = { assign_target_item ~ ("," ~ assign_target_item)* ~ ","? }
-assign_tuple = { "(" ~ assign_target_tuple ~ ")" }
+assign_target_atom = { identifier | "(" ~ line_cont ~ assign_target_ref ~ line_cont ~ ")" }
+assign_list = { "[" ~ line_cont ~ assign_target_items? ~ line_cont ~ "]" }
+assign_target_items = { assign_target_item ~ (line_cont ~ "," ~ line_cont ~ assign_target_item)* ~ (line_cont ~ ",")? }
+assign_tuple = { "(" ~ line_cont ~ assign_target_tuple ~ line_cont ~ ")" }
 expr_stmt = { expr }
 
 // Expressions: precedence from lowest (aug assignment) to highest (power)
