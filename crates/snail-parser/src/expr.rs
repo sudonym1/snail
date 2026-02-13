@@ -260,8 +260,8 @@ fn parse_comparison(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
     let mut ops = Vec::new();
     let mut comparators = Vec::new();
     while let Some(op_pair) = inner.next() {
-        let op_str = op_pair.as_str();
-        let op = match op_str {
+        let op_text = op_pair.as_str().trim();
+        let op = match op_text {
             "==" => CompareOp::Eq,
             "!=" => CompareOp::NotEq,
             "<" => CompareOp::Lt,
@@ -270,11 +270,11 @@ fn parse_comparison(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
             ">=" => CompareOp::GtEq,
             "in" => CompareOp::In,
             "is" => CompareOp::Is,
-            s if s.trim() == "not in" => CompareOp::NotIn,
-            s if s.trim() == "is not" => CompareOp::IsNot,
+            "not in" => CompareOp::NotIn,
+            "is not" => CompareOp::IsNot,
             _ => {
                 return Err(error_with_span(
-                    format!("unknown comparison operator: {}", op_str),
+                    format!("unknown comparison operator: {}", op_text),
                     span_from_pair(&op_pair, source),
                     source,
                 ));

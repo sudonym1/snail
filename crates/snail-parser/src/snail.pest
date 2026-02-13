@@ -32,6 +32,7 @@ stmt_list = { stmt_item* ~ final_stmt? }
 stmt_item = _{ compound_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ }
 final_stmt = _{ compound_stmt | simple_stmt }
 stmt_sep = _{ ";" ~ NEWLINE* | NEWLINE+ }
+line_cont = _{ NEWLINE* }
 
 stmt = _{ compound_stmt | simple_stmt }
 
@@ -59,7 +60,7 @@ for_stmt = { "for" ~ assign_target_list ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "el
 if_cond = { let_cond | expr }
 while_cond = { let_cond | expr }
 let_cond = { "let" ~ assign_target_list ~ "=" ~ expr ~ let_guard? }
-let_guard = { ";" ~ expr }
+let_guard = { ";" ~ line_cont ~ expr }
 
 // Function and class definitions
 def_stmt = { "def" ~ identifier ~ parameters? ~ block }
@@ -79,10 +80,10 @@ with_items = { with_item ~ ("," ~ with_item)* }
 with_item = { expr ~ ("as" ~ assign_target)? }
 
 // Function parameters: regular, *args, **kwargs
-parameters = { "(" ~ param_list? ~ ")" }
-param_list = { parameter ~ ("," ~ parameter)* ~ ","? }
+parameters = { "(" ~ line_cont ~ param_list? ~ line_cont ~ ")" }
+param_list = { parameter ~ (line_cont ~ "," ~ line_cont ~ parameter)* ~ (line_cont ~ ",")? }
 parameter = _{ regular_param | star_param | kw_param }
-regular_param = { identifier ~ ("=" ~ expr)? }
+regular_param = { identifier ~ (line_cont ~ "=" ~ line_cont ~ expr)? }
 star_param = { "*" ~ identifier }
 kw_param = { "**" ~ identifier }
 
@@ -111,7 +112,7 @@ import_item = { dotted_name ~ ("as" ~ identifier)? }
 dotted_name = { identifier ~ ("." ~ identifier)* }
 
 // Assignment and expression statements
-assign_stmt = { assign_target_list ~ "=" ~ expr }
+assign_stmt = { assign_target_list ~ "=" ~ line_cont ~ expr }
 assign_target_list = { assign_target_tuple | assign_target }
 assign_target_tuple = { assign_target_item ~ "," ~ (assign_target_item ~ ("," ~ assign_target_item)* ~ ","?)? }
 assign_target_item = _{ assign_target_star | assign_target }
@@ -131,7 +132,7 @@ yield_expr = { "yield" ~ (yield_from | yield_value)? }
 yield_from = { "from" ~ if_expr }
 yield_value = _{ if_expr }
 
-aug_assign_expr = { aug_target ~ aug_op ~ expr }
+aug_assign_expr = { aug_target ~ aug_op ~ line_cont ~ expr }
 aug_target = { assign_target_ref }
 aug_op = { "+=" | "-=" | "**=" | "*=" | "//=" | "/=" | "%=" }
 
@@ -140,36 +141,39 @@ try_suffix = { try_fallback? ~ "?" }
 try_fallback = { ":" ~ try_fallback_unary }
 
 // Fallback expression grammar (mirrors unary/power/primary but without try_suffix)
-try_fallback_unary = { (prefix_incr | unary_op)* ~ try_fallback_power }
-try_fallback_power = { try_fallback_primary ~ (pow_op ~ try_fallback_primary)* }
+try_fallback_unary = { ((prefix_incr | unary_op) ~ line_cont)* ~ try_fallback_power }
+try_fallback_power = { try_fallback_primary ~ (line_cont ~ pow_op ~ line_cont ~ try_fallback_primary)* }
 try_fallback_primary = { atom ~ (call | attribute | index | postfix_incr)* }
 
 // Ternary conditional
-if_expr = { or_expr ~ ("if" ~ or_expr ~ "else" ~ if_expr)? }
+if_expr = { or_expr ~ (line_cont ~ "if" ~ line_cont ~ or_expr ~ line_cont ~ "else" ~ line_cont ~ if_expr)? }
 
 // Boolean operators
-or_expr = { and_expr ~ ("or" ~ and_expr)* }
-and_expr = { not_expr ~ ("and" ~ not_expr)* }
-not_expr = { (not_op ~ not_expr) | pipeline }
-not_op = { "not" }
+or_expr = { and_expr ~ (line_cont ~ "or" ~ line_cont ~ and_expr)* }
+and_expr = { not_expr ~ (line_cont ~ "and" ~ line_cont ~ not_expr)* }
+not_expr = { (not_op ~ line_cont ~ not_expr) | pipeline }
+not_op = @{ "not" ~ !ident_continue }
 
 // Pipeline operator
-pipeline = { comparison ~ (pipe_op ~ comparison)* }
+pipeline = { comparison ~ (line_cont ~ pipe_op ~ line_cont ~ comparison)* }
 pipe_op = _{ "|" }
 
 // Comparisons
-comparison = { sum ~ (comp_op ~ sum)* }
-comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | "not" ~ "in" | "is" ~ "not" | "in" | "is" }
+comparison = { sum ~ (line_cont ~ comp_op ~ line_cont ~ sum)* }
+comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | comp_kw_not ~ comp_kw_in | comp_kw_is ~ comp_kw_not | comp_kw_in | comp_kw_is }
+comp_kw_not = @{ "not" ~ !ident_continue }
+comp_kw_in = @{ "in" ~ !ident_continue }
+comp_kw_is = @{ "is" ~ !ident_continue }
 
 // Arithmetic operators
-sum = { product ~ (add_op ~ product)* }
-add_op = { "+" | "-" }
-product = { unary ~ (mul_op ~ unary)* }
+sum = { product ~ (line_cont ~ add_op ~ line_cont ~ product)* }
+add_op = @{ "+" ~ !"+" | "-" ~ !"-" }
+product = { unary ~ (line_cont ~ mul_op ~ line_cont ~ unary)* }
 mul_op = { "//" | "*" | "/" | "%" }
-unary = { (prefix_incr | unary_op)* ~ power }
+unary = { ((prefix_incr | unary_op) ~ line_cont)* ~ power }
 unary_op = { "+" | "-" }
 prefix_incr = { "++" | "--" }
-power = { primary ~ (pow_op ~ primary)* }
+power = { primary ~ (line_cont ~ pow_op ~ line_cont ~ primary)* }
 pow_op = { "**" }
 
 // Primary expressions: atoms with postfix operations
@@ -177,19 +181,19 @@ primary = { atom ~ (call | attribute | index | try_suffix | postfix_incr)* }
 postfix_incr = { "++" | "--" }
 
 // Function calls with positional, keyword, *args, **kwargs
-call = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ")" }
+call = { "(" ~ line_cont ~ (argument ~ (line_cont ~ "," ~ line_cont ~ argument)*)? ~ line_cont ~ ")" }
 argument = { kw_argument | star_argument | expr }
-kw_argument = { identifier ~ "=" ~ expr }
+kw_argument = { identifier ~ line_cont ~ "=" ~ line_cont ~ expr }
 star_argument = _{ kw_star_arg | star_arg }
-star_arg = { "*" ~ expr }
-kw_star_arg = { "**" ~ expr }
+star_arg = { "*" ~ line_cont ~ expr }
+kw_star_arg = { "**" ~ line_cont ~ expr }
 
 // Attribute access and indexing/slicing
 attribute = { "." ~ (identifier | attribute_index) }
 attribute_index = @{ ASCII_DIGIT+ }
-index = { "[" ~ slice ~ "]" }
+index = { "[" ~ line_cont ~ slice ~ line_cont ~ "]" }
 slice = { slice_expr | expr }
-slice_expr = { slice_start? ~ ":" ~ slice_end? }
+slice_expr = { slice_start? ~ line_cont ~ ":" ~ line_cont ~ slice_end? }
 slice_start = { expr }
 slice_end = { expr }
 
@@ -218,7 +222,7 @@ atom = _{
 def_expr = { "def" ~ parameters? ~ block }
 
 // Parenthesized expression (preserved in AST for proper validation)
-paren_expr = { "(" ~ expr ~ ")" }
+paren_expr = { "(" ~ line_cont ~ expr ~ line_cont ~ ")" }
 
 // Compound expression: multiple semicolon-separated expressions in parens
 compound_expr = { "(" ~ NEWLINE* ~ expr ~ (";" ~ NEWLINE* ~ expr)+ ~ NEWLINE* ~ ";"? ~ ")" }
@@ -240,17 +244,20 @@ structured_query_body = @{ structured_query_part* }
 structured_query_part = _{ "[" ~ structured_query_body ~ "]" | (!"[" ~ !"]" ~ ANY) }
 
 // Collection literals and comprehensions
-tuple_literal = { "(" ~ ")" | "(" ~ expr ~ "," ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")" }
-list_comp = { "[" ~ expr ~ comp_for ~ "]" }
-list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
-set_literal = { "#{" ~ (expr ~ ("," ~ expr)*)? ~ "}" }
-dict_comp = { "%{" ~ expr ~ ":" ~ expr ~ comp_for ~ "}" }
-dict_literal = { "%{" ~ (dict_entry ~ ("," ~ dict_entry)*)? ~ "}" }
-dict_entry = { expr ~ ":" ~ expr }
+tuple_literal = {
+  "(" ~ line_cont ~ ")"
+  | "(" ~ line_cont ~ expr ~ line_cont ~ "," ~ line_cont ~ (expr ~ (line_cont ~ "," ~ line_cont ~ expr)* ~ (line_cont ~ ",")?)? ~ line_cont ~ ")"
+}
+list_comp = { "[" ~ line_cont ~ expr ~ line_cont ~ comp_for ~ line_cont ~ "]" }
+list_literal = { "[" ~ line_cont ~ (expr ~ (line_cont ~ "," ~ line_cont ~ expr)*)? ~ line_cont ~ "]" }
+set_literal = { "#{" ~ line_cont ~ (expr ~ (line_cont ~ "," ~ line_cont ~ expr)*)? ~ line_cont ~ "}" }
+dict_comp = { "%{" ~ line_cont ~ expr ~ line_cont ~ ":" ~ line_cont ~ expr ~ line_cont ~ comp_for ~ line_cont ~ "}" }
+dict_literal = { "%{" ~ line_cont ~ (dict_entry ~ (line_cont ~ "," ~ line_cont ~ dict_entry)*)? ~ line_cont ~ "}" }
+dict_entry = { expr ~ line_cont ~ ":" ~ line_cont ~ expr }
 
 // Comprehension clauses
-comp_for = { "for" ~ identifier ~ "in" ~ expr ~ comp_if* }
-comp_if = { "if" ~ expr }
+comp_for = { "for" ~ line_cont ~ identifier ~ line_cont ~ "in" ~ line_cont ~ expr ~ (line_cont ~ comp_if)* }
+comp_if = { "if" ~ line_cont ~ expr }
 
 // Literals: numbers, strings, booleans, None
 literal = { number | string | boolean | none }

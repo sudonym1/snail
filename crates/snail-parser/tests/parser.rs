@@ -803,6 +803,57 @@ fn parses_parenthesized_expressions() {
 }
 
 #[test]
+fn parses_newline_continuations_in_expressions() {
+    let source = "call_value = print(\n1\n)\nparen_value = (\n1\n)\nlist_value = [1,\n2]\ndict_value = %{\"a\": 1,\n\"b\": 2}\nsum_value = 1 +\n2\nassigned =\n3\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 6);
+
+    match &program.stmts[0] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::Call { .. }));
+        }
+        other => panic!("Expected assignment, got {other:?}"),
+    }
+
+    match &program.stmts[1] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::Paren { .. }));
+        }
+        other => panic!("Expected assignment, got {other:?}"),
+    }
+
+    match &program.stmts[2] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::List { .. }));
+        }
+        other => panic!("Expected assignment, got {other:?}"),
+    }
+
+    match &program.stmts[3] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(value, Expr::Dict { .. }));
+        }
+        other => panic!("Expected assignment, got {other:?}"),
+    }
+
+    match &program.stmts[4] {
+        Stmt::Assign { value, .. } => {
+            assert!(matches!(
+                value,
+                Expr::Binary {
+                    op: BinaryOp::Add,
+                    ..
+                }
+            ));
+        }
+        other => panic!("Expected assignment, got {other:?}"),
+    }
+
+    let (_, assigned) = expect_assign(&program.stmts[5]);
+    expect_number(assigned, "3");
+}
+
+#[test]
 fn parser_rejects_prefix_incr_on_try_expr() {
     // ++x? is invalid: try expression result cannot be incremented
     parse_err("++x?");
@@ -1341,6 +1392,39 @@ fn simple_stmt_still_requires_separator() {
     // Two simple statements without separator should fail
     let source = "a b";
     parse_err(source);
+}
+
+#[test]
+fn newline_before_equals_does_not_continue_assignment() {
+    parse_err("x\n= 1");
+}
+
+#[test]
+fn newline_before_paren_starts_a_new_statement() {
+    let program = parse_ok("x\n(1)");
+    assert_eq!(program.stmts.len(), 2);
+
+    expect_name(expect_expr_stmt(&program.stmts[0]), "x");
+    match expect_expr_stmt(&program.stmts[1]) {
+        Expr::Paren { expr, .. } => expect_number(expr.as_ref(), "1"),
+        other => panic!("Expected parenthesized expression, got {other:?}"),
+    }
+}
+
+#[test]
+fn newline_before_infix_operator_continues_expression() {
+    let program = parse_ok("1\n+\n1");
+    assert_eq!(program.stmts.len(), 1);
+    match expect_expr_stmt(&program.stmts[0]) {
+        Expr::Binary {
+            left, op, right, ..
+        } => {
+            assert!(matches!(op, BinaryOp::Add));
+            expect_number(left.as_ref(), "1");
+            expect_number(right.as_ref(), "1");
+        }
+        other => panic!("Expected binary expression, got {other:?}"),
+    }
 }
 
 #[test]
