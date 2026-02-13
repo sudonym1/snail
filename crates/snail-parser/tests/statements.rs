@@ -104,6 +104,49 @@ fn parses_raise_from_and_try_finally() {
 }
 
 #[test]
+fn parses_return_and_raise_with_newline_continuations() {
+    let source = "def ret() { return\n1 }\ndef boom() { raise\nValueError(\"bad\")\nfrom\nerr }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+
+    match &program.stmts[0] {
+        Stmt::Def { name, body, .. } => {
+            assert_eq!(name, "ret");
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::Return { value, .. } => {
+                    let value = value.as_ref().expect("return value");
+                    expect_number(value, "1");
+                }
+                other => panic!("Expected return statement, got {other:?}"),
+            }
+        }
+        other => panic!("Expected function def, got {other:?}"),
+    }
+
+    match &program.stmts[1] {
+        Stmt::Def { name, body, .. } => {
+            assert_eq!(name, "boom");
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::Raise { value, from, .. } => {
+                    match value.as_ref().expect("raise value") {
+                        Expr::Call { func, args, .. } => {
+                            expect_name(func.as_ref(), "ValueError");
+                            assert_eq!(args.len(), 1);
+                        }
+                        other => panic!("Expected ValueError call, got {other:?}"),
+                    }
+                    expect_name(from.as_ref().expect("raise from"), "err");
+                }
+                other => panic!("Expected raise statement, got {other:?}"),
+            }
+        }
+        other => panic!("Expected function def, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_with_statement() {
     let source = "with open(\"data\") as f { line = f.read() }\n";
     let program = parse_ok(source);

@@ -88,8 +88,8 @@ star_param = { "*" ~ identifier }
 kw_param = { "**" ~ identifier }
 
 // Simple statements
-return_stmt = { "return" ~ expr? }
-raise_stmt = { "raise" ~ expr? ~ ("from" ~ expr)? }
+return_stmt = { "return" ~ line_cont ~ expr? }
+raise_stmt = { "raise" ~ line_cont ~ expr? ~ (line_cont ~ "from" ~ line_cont ~ expr)? }
 assert_stmt = { "assert" ~ line_cont ~ expr ~ (line_cont ~ "," ~ line_cont ~ expr)? }
 del_stmt = { "del" ~ line_cont ~ assign_target ~ (line_cont ~ "," ~ line_cont ~ assign_target)* }
 break_stmt = { "break" }
