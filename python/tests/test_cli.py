@@ -2656,7 +2656,7 @@ def test_path_helper_returns_paths(
     (tmp_path / "b.txt").write_text("b")
     (tmp_path / "c.md").write_text("c")
     script = (
-        f'import os; os.chdir("{tmp_path}")\n'
+        f'import os; os.chdir("{tmp_path.as_posix()}")\n'
         'result = path("*.txt")\n'
         "print(sorted([p.name for p in result]))"
     )
@@ -2669,7 +2669,7 @@ def test_path_helper_fallback(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     script = (
-        f'import os; os.chdir("{tmp_path}")\n'
+        f'import os; os.chdir("{tmp_path.as_posix()}")\n'
         'result = path("*.nonexistent")?\n'
         "print(result)"
     )
@@ -2684,7 +2684,7 @@ def test_path_helper_multiple_patterns(
     (tmp_path / "a.txt").write_text("a")
     (tmp_path / "b.md").write_text("b")
     script = (
-        f'import os; os.chdir("{tmp_path}")\n'
+        f'import os; os.chdir("{tmp_path.as_posix()}")\n'
         'result = path("*.txt", "*.md")\n'
         "print(sorted([p.name for p in result]))"
     )
@@ -2699,7 +2699,7 @@ def test_path_helper_no_false_matches(
     (tmp_path / "a.txt").write_text("a")
     (tmp_path / "b.md").write_text("b")
     script = (
-        f'import os; os.chdir("{tmp_path}")\n'
+        f'import os; os.chdir("{tmp_path.as_posix()}")\n'
         'result = path("*.txt")\n'
         "print([p.name for p in result])"
     )
@@ -2715,7 +2715,7 @@ def test_path_helper_partial_match_raises_with_fallback(
     The ? fallback returns the partial matches."""
     (tmp_path / "a.py").write_text("a")
     script = (
-        f'import os; os.chdir("{tmp_path}")\n'
+        f'import os; os.chdir("{tmp_path.as_posix()}")\n'
         'result = path("*.nonexistent", "*.py")?\n'
         "print(sorted([p.name for p in result]))"
     )
@@ -2730,7 +2730,7 @@ def test_path_helper_partial_match_raises_without_fallback(
     """When one pattern matches and another doesn't, raise without ?."""
     (tmp_path / "a.py").write_text("a")
     script = (
-        f'import os; os.chdir("{tmp_path}")\n'
+        f'import os; os.chdir("{tmp_path.as_posix()}")\n'
         'result = path("*.nonexistent", "*.py")\n'
     )
     with pytest.raises(Exception, match="no matches"):
