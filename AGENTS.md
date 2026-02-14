@@ -225,3 +225,5 @@ When implementing a phase from the project plan:
 5. **RUN ALL MANDATORY CI CHECKS** (see "MANDATORY: CI Requirements" section).
    This is just `make test`
 6. Only commit/push after ALL CI checks pass
+7. DO NOT UNDER ANY CIRCUMSTANCES ADD A Co-Authored-By trailer to the commit
+   message.
