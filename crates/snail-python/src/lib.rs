@@ -18,7 +18,7 @@ use pyo3::Bound;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
-use snail_ast::CompileMode;
+use snail_ast::{CompileMode, Stmt};
 use snail_error::{ParseError, format_snail_error};
 use snail_parser::preprocess;
 use snail_parser::{parse, parse_awk, parse_awk_cli, parse_map};
@@ -47,17 +47,28 @@ fn parse_error_to_syntax(err: ParseError, filename: &str) -> PyErr {
     PySyntaxError::new_err(format_snail_error(&err.into(), filename))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compile_source_to_code(
     py: Python<'_>,
     source: &str,
     mode: CompileMode,
     auto_print: bool,
+    capture_last: bool,
     filename: &str,
     begin_code: &[String],
     end_code: &[String],
 ) -> PyResult<PyObject> {
     let profile = profile_enabled();
-    let python_ast = compile_source(py, source, mode, auto_print, filename, begin_code, end_code)?;
+    let python_ast = compile_source(
+        py,
+        source,
+        mode,
+        auto_print,
+        capture_last,
+        filename,
+        begin_code,
+        end_code,
+    )?;
     let display = display_filename(filename);
     let linecache_start = Instant::now();
     register_linecache(py, &display, source)?;
@@ -116,11 +127,13 @@ fn build_info_dict(py: Python<'_>) -> PyResult<PyObject> {
     Ok(info.into_py(py))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compile_source(
     py: Python<'_>,
     source: &str,
     mode: CompileMode,
     auto_print: bool,
+    capture_last: bool,
     filename: &str,
     begin_code: &[String],
     end_code: &[String],
@@ -131,8 +144,16 @@ fn compile_source(
 
     let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
     let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
-    let module = compiler::compile_source(py, source, mode, &begin_refs, &end_refs, auto_print)
-        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+    let module = compiler::compile_source(
+        py,
+        source,
+        mode,
+        &begin_refs,
+        &end_refs,
+        auto_print,
+        capture_last,
+    )
+    .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
 
     if profile {
         log_profile("compile_snail_source", compile_start.elapsed());
@@ -207,6 +228,7 @@ fn compile_py(
         source,
         parse_mode(mode)?,
         auto_print,
+        false,
         filename,
         &begin_code,
         &end_code,
@@ -233,14 +255,36 @@ fn compile_ast_py(
         source,
         parse_mode(mode)?,
         auto_print,
+        false,
         filename,
         &begin_code,
         &end_code,
     )
 }
 
+/// Check whether the main body of a program ends with a non-semicolon-terminated
+/// expression (i.e. an expression that would be captured by AutoPrint/CaptureOnly).
+fn has_tail_expression(source: &str, mode: CompileMode) -> bool {
+    let parse_fn: fn(&str) -> Result<_, _> = match mode {
+        CompileMode::Snail => parse,
+        CompileMode::Map => parse_map,
+        CompileMode::Awk => return false,
+    };
+    parse_fn(source)
+        .map(|(program, _, _)| {
+            matches!(
+                program.stmts.last(),
+                Some(Stmt::Expr {
+                    semicolon_terminated: false,
+                    ..
+                })
+            )
+        })
+        .unwrap_or(false)
+}
+
 #[pyfunction(name = "exec")]
-#[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, auto_import = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new(), field_separators = None, include_whitespace = None))]
+#[pyo3(signature = (source, *, argv = Vec::new(), mode = "snail", auto_print = true, auto_import = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new(), field_separators = None, include_whitespace = None, test_last = false))]
 #[allow(clippy::too_many_arguments)]
 fn exec_py(
     py: Python<'_>,
@@ -254,14 +298,28 @@ fn exec_py(
     end_code: Vec<String>,
     field_separators: Option<String>,
     include_whitespace: Option<bool>,
+    test_last: bool,
 ) -> PyResult<i32> {
     let profile = profile_enabled();
     let total_start = Instant::now();
+    let parsed_mode = parse_mode(mode)?;
+
+    // Pre-flight check: --test requires a trailing expression.
+    // Reject before compiling/executing so no side effects occur.
+    if test_last && !has_tail_expression(source, parsed_mode) {
+        let sys = py.import_bound("sys")?;
+        let stderr = sys.getattr("stderr")?;
+        stderr.call_method1("write", ("snail: --test requires a trailing expression\n",))?;
+        return Ok(2);
+    }
+
+    let capture_last = test_last && !auto_print;
     let code = compile_source_to_code(
         py,
         source,
-        parse_mode(mode)?,
+        parsed_mode,
         auto_print,
+        capture_last,
         filename,
         &begin_code,
         &end_code,
@@ -286,7 +344,15 @@ fn exec_py(
         log_profile("py_exec", exec_start.elapsed());
     }
     let result = match exec_result {
-        Ok(_) => Ok(0),
+        Ok(_) => {
+            if test_last {
+                let key = "__snail_last_result";
+                let value = globals.get_item(key)?;
+                if value.is_truthy()? { Ok(0) } else { Ok(1) }
+            } else {
+                Ok(0)
+            }
+        }
         Err(err) => {
             if err.is_instance_of::<PySystemExit>(py) {
                 let code = err.value_bound(py).getattr("code")?;

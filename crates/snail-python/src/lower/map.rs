@@ -19,7 +19,7 @@ pub fn lower_map_auto(
     program: &Program,
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
-    lower_map(py, program, &[], &[], auto_print_last)
+    lower_map(py, program, &[], &[], auto_print_last, false)
 }
 
 pub fn lower_map(
@@ -28,6 +28,7 @@ pub fn lower_map(
     begin_blocks: &[Vec<Stmt>],
     end_blocks: &[Vec<Stmt>],
     auto_print_last: bool,
+    capture_last: bool,
 ) -> Result<PyObject, LowerError> {
     let mut hoister = LambdaHoister::new();
     let begin_blocks: Vec<Vec<Stmt>> = begin_blocks
@@ -105,17 +106,17 @@ pub fn lower_map(
 
     // Begin blocks
     for block in begin_blocks {
-        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, &span)?;
+        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, false, &span)?;
         body.extend(lowered);
     }
 
     // Generate file loop
-    let file_loop = lower_map_file_loop(&builder, &program, &span, auto_print_last)?;
+    let file_loop = lower_map_file_loop(&builder, &program, &span, auto_print_last, capture_last)?;
     body.push(file_loop);
 
     // End blocks
     for block in end_blocks {
-        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, &span)?;
+        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, false, &span)?;
         body.extend(lowered);
     }
 
@@ -169,6 +170,7 @@ fn lower_map_file_loop(
     program: &Program,
     span: &SourceSpan,
     auto_print_last: bool,
+    capture_last: bool,
 ) -> Result<PyObject, LowerError> {
     // for __snail_src in __snail_paths:
     //     with __SnailLazyFile(__snail_src, 'r') as __snail_fd:
@@ -212,7 +214,13 @@ fn lower_map_file_loop(
     )?);
 
     // Lower user code
-    let user_code = lower_block_auto(builder, &program.stmts, auto_print_last, &program.span)?;
+    let user_code = lower_block_auto(
+        builder,
+        &program.stmts,
+        auto_print_last,
+        capture_last,
+        &program.span,
+    )?;
     with_body.extend(user_code);
 
     // __SnailLazyFile(__snail_src, 'r')

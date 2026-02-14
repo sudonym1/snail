@@ -21,7 +21,7 @@ pub fn lower_program_auto(
     program: &Program,
     auto_print_last: bool,
 ) -> Result<PyObject, LowerError> {
-    lower_program(py, program, &[], &[], auto_print_last)
+    lower_program(py, program, &[], &[], auto_print_last, false)
 }
 
 pub fn lower_program(
@@ -30,6 +30,7 @@ pub fn lower_program(
     begin_blocks: &[Vec<Stmt>],
     end_blocks: &[Vec<Stmt>],
     auto_print_last: bool,
+    capture_last: bool,
 ) -> Result<PyObject, LowerError> {
     let mut hoister = LambdaHoister::new();
     let begin_blocks: Vec<Vec<Stmt>> = begin_blocks
@@ -49,15 +50,21 @@ pub fn lower_program(
     let mut body = Vec::new();
 
     for block in begin_blocks {
-        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, &span)?;
+        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, false, &span)?;
         body.extend(lowered);
     }
 
-    let main_body = lower_block_auto(&builder, &program.stmts, auto_print_last, &span)?;
+    let main_body = lower_block_auto(
+        &builder,
+        &program.stmts,
+        auto_print_last,
+        capture_last,
+        &span,
+    )?;
     body.extend(main_body);
 
     for block in end_blocks {
-        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, &span)?;
+        let lowered = lower_block_auto(&builder, block.as_slice(), auto_print_last, false, &span)?;
         body.extend(lowered);
     }
 
@@ -65,13 +72,14 @@ pub fn lower_program(
 }
 
 pub fn lower_awk_main(py: Python<'_>, program: &AwkProgram) -> Result<PyObject, LowerError> {
-    lower_awk(py, program, false)
+    lower_awk(py, program, false, false)
 }
 
 pub fn lower_awk(
     py: Python<'_>,
     program: &AwkProgram,
     auto_print: bool,
+    capture_last: bool,
 ) -> Result<PyObject, LowerError> {
     let mut hoister = LambdaHoister::new();
     let program = hoister.desugar_awk_program(program);
@@ -116,7 +124,7 @@ pub fn lower_awk(
 
     let mut main_body = Vec::new();
     for block in &program.begin_blocks {
-        let lowered = lower_block_auto(&builder, block, auto_print, &span)?;
+        let lowered = lower_block_auto(&builder, block, auto_print, false, &span)?;
         main_body.extend(lowered);
     }
 
@@ -199,7 +207,7 @@ pub fn lower_awk(
         )
         .map_err(py_err_to_lower)?;
 
-    let file_loop = lower_awk_file_loop(&builder, &program, &span, auto_print)?;
+    let file_loop = lower_awk_file_loop(&builder, &program, &span, auto_print, capture_last)?;
     let for_loop = builder
         .call_node(
             "For",
@@ -220,7 +228,7 @@ pub fn lower_awk(
     main_body.push(for_loop);
 
     for block in &program.end_blocks {
-        let lowered = lower_block_auto(&builder, block, auto_print, &span)?;
+        let lowered = lower_block_auto(&builder, block, auto_print, false, &span)?;
         main_body.extend(lowered);
     }
 

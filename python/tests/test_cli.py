@@ -319,6 +319,87 @@ def test_no_print(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == ""
 
 
+def test_test_truthy(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-t", "1"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_test_falsy_zero(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-t", "0"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_test_falsy_none(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-t", "None"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_test_falsy_empty_string(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-t", "''"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_test_falsy_empty_list(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-t", "[]"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_test_print_truthy(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-tp", "1 == 1"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "True\n"
+
+
+def test_test_print_falsy(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-tp", "1 == 2"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "False\n"
+
+
+def test_test_semicolon_terminated(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-t", "x = 1;"]) == 2
+    captured = capsys.readouterr()
+    assert "trailing expression" in captured.err
+
+
+def test_test_non_expression_last(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-t", "for x in range(3) { pass }"]) == 2
+    captured = capsys.readouterr()
+    assert "trailing expression" in captured.err
+
+
+def test_test_no_tail_does_not_execute(capsys: pytest.CaptureFixture[str]) -> None:
+    """--test with no trailing expression must not execute ANY code."""
+    assert main(["-t", "print('side effect'); x = 1;"]) == 2
+    captured = capsys.readouterr()
+    assert "side effect" not in captured.out
+    assert "trailing expression" in captured.err
+
+
+def test_test_system_exit(capsys: pytest.CaptureFixture[str]) -> None:
+    """raise is a statement, not an expression, so --test rejects it pre-execution."""
+    assert main(["-t", "raise SystemExit(42)"]) == 2
+    captured = capsys.readouterr()
+    assert "trailing expression" in captured.err
+
+
+def test_print_flag_alone(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-p", "42"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "42\n"
+
+
+def test_print_flag_overrides_no_print(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-P", "-p", "42"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "42\n"
+
+
 def test_inline_print(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["print('hi')"]) == 0
     captured = capsys.readouterr()

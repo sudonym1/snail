@@ -14,6 +14,7 @@ pub(crate) fn lower_awk_file_loop(
     program: &AwkProgram,
     span: &SourceSpan,
     auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut file_loop = Vec::new();
     file_loop.push(assign_name(
@@ -196,6 +197,7 @@ pub(crate) fn lower_awk_file_loop(
             builder.load_ctx().map_err(py_err_to_lower)?,
         )?,
         auto_print,
+        capture_last,
     )?;
 
     let with_stmt = builder
@@ -219,6 +221,7 @@ pub(crate) fn lower_awk_line_loop(
     span: &SourceSpan,
     iter: PyObject,
     auto_print: bool,
+    capture_last: bool,
 ) -> Result<PyObject, LowerError> {
     let mut loop_body = Vec::new();
     loop_body.push(assign_name(
@@ -397,7 +400,12 @@ pub(crate) fn lower_awk_line_loop(
         span,
     )?);
 
-    loop_body.extend(lower_awk_rules(builder, &program.rules, auto_print)?);
+    loop_body.extend(lower_awk_rules(
+        builder,
+        &program.rules,
+        auto_print,
+        capture_last,
+    )?);
 
     builder
         .call_node(
@@ -422,6 +430,7 @@ pub(crate) fn lower_awk_rules(
     builder: &AstBuilder<'_>,
     rules: &[AwkRule],
     auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
     for rule in rules {
@@ -430,6 +439,7 @@ pub(crate) fn lower_awk_rules(
                 builder,
                 rule.action.as_ref().unwrap(),
                 auto_print,
+                capture_last,
                 &rule.span,
             )?
         } else {

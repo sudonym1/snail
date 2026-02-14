@@ -9,7 +9,7 @@ from . import __build_info__, compile_ast, exec
 
 _USAGE = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]..."
 _DESCRIPTION = "Snail programming language interpreter"
-_BOOLEAN_FLAGS = frozenset("amPIvhW")
+_BOOLEAN_FLAGS = frozenset("amptPIvhW")
 _VALUE_FLAGS = frozenset("fbeF")
 
 
@@ -93,6 +93,8 @@ class _Args:
         self.file: Optional[str] = None
         self.awk = False
         self.map = False
+        self.test = False
+        self.force_print = False
         self.no_print = False
         self.no_auto_import = False
         self.debug = False
@@ -132,6 +134,11 @@ def _print_help(file=None) -> None:
         file=file,
     )
     print("  -W, --whitespace        include whitespace as a separator", file=file)
+    print(
+        "  -t, --test              exit 0 if last expression is truthy, 1 if falsy",
+        file=file,
+    )
+    print("  -p, --print             force auto-print (overrides -P and --test)", file=file)
     print(
         "  -P, --no-print          disable auto-print of implicit return value",
         file=file,
@@ -228,6 +235,14 @@ def _parse_args(argv: list[str]) -> _Args:
             continue
         if token in ("-m", "--map"):
             args.map = True
+            idx += 1
+            continue
+        if token in ("-t", "--test"):
+            args.test = True
+            idx += 1
+            continue
+        if token in ("-p", "--print"):
+            args.force_print = True
             idx += 1
             continue
         if token in ("-P", "--no-print"):
@@ -386,6 +401,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         filename = "<cmd>"
         args = ["--", *namespace.args[1:]]
 
+    # --test implies -P; -p overrides back to printing
+    if namespace.force_print:
+        auto_print = True
+    elif namespace.test or namespace.no_print:
+        auto_print = False
+    else:
+        auto_print = True  # default
+
     if namespace.debug_snail_preprocessor:
         from . import preprocess
 
@@ -412,7 +435,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         python_ast = compile_ast(
             source,
             mode=mode,
-            auto_print=not namespace.no_print,
+            auto_print=auto_print,
             filename=filename,
             begin_code=namespace.begin_code,
             end_code=namespace.end_code,
@@ -431,7 +454,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         python_ast = compile_ast(
             source,
             mode=mode,
-            auto_print=not namespace.no_print,
+            auto_print=auto_print,
             filename=filename,
             begin_code=namespace.begin_code,
             end_code=namespace.end_code,
@@ -463,13 +486,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         source,
         argv=args,
         mode=mode,
-        auto_print=not namespace.no_print,
+        auto_print=auto_print,
         auto_import=not namespace.no_auto_import,
         filename=filename,
         begin_code=namespace.begin_code,
         end_code=namespace.end_code,
         field_separators=field_separators,
         include_whitespace=include_whitespace,
+        test_last=namespace.test,
     )
 
 

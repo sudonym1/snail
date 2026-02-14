@@ -15,6 +15,7 @@ use super::py_ast::{AstBuilder, py_err_to_lower};
 enum TailBehavior {
     None,
     AutoPrint,
+    CaptureOnly,
     ImplicitReturn,
 }
 
@@ -352,10 +353,13 @@ pub(crate) fn lower_block_auto(
     builder: &AstBuilder<'_>,
     block: &[Stmt],
     auto_print: bool,
+    capture_last: bool,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     let tail = if auto_print {
         TailBehavior::AutoPrint
+    } else if capture_last {
+        TailBehavior::CaptureOnly
     } else {
         TailBehavior::None
     };
@@ -391,6 +395,18 @@ fn lower_block_with_tail(
                 ) if !semicolon_terminated => {
                     let expr = lower_expr(builder, value)?;
                     stmts.extend(build_auto_print_block(builder, expr, span)?);
+                    continue;
+                }
+                (
+                    TailBehavior::CaptureOnly,
+                    Stmt::Expr {
+                        value,
+                        semicolon_terminated,
+                        span,
+                    },
+                ) if !semicolon_terminated => {
+                    let expr = lower_expr(builder, value)?;
+                    stmts.push(assign_name(builder, "__snail_last_result", expr, span)?);
                     continue;
                 }
                 (

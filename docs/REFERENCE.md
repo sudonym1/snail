@@ -10,7 +10,28 @@ blocks for curly braces. The examples here mirror the runnable tour in
 
 By default, Snail pretty-prints the implicit return value of the last
 non-semicolon expression statement in a program. Use `-P`/`--no-print` to
-disable auto-printing.
+disable auto-printing. Use `-p`/`--print` to force auto-printing (overrides
+`-P` and `--test`).
+
+### Test mode
+
+Use `-t`/`--test` to make Snail act as a predicate: the process exits 0 if the
+last expression is truthy, 1 if falsy. `--test` implies `-P` (no printing).
+Combine with `-p` (`-tp`) to both print and test:
+
+```bash
+# Predicate usage
+if snail -t "'error' in /pattern/" < log.txt; then echo "found"; fi
+
+# Print and test
+snail -tp "1 == 1"   # prints True, exits 0
+snail -tp "1 == 2"   # prints False, exits 1
+```
+
+Exit codes with `--test`:
+- **0**: last expression is truthy
+- **1**: last expression is falsy
+- **2**: no trailing expression to test (error, with a message on stderr)
 
 BEGIN/END blocks run once before/after the main program in regular mode:
 ```snail
