@@ -48,6 +48,10 @@ fn stmt_kind(stmt: &Stmt) -> StmtKind {
     }
 }
 
+/// Under Go-style semicolon injection, compound-statement headers support
+/// multi-line splitting via header mode. Simple statements (return, raise,
+/// assert, yield, etc.) require arguments on the same line because their
+/// keywords are StmtEnders.
 #[test]
 fn parses_each_statement_with_newline_split_tokens() {
     let cases = [
@@ -75,7 +79,7 @@ fn parses_each_statement_with_newline_split_tokens() {
         ),
         (
             "def_stmt",
-            "def\nbuild\n(\na\n,\nb\n=\n1\n)\n{\nreturn\na\n}\n",
+            "def\nbuild\n(\na\n,\nb\n=\n1\n)\n{\nreturn a\n}\n",
             StmtKind::Def,
         ),
         ("class_stmt", "class\nBucket\n{\npass\n}\n", StmtKind::Class),
@@ -89,43 +93,32 @@ fn parses_each_statement_with_newline_split_tokens() {
             "with\nopen(\n\"data\"\n)\nas\nhandle\n{\npass\n}\n",
             StmtKind::With,
         ),
-        ("return_stmt", "return\n1\n", StmtKind::Return),
+        // Simple statements: arguments on same line
+        ("return_stmt", "return 1\n", StmtKind::Return),
         ("break_stmt", "break\n", StmtKind::Break),
         ("continue_stmt", "continue\n", StmtKind::Continue),
         ("pass_stmt", "pass\n", StmtKind::Pass),
         (
             "raise_stmt",
-            "raise\nValueError(\n\"bad\"\n)\nfrom\nerr\n",
+            "raise ValueError(\"bad\") from err\n",
             StmtKind::Raise,
         ),
-        (
-            "assert_stmt",
-            "assert\ncond\n,\n\"msg\"\n",
-            StmtKind::Assert,
-        ),
-        (
-            "del_stmt",
-            "del\nitems[\n0\n]\n,\nother\n",
-            StmtKind::Delete,
-        ),
+        ("assert_stmt", "assert cond, \"msg\"\n", StmtKind::Assert),
+        ("del_stmt", "del\nitems[\n0\n],\nother\n", StmtKind::Delete),
         (
             "import_stmt_import_names",
-            "import\nos\nas\nos_mod\n,\nsys\n",
+            "import\nos as os_mod,\nsys\n",
             StmtKind::Import,
         ),
         (
             "import_stmt_import_from",
-            "from\npkg\nimport\nname\nas\nalias\n,\nother\n",
+            "from pkg import name as alias, other\n",
             StmtKind::ImportFrom,
         ),
         ("assign_stmt", "value =\n1\n", StmtKind::Assign),
         ("expr_stmt", "print(\n1\n)\n", StmtKind::Expr),
-        ("expr_stmt_yield", "yield\n1\n", StmtKind::Expr),
-        (
-            "expr_stmt_yield_from",
-            "yield\nfrom\nitems\n",
-            StmtKind::Expr,
-        ),
+        ("expr_stmt_yield", "yield 1\n", StmtKind::Expr),
+        ("expr_stmt_yield_from", "yield from items\n", StmtKind::Expr),
     ];
 
     for (case_name, source, expected_kind) in cases {

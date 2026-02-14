@@ -343,7 +343,14 @@ fn parses_except_as_with_newlines() {
 
 #[test]
 fn parses_multiline_assert_del_import_headers() {
-    let source = "assert\nTrue\n,\n\"ok\"\ndel\nitems[0]\nimport\nos\nfrom\nos\nimport\npath\n";
+    // Under Go-style rules: assert/del/import are Continuation keywords,
+    // but their arguments may contain StmtEnders (e.g. True, os).
+    // del\nitems[0] works because del is Continuation and items[ starts an index.
+    // import\nos works because import is Continuation.
+    // assert True, "ok" must be on one line (True is StmtEnder).
+    // from\nos\nimport\npath: from is Continuation, but os is StmtEnder → separates.
+    // So we keep assert and from...import on one line.
+    let source = "assert True, \"ok\"\ndel\nitems[0]\nimport\nos\nfrom os import path\n";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 4);
 
@@ -1691,8 +1698,10 @@ fn newline_before_paren_starts_a_new_statement() {
 }
 
 #[test]
-fn newline_before_infix_operator_continues_expression() {
-    let program = parse_ok("1\n+\n1");
+fn trailing_infix_operator_continues_expression() {
+    // Under Go-style rules: 1\n+\n1 → two statements (1 is StmtEnder, inject before +)
+    // Trailing operator continues: 1 +\n1 → single binary expression
+    let program = parse_ok("1 +\n1");
     assert_eq!(program.stmts.len(), 1);
     match expect_expr_stmt(&program.stmts[0]) {
         Expr::Binary {
@@ -1707,38 +1716,25 @@ fn newline_before_infix_operator_continues_expression() {
 }
 
 #[test]
-fn newline_before_dot_continues_attribute_access() {
-    let program = parse_ok("value = obj\n.attr");
-    assert_eq!(program.stmts.len(), 1);
-
-    let (_, value) = expect_assign(&program.stmts[0]);
-    match value {
-        Expr::Attribute {
-            value: inner, attr, ..
-        } => {
-            expect_name(inner.as_ref(), "obj");
-            assert_eq!(attr, "attr");
-        }
-        other => panic!("Expected attribute expression, got {other:?}"),
-    }
+fn newline_before_dot_separates_attribute_access() {
+    // Under Go-style rules: obj\n.attr → separated (obj is StmtEnder)
+    // This now fails to parse since .attr is not a valid statement start.
+    let result = snail_parser::parse("value = obj\n.attr");
+    assert!(
+        result.is_err(),
+        "obj\\n.attr should fail to parse under Go-style rules"
+    );
 }
 
 #[test]
-fn newline_before_dot_continues_attribute_assignment_target() {
-    let program = parse_ok("obj\n.attr = 1");
-    assert_eq!(program.stmts.len(), 1);
-
-    let (targets, value) = expect_assign(&program.stmts[0]);
-    match &targets[0] {
-        AssignTarget::Attribute {
-            value: inner, attr, ..
-        } => {
-            expect_name(inner.as_ref(), "obj");
-            assert_eq!(attr, "attr");
-        }
-        other => panic!("Expected attribute target, got {other:?}"),
-    }
-    expect_number(value, "1");
+fn newline_before_dot_separates_attribute_assignment_target() {
+    // Under Go-style rules: obj\n.attr = 1 → separated (obj is StmtEnder)
+    // This now fails to parse since .attr is not a valid statement start.
+    let result = snail_parser::parse("obj\n.attr = 1");
+    assert!(
+        result.is_err(),
+        "obj\\n.attr = 1 should fail to parse under Go-style rules"
+    );
 }
 
 #[test]

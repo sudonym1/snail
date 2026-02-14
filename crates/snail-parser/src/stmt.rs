@@ -536,19 +536,12 @@ fn parse_import_from_items(
         Rule::import_star => Ok(ImportFromItems::Star {
             span: span_from_pair(&pair, source),
         }),
-        Rule::import_items | Rule::import_items_multiline => {
-            Ok(ImportFromItems::Names(parse_import_items(pair, source)?))
-        }
+        Rule::import_items => Ok(ImportFromItems::Names(parse_import_items(pair, source)?)),
         Rule::import_paren_items => {
             let span = span_from_pair(&pair, source);
             let mut inner = pair.into_inner();
             let items_pair = inner
-                .find(|inner| {
-                    matches!(
-                        inner.as_rule(),
-                        Rule::import_items | Rule::import_items_multiline
-                    )
-                })
+                .find(|inner| inner.as_rule() == Rule::import_items)
                 .ok_or_else(|| error_with_span("missing import items", span, source))?;
             Ok(ImportFromItems::Names(parse_import_items(
                 items_pair, source,
@@ -803,8 +796,12 @@ fn parse_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseErro
 }
 
 fn check_trailing_semicolon(source: &str, end_pos: usize) -> bool {
-    // Check if the first non-whitespace character after end_pos is a semicolon
-    source[end_pos..].chars().find(|c| !c.is_whitespace()) == Some(';')
+    // Check if the first non-whitespace character after end_pos is a semicolon.
+    // Skip \x1e (injected record separator) since it's not a real semicolon.
+    source[end_pos..]
+        .chars()
+        .find(|c| !c.is_whitespace() && *c != '\x1e')
+        == Some(';')
 }
 
 pub(crate) fn parse_parameters(

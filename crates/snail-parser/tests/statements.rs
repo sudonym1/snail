@@ -105,7 +105,9 @@ fn parses_raise_from_and_try_finally() {
 
 #[test]
 fn parses_return_and_raise_with_newline_continuations() {
-    let source = "def ret() { return\n1 }\ndef boom() { raise\nValueError(\"bad\")\nfrom\nerr }\n";
+    // Under Go-style rules: return/raise are StmtEnders, so their
+    // arguments must be on the same line.
+    let source = "def ret() { return 1 }\ndef boom() { raise ValueError(\"bad\") from err }\n";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
 

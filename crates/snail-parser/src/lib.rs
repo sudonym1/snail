@@ -7,6 +7,7 @@ use snail_error::ParseError;
 mod awk;
 mod expr;
 mod literal;
+pub mod preprocess;
 mod stmt;
 mod string;
 mod util;
@@ -31,8 +32,10 @@ pub fn parse_main(source: &str) -> Result<Program, ParseError> {
 /// Parses a regular Snail program with in-file BEGIN/END blocks.
 /// BEGIN/END blocks are parsed as regular Snail statement blocks (no map/awk vars).
 pub fn parse(source: &str) -> Result<ProgramWithBeginEnd, ParseError> {
+    let preprocessed = preprocess::preprocess(source);
     parse_program_entries(
         source,
+        &preprocessed,
         Rule::program,
         Rule::program_entry_list,
         Rule::program_entry,
@@ -45,7 +48,8 @@ pub fn parse(source: &str) -> Result<ProgramWithBeginEnd, ParseError> {
 }
 
 pub fn parse_awk(source: &str) -> Result<AwkProgram, ParseError> {
-    let mut pairs = SnailParser::parse(Rule::awk_program, source)
+    let preprocessed = preprocess::preprocess(source);
+    let mut pairs = SnailParser::parse(Rule::awk_program, &preprocessed)
         .map_err(|err| parse_error_from_pest(err, source))?;
     let pair = pairs
         .next()
@@ -144,8 +148,10 @@ fn validate_no_awk_syntax_for_map(program: &Program, source: &str) -> Result<(),
 /// Parses a map program with in-file BEGIN/END blocks.
 /// BEGIN/END blocks are parsed as regular Snail statement blocks (no map/awk vars).
 pub fn parse_map(source: &str) -> Result<MapProgramWithBeginEnd, ParseError> {
+    let preprocessed = preprocess::preprocess(source);
     parse_program_entries(
         source,
+        &preprocessed,
         Rule::map_program,
         Rule::map_entry_list,
         Rule::map_entry,
@@ -160,6 +166,7 @@ pub fn parse_map(source: &str) -> Result<MapProgramWithBeginEnd, ParseError> {
 #[allow(clippy::too_many_arguments)]
 fn parse_program_entries(
     source: &str,
+    preprocessed: &str,
     root_rule: Rule,
     entry_list_rule: Rule,
     entry_rule: Rule,
@@ -169,8 +176,8 @@ fn parse_program_entries(
     missing_entry: &str,
     validate_program: ValidateProgramFn,
 ) -> Result<ProgramWithBeginEnd, ParseError> {
-    let mut pairs =
-        SnailParser::parse(root_rule, source).map_err(|err| parse_error_from_pest(err, source))?;
+    let mut pairs = SnailParser::parse(root_rule, preprocessed)
+        .map_err(|err| parse_error_from_pest(err, source))?;
     let pair = pairs.next().ok_or_else(|| ParseError::new(missing_root))?;
     let span = full_span(source);
     let mut stmts = Vec::new();

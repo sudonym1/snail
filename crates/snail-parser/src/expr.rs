@@ -260,21 +260,48 @@ fn parse_comparison(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
     let mut ops = Vec::new();
     let mut comparators = Vec::new();
     while let Some(op_pair) = inner.next() {
-        let op_text = op_pair.as_str().trim();
-        let op = match op_text {
-            "==" => CompareOp::Eq,
-            "!=" => CompareOp::NotEq,
-            "<" => CompareOp::Lt,
-            "<=" => CompareOp::LtEq,
-            ">" => CompareOp::Gt,
-            ">=" => CompareOp::GtEq,
-            "in" => CompareOp::In,
-            "is" => CompareOp::Is,
-            "not in" => CompareOp::NotIn,
-            "is not" => CompareOp::IsNot,
+        let op = match op_pair.as_rule() {
+            Rule::comp_op => {
+                let sub: Vec<_> = op_pair.clone().into_inner().collect();
+                match sub.as_slice() {
+                    [kw] if kw.as_rule() == Rule::comp_kw_in => CompareOp::In,
+                    [kw] if kw.as_rule() == Rule::comp_kw_is => CompareOp::Is,
+                    [not_kw, in_kw]
+                        if not_kw.as_rule() == Rule::comp_kw_not
+                            && in_kw.as_rule() == Rule::comp_kw_in =>
+                    {
+                        CompareOp::NotIn
+                    }
+                    [is_kw, not_kw]
+                        if is_kw.as_rule() == Rule::comp_kw_is
+                            && not_kw.as_rule() == Rule::comp_kw_not =>
+                    {
+                        CompareOp::IsNot
+                    }
+                    _ => {
+                        // Symbolic operators have no inner rules
+                        let op_text = op_pair.as_str().trim();
+                        match op_text {
+                            "==" => CompareOp::Eq,
+                            "!=" => CompareOp::NotEq,
+                            "<" => CompareOp::Lt,
+                            "<=" => CompareOp::LtEq,
+                            ">" => CompareOp::Gt,
+                            ">=" => CompareOp::GtEq,
+                            _ => {
+                                return Err(error_with_span(
+                                    format!("unknown comparison operator: {}", op_text),
+                                    span_from_pair(&op_pair, source),
+                                    source,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
             _ => {
                 return Err(error_with_span(
-                    format!("unknown comparison operator: {}", op_text),
+                    format!("expected comp_op, got {:?}", op_pair.as_rule()),
                     span_from_pair(&op_pair, source),
                     source,
                 ));

@@ -27,15 +27,18 @@ SEMANTIC_EQUIVALENCE_CASES = [
         'call_value = print(\n1\n)\nparen_value = (\n1\n)\nlist_value = [1,\n2]\ndict_value = %{"a": 1,\n"b": 2}\nsum_value = 1 +\n2\nassigned =\n3\nprint(call_value, paren_value, list_value, dict_value["b"], sum_value, assigned)',
         id="mixed-expression-and-assignment-continuations",
     ),
+    # Under Go-style rules: return/raise are StmtEnders, so their args must
+    # be on the same line. These test trailing-operator and header-mode
+    # continuations that DO work under Go-style rules.
     pytest.param(
         "def ret() { return 1 }\nprint(ret())",
-        "def ret() { return\n1 }\nprint(ret())",
-        id="return-newline-continuation",
+        "def\nret\n()\n{ return 1 }\nprint(ret())",
+        id="return-def-header-multiline",
     ),
     pytest.param(
         'err = ValueError("root")\ndef boom() { raise ValueError("bad") from err }\ntry { boom() }\nexcept ValueError as e { print(type(e.__cause__).__name__, e.args[0]) }',
-        'err = ValueError("root")\ndef boom() { raise\nValueError("bad")\nfrom\nerr }\ntry { boom() }\nexcept ValueError\nas\ne\n{ print(type(e.__cause__).__name__, e.args[0]) }',
-        id="raise-from-newline-continuation",
+        'err = ValueError("root")\ndef\nboom\n()\n{ raise ValueError("bad") from err }\ntry\n{ boom() }\nexcept\nValueError\nas\ne\n{ print(type(e.__cause__).__name__, e.args[0]) }',
+        id="raise-except-header-multiline",
     ),
 ]
 

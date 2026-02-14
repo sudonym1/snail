@@ -28,11 +28,19 @@ pub const SESSION_CORPUS_CASES: &[WsCase] = &[
         variants: &["for\nx\nin\nrange(1) { }\n"],
         expectation: BoundaryExpectation::MustContinue,
     },
+    // Under Go-style rules: 1\n+\n1 → two statements (1 is StmtEnder, inject before +)
+    // Operator must be on the end of the line to continue: 1 +\n1
     WsCase {
-        name: "session_infix_operator_newlines",
+        name: "session_infix_operator_trailing",
+        base: "1 + 1\n",
+        variants: &["1 +\n1\n"],
+        expectation: BoundaryExpectation::MustContinue,
+    },
+    WsCase {
+        name: "session_infix_operator_leading_separates",
         base: "1 + 1\n",
         variants: &["1\n+\n1\n"],
-        expectation: BoundaryExpectation::MustContinue,
+        expectation: BoundaryExpectation::MaySeparate,
     },
     WsCase {
         name: "session_mixed_expression_continuations",
@@ -42,29 +50,35 @@ pub const SESSION_CORPUS_CASES: &[WsCase] = &[
         ],
         expectation: BoundaryExpectation::MustContinue,
     },
+    // Under Go-style rules: return\n1 → bare return + expr 1 (return is StmtEnder)
+    // Must write return and value on same line: return 1
     WsCase {
-        name: "session_return_newline_continuation",
+        name: "session_return_newline_separates",
         base: "def ret() { return 1 }\n",
         variants: &["def ret() { return\n1 }\n"],
-        expectation: BoundaryExpectation::MustContinue,
+        expectation: BoundaryExpectation::MaySeparate,
     },
+    // Under Go-style rules: raise\nVal()\nfrom\nerr → bare raise + Val() + from\nerr
+    // raise is StmtEnder; must keep on one line
     WsCase {
-        name: "session_raise_from_newline_continuation",
+        name: "session_raise_from_newline_separates",
         base: "def boom() { raise ValueError(\"bad\") from err }\n",
         variants: &["def boom() { raise\nValueError(\"bad\")\nfrom\nerr }\n"],
-        expectation: BoundaryExpectation::MustContinue,
+        expectation: BoundaryExpectation::MustFail,
     },
+    // Under Go-style rules: obj\n.attr → separated (obj is StmtEnder)
     WsCase {
-        name: "session_attribute_access_newline_before_dot",
+        name: "session_attribute_access_newline_before_dot_separates",
         base: "value = obj.attr\n",
         variants: &["value = obj\n.attr\n"],
-        expectation: BoundaryExpectation::MustContinue,
+        expectation: BoundaryExpectation::MustFail,
     },
+    // obj\n.attr = 1 → fails (obj is StmtEnder, .attr starts new stmt which is invalid)
     WsCase {
-        name: "session_attribute_assignment_newline_before_dot",
+        name: "session_attribute_assignment_newline_before_dot_fails",
         base: "obj.attr = 1\n",
         variants: &["obj\n.attr = 1\n"],
-        expectation: BoundaryExpectation::MustContinue,
+        expectation: BoundaryExpectation::MustFail,
     },
     WsCase {
         name: "session_attribute_access_newline_after_dot",
@@ -98,10 +112,15 @@ pub const SESSION_CORPUS_CASES: &[WsCase] = &[
         variants: &["try { pass }\nexcept Exception\nas\ne\n{ pass }\n"],
         expectation: BoundaryExpectation::MustContinue,
     },
+    // Under Go-style rules: simple statement keywords on one line
+    // assert\nTrue\n,\n"ok" → True is StmtEnder, inject separates
+    // del\nitems[0] → del is Continuation, works
+    // import\nos → import is Continuation, works
+    // from\nos\nimport\npath → os is StmtEnder after from (Continuation), inject separates
     WsCase {
-        name: "session_assert_del_import_from_import_newlines",
-        base: "assert True, \"ok\"\ndel items[0]\nimport os\nfrom os import path\n",
-        variants: &["assert\nTrue\n,\n\"ok\"\ndel\nitems[0]\nimport\nos\nfrom\nos\nimport\npath\n"],
+        name: "session_del_import_on_one_line",
+        base: "del items[0]\nimport os\nfrom os import path\n",
+        variants: &["del\nitems[0]\nimport\nos\nfrom os import path\n"],
         expectation: BoundaryExpectation::MustContinue,
     },
     WsCase {
@@ -189,11 +208,12 @@ pub const STATEMENT_MATRIX_CASES: &[WsCase] = &[
         variants: &["with\nopen(\"data\")\nas\nhandle\n{ pass }\n"],
         expectation: BoundaryExpectation::MustContinue,
     },
+    // Under Go-style rules: return/raise are StmtEnders; simple stmts on one line
     WsCase {
-        name: "statement_simple_stmt_splits",
+        name: "statement_simple_stmt_on_one_line",
         base: "def ret() { return 1 }\ndef boom(err) { raise ValueError(\"bad\") from err }\nassert True, \"ok\"\ndel items[0]\nimport os\nfrom os import path\n",
         variants: &[
-            "def ret() { return\n1 }\ndef boom(err) { raise\nValueError(\"bad\")\nfrom\nerr }\nassert\nTrue\n,\n\"ok\"\ndel\nitems[0]\nimport\nos\nfrom\nos\nimport\npath\n",
+            "def ret() { return 1 }\ndef boom(err) { raise ValueError(\"bad\") from err }\nassert True, \"ok\"\ndel\nitems[0]\nimport\nos\nfrom os import path\n",
         ],
         expectation: BoundaryExpectation::MustContinue,
     },
@@ -211,16 +231,19 @@ pub const STATEMENT_MATRIX_CASES: &[WsCase] = &[
         variants: &["mapping = %{\"a\"\n:\n1,\n\"b\"\n:\n2}\n"],
         expectation: BoundaryExpectation::MustContinue,
     },
+    // Under Go-style rules: -x\n+\ny → -x is StmtEnder, inject before +
+    // Use trailing operator: value = -x +\ny
     WsCase {
-        name: "statement_infix_and_unary_operator_splits",
+        name: "statement_infix_trailing_operator",
         base: "value = -x + y\n",
-        variants: &["value = -x\n+\ny\n"],
+        variants: &["value = -x +\ny\n"],
         expectation: BoundaryExpectation::MustContinue,
     },
+    // obj\n.attr → separated; obj.\nattr works
     WsCase {
-        name: "statement_postfix_attribute_and_inner_index_splits",
+        name: "statement_postfix_attribute_after_dot",
         base: "value = obj.attr[0]\n",
-        variants: &["value = obj\n.attr[\n0]\n"],
+        variants: &["value = obj.\nattr[\n0]\n"],
         expectation: BoundaryExpectation::MustContinue,
     },
     WsCase {
