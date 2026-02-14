@@ -312,11 +312,11 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "snail-ast"
-version = "0.7.12"
+version = "0.8.0"
 
 [[package]]
 name = "snail-error"
-version = "0.7.12"
+version = "0.8.0"
 dependencies = [
  "snail-ast",
  "thiserror",
@@ -324,14 +324,14 @@ dependencies = [
 
 [[package]]
 name = "snail-lower"
-version = "0.7.12"
+version = "0.8.0"
 dependencies = [
  "snail-python",
 ]
 
 [[package]]
 name = "snail-parser"
-version = "0.7.12"
+version = "0.8.0"
 dependencies = [
  "pest",
  "pest_derive",
@@ -341,7 +341,7 @@ dependencies = [
 
 [[package]]
 name = "snail-python"
-version = "0.7.12"
+version = "0.8.0"
 dependencies = [
  "pyo3",
  "pyo3-build-config",
