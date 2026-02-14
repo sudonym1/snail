@@ -97,6 +97,7 @@ class _Args:
         self.no_auto_import = False
         self.debug = False
         self.debug_snail_ast = False
+        self.debug_snail_preprocessor = False
         self.debug_python_ast = False
         self.version = False
         self.help = False
@@ -140,6 +141,10 @@ def _print_help(file=None) -> None:
         "  --debug                 parse and compile, then print, do not run", file=file
     )
     print("  --debug-snail-ast       parse and print Snail AST, do not run", file=file)
+    print(
+        "  --debug-snail-preprocessor  show preprocessor output (stmt boundaries)",
+        file=file,
+    )
     print("  --debug-python-ast      parse and print Python AST, do not run", file=file)
     print("  -v, --version           show version and exit", file=file)
     print("  -h, --help              show this help message and exit", file=file)
@@ -241,6 +246,10 @@ def _parse_args(argv: list[str]) -> _Args:
             args.debug_snail_ast = True
             idx += 1
             continue
+        if token == "--debug-snail-preprocessor":
+            args.debug_snail_preprocessor = True
+            idx += 1
+            continue
         if token == "--debug-python-ast":
             args.debug_python_ast = True
             idx += 1
@@ -315,6 +324,34 @@ def _format_python_runtime() -> str:
     return f"Python {version} ({executable})"
 
 
+def _print_preprocessor_debug(source: str, preprocessed: str) -> None:
+    """Print a human-readable diff of the preprocessor's statement boundary injection."""
+    RS = "\x1e"
+    # Walk through both strings (same length) and build original lines
+    # annotated with whether each newline was replaced.
+    lines: list[tuple[str, bool]] = []  # (line_text, was_injected)
+    current: list[str] = []
+    for orig_ch, prep_ch in zip(source, preprocessed):
+        if orig_ch == "\n":
+            injected = prep_ch == RS
+            lines.append(("".join(current), injected))
+            current = []
+        else:
+            current.append(orig_ch)
+    # Last line (no trailing newline)
+    if current:
+        lines.append(("".join(current), False))
+
+    if not lines:
+        return
+
+    width = len(str(len(lines)))
+    for lineno_0, (text, injected) in enumerate(lines):
+        lineno = lineno_0 + 1
+        marker = " ;< " if injected else "    "
+        print(f"  {lineno:>{width}} |{marker}{text}")
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     if argv is None:
         _install_trimmed_excepthook()
@@ -371,6 +408,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         source = namespace.args[0]
         filename = "<cmd>"
         args = ["--", *namespace.args[1:]]
+
+    if namespace.debug_snail_preprocessor:
+        from . import preprocess
+
+        preprocessed = preprocess(source)
+        _print_preprocessor_debug(source, preprocessed)
+        return 0
 
     if namespace.debug_snail_ast:
         from . import parse_ast

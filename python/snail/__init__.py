@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from ._native import __build_info__, compile, compile_ast, exec, parse, parse_ast
+from ._native import (
+    __build_info__,
+    compile,
+    compile_ast,
+    exec,
+    parse,
+    parse_ast,
+    preprocess,
+)
 
 
 def _resolve_version() -> str:
@@ -30,6 +38,7 @@ __all__ = [
     "exec",
     "parse",
     "parse_ast",
+    "preprocess",
     "__version__",
     "__build_info__",
 ]

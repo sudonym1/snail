@@ -20,6 +20,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 use snail_ast::CompileMode;
 use snail_error::{ParseError, format_snail_error};
+use snail_parser::preprocess;
 use snail_parser::{parse, parse_awk, parse_awk_cli, parse_map};
 use std::fmt::Debug;
 use std::time::Instant;
@@ -371,6 +372,11 @@ fn parse_ast_py(
     }
 }
 
+#[pyfunction(name = "preprocess")]
+fn preprocess_py(source: &str) -> String {
+    preprocess::preprocess(source)
+}
+
 #[pyfunction(name = "parse")]
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>"))]
 fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
@@ -396,6 +402,7 @@ fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(exec_py, module)?)?;
     module.add_function(wrap_pyfunction!(parse_ast_py, module)?)?;
     module.add_function(wrap_pyfunction!(parse_py, module)?)?;
+    module.add_function(wrap_pyfunction!(preprocess_py, module)?)?;
     module.add("__build_info__", build_info_dict(py)?)?;
     module.add(
         "__all__",
@@ -405,6 +412,7 @@ fn _native(py: Python<'_>, module: &Bound<'_, PyModule>) -> PyResult<()> {
             "exec",
             "parse_ast",
             "parse",
+            "preprocess",
             "__build_info__",
         ],
     )?;
