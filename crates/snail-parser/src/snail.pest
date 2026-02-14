@@ -59,7 +59,7 @@ while_stmt = { "while" ~ line_cont ~ while_cond ~ line_cont ~ block ~ (stmt_sep*
 for_stmt = { "for" ~ line_cont ~ assign_target_list ~ line_cont ~ "in" ~ line_cont ~ expr ~ line_cont ~ block ~ (stmt_sep* ~ "else" ~ line_cont ~ block)? }
 if_cond = { let_cond | expr }
 while_cond = { let_cond | expr }
-let_cond = { "let" ~ line_cont ~ assign_target_list ~ line_cont ~ "=" ~ line_cont ~ expr ~ let_guard? }
+let_cond = { "let" ~ line_cont ~ assign_target_list ~ line_cont ~ "=" ~ line_cont ~ expr ~ line_cont ~ let_guard? }
 let_guard = { ";" ~ line_cont ~ expr }
 
 // Function and class definitions
@@ -219,7 +219,7 @@ atom = _{
   | paren_expr
 }
 
-def_expr = { "def" ~ parameters? ~ block }
+def_expr = { "def" ~ line_cont ~ parameters? ~ block }
 
 // Parenthesized expression (preserved in AST for proper validation)
 paren_expr = { "(" ~ line_cont ~ expr ~ line_cont ~ ")" }
