@@ -1,7 +1,7 @@
 mod common;
 
 use common::parse_ok;
-use snail_ast::Stmt;
+use snail_ast::{Expr, Stmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StmtKind {
@@ -120,6 +120,12 @@ fn parses_each_statement_with_newline_split_tokens() {
         ),
         ("assign_stmt", "value =\n1\n", StmtKind::Assign),
         ("expr_stmt", "print(\n1\n)\n", StmtKind::Expr),
+        ("expr_stmt_yield", "yield\n1\n", StmtKind::Expr),
+        (
+            "expr_stmt_yield_from",
+            "yield\nfrom\nitems\n",
+            StmtKind::Expr,
+        ),
     ];
 
     for (case_name, source, expected_kind) in cases {
@@ -134,5 +140,40 @@ fn parses_each_statement_with_newline_split_tokens() {
             actual_kind, expected_kind,
             "unexpected statement kind for {case_name}\nsource:\n{source}"
         );
+    }
+}
+
+#[test]
+fn parses_yield_expression_statements() {
+    let program = parse_ok("yield 1\nyield from items\nyield\n");
+    assert_eq!(program.stmts.len(), 3);
+
+    match &program.stmts[0] {
+        Stmt::Expr { value, .. } => match value {
+            Expr::Yield { value, .. } => match value.as_deref() {
+                Some(Expr::Number { value, .. }) => assert_eq!(value, "1"),
+                other => panic!("expected numeric yield value, got {other:?}"),
+            },
+            other => panic!("expected yield expression, got {other:?}"),
+        },
+        other => panic!("expected expression statement, got {other:?}"),
+    }
+
+    match &program.stmts[1] {
+        Stmt::Expr { value, .. } => match value {
+            Expr::YieldFrom { expr, .. } => {
+                assert!(matches!(expr.as_ref(), Expr::Name { name, .. } if name == "items"));
+            }
+            other => panic!("expected yield from expression, got {other:?}"),
+        },
+        other => panic!("expected expression statement, got {other:?}"),
+    }
+
+    match &program.stmts[2] {
+        Stmt::Expr { value, .. } => match value {
+            Expr::Yield { value, .. } => assert!(value.is_none()),
+            other => panic!("expected bare yield expression, got {other:?}"),
+        },
+        other => panic!("expected expression statement, got {other:?}"),
     }
 }

@@ -128,8 +128,8 @@ expr_stmt = { expr }
 // Expressions: precedence from lowest (aug assignment) to highest (power)
 expr = { aug_assign_expr | yield_expr | if_expr }
 
-yield_expr = { "yield" ~ (yield_from | yield_value)? }
-yield_from = { "from" ~ if_expr }
+yield_expr = { "yield" ~ line_cont ~ (yield_from | yield_value)? }
+yield_from = { "from" ~ line_cont ~ if_expr }
 yield_value = _{ if_expr }
 
 aug_assign_expr = { aug_target ~ aug_op ~ line_cont ~ expr }
