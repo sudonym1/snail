@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-make build
+uv sync --extra dev
+uv run -- python -m maturin develop
 exec uv run -- snail "$@"
