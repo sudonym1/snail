@@ -219,7 +219,7 @@ atom = _{
   | paren_expr
 }
 
-def_expr = { "def" ~ line_cont ~ parameters? ~ block }
+def_expr = { "def" ~ line_cont ~ parameters? ~ line_cont ~ block }
 
 // Parenthesized expression (preserved in AST for proper validation)
 paren_expr = { "(" ~ line_cont ~ expr ~ line_cont ~ ")" }

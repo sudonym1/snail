@@ -647,6 +647,21 @@ fn parses_def_expr_no_params() {
 }
 
 #[test]
+fn parses_bare_def_expr_with_newline_before_block() {
+    let source = "def\n{}\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match expect_expr_stmt(&program.stmts[0]) {
+        Expr::Lambda { params, body, .. } => {
+            assert!(params.is_empty());
+            assert!(body.is_empty());
+        }
+        other => panic!("Expected bare def expression, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_def_expr_with_params_and_defaults() {
     let source = "f = def(x, y=2, *rest, **kw) { x }\n";
     let program = parse_ok(source);
