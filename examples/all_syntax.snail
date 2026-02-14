@@ -198,6 +198,19 @@ assert placeholder_second == "Hello Hello World"
 placeholder_named = "World" | greet("Hello ", suffix=_)
 assert placeholder_named == "Hello Hello World"
 
+# ---- Glob expansion with path() ----
+glob_files = path("*.toml")
+assert type(glob_files) == list
+assert len(glob_files) > 0
+
+# Fallback on no matches
+glob_empty = path("*.zzz_nonexistent_ext")?
+assert glob_empty == []
+
+# Multiple patterns
+glob_multi = path("*.toml", "*.lock")
+assert len(glob_multi) >= 1
+
 # ---- Operators, ternary, and precedence ----
 missing = None
 flag = not False and True or False

@@ -1743,6 +1743,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_awk_include_whitespace",
         "__snail_env",
         "js",
+        "path",
         "__SnailLazyText",
         "__SnailLazyFile",
     }
@@ -1760,6 +1761,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_aug_attr",
         "__snail_aug_index",
         "js",
+        "path",
     ]
     for name in lazy_wrapper_names:
         assert callable(globals_dict[name])
@@ -2561,3 +2563,94 @@ def test_example_map(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     captured = capsys.readouterr()
     assert str(file_a) in captured.out
     assert "bytes" in captured.out
+
+
+# --- Tests for path() glob helper ---
+
+
+def test_path_helper_returns_paths(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "a.txt").write_text("a")
+    (tmp_path / "b.txt").write_text("b")
+    (tmp_path / "c.md").write_text("c")
+    script = (
+        f'import os; os.chdir("{tmp_path}")\n'
+        'result = path("*.txt")\n'
+        "print(sorted([p.name for p in result]))"
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "['a.txt', 'b.txt']"
+
+
+def test_path_helper_fallback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    script = (
+        f'import os; os.chdir("{tmp_path}")\n'
+        'result = path("*.nonexistent")?\n'
+        "print(result)"
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "[]"
+
+
+def test_path_helper_multiple_patterns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "a.txt").write_text("a")
+    (tmp_path / "b.md").write_text("b")
+    script = (
+        f'import os; os.chdir("{tmp_path}")\n'
+        'result = path("*.txt", "*.md")\n'
+        "print(sorted([p.name for p in result]))"
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "['a.txt', 'b.md']"
+
+
+def test_path_helper_no_false_matches(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "a.txt").write_text("a")
+    (tmp_path / "b.md").write_text("b")
+    script = (
+        f'import os; os.chdir("{tmp_path}")\n'
+        'result = path("*.txt")\n'
+        "print([p.name for p in result])"
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert "b.md" not in captured.out
+
+
+def test_path_helper_partial_match_raises_with_fallback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When one pattern matches and another doesn't, raise GlobError.
+    The ? fallback returns the partial matches."""
+    (tmp_path / "a.py").write_text("a")
+    script = (
+        f'import os; os.chdir("{tmp_path}")\n'
+        'result = path("*.nonexistent", "*.py")?\n'
+        "print(sorted([p.name for p in result]))"
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "['a.py']"
+
+
+def test_path_helper_partial_match_raises_without_fallback(
+    tmp_path: Path,
+) -> None:
+    """When one pattern matches and another doesn't, raise without ?."""
+    (tmp_path / "a.py").write_text("a")
+    script = (
+        f'import os; os.chdir("{tmp_path}")\n'
+        'result = path("*.nonexistent", "*.py")\n'
+    )
+    with pytest.raises(Exception, match="no matches"):
+        main(["-P", script])

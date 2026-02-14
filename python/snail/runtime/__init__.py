@@ -56,6 +56,7 @@ _GETTER_REGISTRY: dict[str, tuple[str, str, bool]] = {
     "_get_incr_index": (".augmented", "__snail_incr_index", False),
     "_get_aug_attr": (".augmented", "__snail_aug_attr", False),
     "_get_aug_index": (".augmented", "__snail_aug_index", False),
+    "_get_path": (".path_helper", "path", False),
 }
 
 _LAZY_WRAPPER_REGISTRY: dict[str, str] = {
@@ -70,6 +71,7 @@ _LAZY_WRAPPER_REGISTRY: dict[str, str] = {
     "_lazy_incr_index": "_get_incr_index",
     "_lazy_aug_attr": "_get_aug_attr",
     "_lazy_aug_index": "_get_aug_index",
+    "_lazy_path": "_get_path",
 }
 
 _INSTALL_LAZY_HELPER_REGISTRY: dict[str, str] = {
@@ -84,6 +86,7 @@ _INSTALL_LAZY_HELPER_REGISTRY: dict[str, str] = {
     "__snail_aug_attr": "_lazy_aug_attr",
     "__snail_aug_index": "_lazy_aug_index",
     "js": "_lazy_js",
+    "path": "_lazy_path",
 }
 
 _INSTALL_EAGER_HELPER_REGISTRY: dict[str, str] = {

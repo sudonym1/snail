@@ -439,6 +439,25 @@ When used standalone, subprocess expressions run with no stdin (current behavior
 When used on the right side of `|`, the left-hand value is piped to the command's
 stdin.
 
+## Glob expansion
+
+The built-in `path()` function expands glob patterns and returns a `list[Path]`
+of matching files. It uses Python's `glob` module internally.
+
+```snail
+# Single pattern
+py_files = path("*.py")
+
+# Multiple patterns
+assets = path("*.css", "*.js")
+
+# Fallback on no matches — returns []
+missing = path("*.nonexistent")?
+```
+
+`path()` raises `GlobError` when no files match any of the given patterns. Use
+the `?` compact-try operator to get an empty list as a fallback.
+
 ## JSON queries
 Snail provides first-class JSON support through JMESPath queries using the
 `js()` function and `$[query]` structured pipeline accessor syntax.
