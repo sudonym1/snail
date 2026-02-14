@@ -106,9 +106,76 @@ print(repr($env.MISSING?))  # ''
 Missing keys raise exceptions by default; using `?` invokes `$env`'s
 `__fallback__` to return an empty string.
 
+## Statement boundaries
+
+Snail uses a Go-style rule: newlines act as statement separators based on the
+token that precedes them. You rarely need to think about this — write one
+statement per line and it works. The rules matter when you want to split a
+long statement across lines.
+
+A newline **ends a statement** after:
+- Identifiers and literals (numbers, strings, `True`, `False`, `None`)
+- Closing brackets: `)`, `]`, `}`
+- Postfix operators: `?`, `++`, `--`
+- `break`, `continue`, `pass`, `return`, `yield`, `raise`
+
+A newline **continues the statement** after:
+- Operators: `+`, `-`, `*`, `/`, `=`, `==`, `!=`, `<`, `>`, `|`, etc.
+- Commas, dots, colons, semicolons
+- Compound-statement keywords: `if`, `elif`, `else`, `while`, `for`, `def`,
+  `class`, `try`, `except`, `finally`, `with`
+- Other keywords: `in`, `and`, `or`, `not`, `as`, `import`, `from`, `del`,
+  `assert`, `let`
+
+Newlines inside **parentheses** `()` and **brackets** `[]` never end a
+statement, so you can freely split argument lists and array contents across
+lines. The same applies inside set literals `#{...}` and dict literals
+`%{...}`.
+
+Inside **block braces** `{...}`, normal rules apply — each line is a separate
+statement unless continued by a trailing operator.
+
+**Compound-statement headers** (from the keyword to the opening `{`) allow
+free newlines regardless of the tokens in between:
+```snail
+for x
+in range(10) {
+    print(x)
+}
+
+def greet
+(name, greeting="hi") {
+    print("{greeting}, {name}")
+}
+```
+
+**Multiline expressions**: to split a long expression across lines, end the
+first line with an operator:
+```snail
+total = first_value +
+    second_value +
+    third_value
+```
+Alternatively, wrap the expression in parentheses:
+```snail
+total = (first_value
+    + second_value
+    + third_value)
+```
+
+**Same-line arguments**: `return`, `yield`, and `raise` end the statement at a
+newline, so their argument must appear on the same line:
+```snail
+return x + 1       # returns x + 1
+yield value         # yields value
+raise ValueError()  # raises
+```
+
+Explicit semicolons always separate statements regardless of these rules.
+
 ## Statements and expressions
 - Assignments mirror Python (`value = 1`). Multiple statements can be separated
-  with semicolons.
+  with semicolons or newlines.
 - Destructuring assignment works for tuples and lists:
   `x, y = pair`, `[a, b] = items`, and starred rest bindings such as
   `x, *xs = values`.

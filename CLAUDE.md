@@ -110,21 +110,27 @@ The repository is organized as a Cargo workspace with the following crates:
 
 ### Compilation Pipeline
 
-Snail → Parser → AST → Lowering → Python AST → in-process exec
+Snail → Preprocessor → Parser → AST → Lowering → Python AST → in-process exec
 
-1. **Parser** (`crates/snail-parser/`):
+1. **Preprocessor** (`crates/snail-parser/src/preprocess.rs`):
+   - Go-style semicolon injection: scans source and replaces statement-boundary newlines with `\x1e` (ASCII Record Separator)
+   - Classifies tokens as StmtEnders (identifiers, literals, `)`, `]`, `}`, `?`, `++`, `--`) or Continuations (operators, commas, compound-statement keywords)
+   - Suppresses injection inside parentheses, brackets, set/dict literals, and compound-statement headers
+   - Output has identical byte length to input; `\x1e` is treated as `stmt_sep` by the Pest grammar
+
+2. **Parser** (`crates/snail-parser/`):
    - Uses Pest parser generator with grammar defined in `crates/snail-parser/src/snail.pest`
    - Produces Snail AST with source spans for error reporting
    - Two entry points: `parse_program()` for regular Snail, `parse_awk_program()` for awk mode
    - All string forms (quotes, regex `/.../`, subprocess `$(...)`, `@(...)`) support `{expr}` interpolation
 
-2. **AST** (`crates/snail-ast/`):
+3. **AST** (`crates/snail-ast/`):
    - `Program`: Top-level Snail AST with statement list (`crates/snail-ast/src/ast.rs`)
    - `AwkProgram`: Separate structure with BEGIN/END blocks and pattern/action rules (`crates/snail-ast/src/awk.rs`)
    - All nodes carry `SourceSpan` for traceback accuracy
    - Awk mode has special `$`-prefixed variables (`$0`, `$1`, `$n`, `$fn`, `$f`, `$src`, `$m`)
 
-3. **Lowering** (`crates/snail-lower/`):
+4. **Lowering** (`crates/snail-lower/`):
    - Transforms Snail AST into Python `ast` nodes via pyo3
    - Handles Snail-specific features by generating helper calls (provided by `snail.runtime`):
      - `?` operator → compact try/except using `__snail_compact_try`
@@ -134,14 +140,14 @@ Snail → Parser → AST → Lowering → Python AST → in-process exec
    - Awk variables (`$0`, `$n`, etc.) map to Python names (`__snail_line`, `__snail_nr_user`, etc.)
    - Awk mode wrapping: lower_awk_program() generates a Python main loop over input files/stdin
 
-4. **Python AST**:
+5. **Python AST**:
    - Uses Python's built-in `ast` nodes constructed in Rust via pyo3
 
-5. **Compilation API** (`crates/snail-python/`):
+6. **Compilation API** (`crates/snail-python/`):
    - `compile_snail_source_with_auto_print()`: compiles Snail source to a Python AST module, with optional auto-print of the last expression
    - Used by the Python module to execute code in-process
 
-6. **Python CLI** (`python/snail/cli.py`):
+7. **Python CLI** (`python/snail/cli.py`):
    - Handles `-f file.snail`, one-liner execution, and `--awk` mode
    - Executes generated Python code in-process via the `snail` extension module
    - `-P` flag disables auto-printing of last expression
