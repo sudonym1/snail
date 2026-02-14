@@ -176,19 +176,19 @@ cmd_name = "snail"
 # @(...) returns status (raise on non-zero, with ? to swallow)
 echoed = $(echo {cmd_name})
 try {
-    echoed = $(false)? # it is required to provide a default value for this form.
+    echoed = $(__snail_missing_command__)? # it is required to provide a default value for this form.
 } except Exception as e {
-    echoed = $(false):"default"?
+    echoed = $(__snail_missing_command__):"default"?
 }
 assert echoed == "default"
 status_ok = @(echo ready)
-status_fail = @(false)?
+status_fail = @(__snail_missing_command__)?
 
 # Subprocess pipelines and placeholder arguments
-piped = "test" | $(cat)
+piped = "test" | $(more)
 assert piped == "test"
-chained = "a\nb" | $(grep a) | $(cat)
-assert chained == "a"
+chained = "b\na" | $(sort) | $(more)
+assert chained == "a\nb"
 
 def greet(name, suffix) { return "Hello {name}{suffix}" }
 placeholder_first = "World" | greet(_, "!")
