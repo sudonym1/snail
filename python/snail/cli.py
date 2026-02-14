@@ -325,31 +325,8 @@ def _format_python_runtime() -> str:
 
 
 def _print_preprocessor_debug(source: str, preprocessed: str) -> None:
-    """Print a human-readable diff of the preprocessor's statement boundary injection."""
-    RS = "\x1e"
-    # Walk through both strings (same length) and build original lines
-    # annotated with whether each newline was replaced.
-    lines: list[tuple[str, bool]] = []  # (line_text, was_injected)
-    current: list[str] = []
-    for orig_ch, prep_ch in zip(source, preprocessed):
-        if orig_ch == "\n":
-            injected = prep_ch == RS
-            lines.append(("".join(current), injected))
-            current = []
-        else:
-            current.append(orig_ch)
-    # Last line (no trailing newline)
-    if current:
-        lines.append(("".join(current), False))
-
-    if not lines:
-        return
-
-    width = len(str(len(lines)))
-    for lineno_0, (text, injected) in enumerate(lines):
-        lineno = lineno_0 + 1
-        marker = " ;< " if injected else "    "
-        print(f"  {lineno:>{width}} |{marker}{text}")
+    """Print the source with statement-boundary newlines shown as !\\n."""
+    print(preprocessed.replace("\x1e", "❗\n"), end="")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
