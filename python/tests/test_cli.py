@@ -361,6 +361,42 @@ def test_test_print_falsy(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "False\n"
 
 
+def test_test_subprocess_status_truthy(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert main(["-t", "@(echo ready)"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_test_print_subprocess_status_failure_compact_try(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fake_run(cmd, **kwargs):
+        raise subprocess.CalledProcessError(7, cmd)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert main(["-tp", "@(echo nope)?"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "7\n"
+
+
+def test_test_subprocess_capture_still_returns_string(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout="hello\n")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert main(["-tp", "type($(echo hi)).__name__"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "str\n"
+
+
 def test_test_semicolon_terminated(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["-t", "x = 1;"]) == 2
     captured = capsys.readouterr()
@@ -1962,6 +1998,24 @@ def test_runtime_run_subprocess_status_without_input(
     }
 
 
+def test_subprocess_status_success_returns_snail_exit_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_subprocess = importlib.import_module("snail.runtime.subprocess")
+
+    def fake_run_subprocess(cmd: str, input_data=None, *, capture: bool):
+        return object()
+
+    monkeypatch.setattr(runtime_subprocess, "_run_subprocess", fake_run_subprocess)
+    status = runtime_subprocess.SubprocessStatus("ok")
+    result = status()
+
+    assert isinstance(result, runtime_subprocess.SnailExitStatus)
+    assert result == 0
+    assert bool(result)
+    assert result.rc == 0
+
+
 def test_subprocess_capture_error_fallback_reraises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2001,7 +2055,11 @@ def test_subprocess_status_error_fallback_returns_returncode(
         status()
     fallback = getattr(excinfo.value, "__fallback__", None)
     assert callable(fallback)
-    assert fallback() == 7
+    value = fallback()
+    assert isinstance(value, runtime_subprocess.SnailExitStatus)
+    assert value == 7
+    assert not value
+    assert value.rc == 7
 
 
 def test_lazy_text_reads_once_and_caches() -> None:

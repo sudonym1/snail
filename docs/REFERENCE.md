@@ -427,9 +427,13 @@ Snail provides succinct subprocess helpers that work seamlessly with the pipelin
 operator:
 - `$(<command>)` runs the command, captures stdout, and returns it as a string.
   It raises on non-zero exit unless a fallback is provided.
-- `@(<command>)` runs the command without capturing output and returns `0` on
-  success. On failure it raises unless a fallback is specified; the injected
-  `__fallback__` returns the process return code.
+- `@(<command>)` runs the command without capturing output and returns a
+  `SnailExitStatus` on success.
+  - `bool(status)` is `True` when the exit code is `0`, else `False`.
+  - It compares like an integer exit code (`status == 0`).
+  - Use `status.rc` to read the numeric return code.
+  On failure it raises unless a fallback is specified; with `?`, the fallback
+  value is a `SnailExitStatus` carrying the failing return code.
 
 Both forms treat the command body as an f-string, so variables inside `{}` are
 interpolated directly:
@@ -437,7 +441,9 @@ interpolated directly:
 cmd_name = "snail"
 echoed = $(echo {cmd_name})
 status_ok = @(echo ready)
-status_fail = @(false)?           # yields return code because of __fallback__
+status_fail = @(false)?           # SnailExitStatus with non-zero .rc
+assert status_ok                  # 0 is treated as truthy here
+assert status_fail.rc != 0
 ```
 
 ### Subprocess pipelines
@@ -453,7 +459,7 @@ output = "foo\nbar" | $(grep foo) | $(wc -w)  # "1"
 number = 42 | $(cat)              # "42"
 
 # Works with @() too
-"data" | @(cat > /tmp/file)       # writes to file, returns 0
+"data" | @(cat > /tmp/file)       # writes to file, returns SnailExitStatus(0)
 ```
 
 When used standalone, subprocess expressions run with no stdin (current behavior).
