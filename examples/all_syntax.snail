@@ -173,7 +173,7 @@ brace_text = "brace {{ok}}"
 # ---- Subprocess and pipeline syntax ----
 cmd_name = "snail"
 # $(...) captures stdout
-# @(...) returns status (raise on non-zero, with ? to swallow)
+# @(...) returns SnailExitStatus (raise on non-zero, with ? to swallow)
 echoed = $(echo {cmd_name})
 try {
     echoed = $(__snail_missing_command__)? # it is required to provide a default value for this form.
@@ -183,6 +183,11 @@ try {
 assert echoed == "default"
 status_ok = @(echo ready)
 status_fail = @(__snail_missing_command__)?
+assert status_ok
+assert status_ok.rc == 0
+assert not status_fail
+assert status_fail.rc != 0
+assert status_fail == status_fail.rc
 
 # Subprocess pipelines and placeholder arguments
 piped = "test" | $(more)

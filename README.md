@@ -224,7 +224,8 @@ greeting = $(echo hello {name})
 result = "foo\nbar\nbaz" | $(grep bar) | $(cat -n)
 
 # Check command status
-@(make build)?  # returns exit code on failure instead of raising
+status = @(make build)?  # returns SnailExitStatus on failure instead of raising
+if status { print("build passed") } else { print(status.rc) }
 ```
 
 
