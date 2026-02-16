@@ -118,7 +118,10 @@ def _print_help(file=None) -> None:
     print(_DESCRIPTION, file=file)
     print("", file=file)
     print("options:", file=file)
-    print("  -f <file>               read Snail source from file ('-' for stdin)", file=file)
+    print(
+        "  -f <file>               read Snail source from file ('-' for stdin)",
+        file=file,
+    )
     print("  -a, --awk               awk mode", file=file)
     print("  -m, --map               map mode (process files one at a time)", file=file)
     print(
@@ -138,7 +141,10 @@ def _print_help(file=None) -> None:
         "  -t, --test              exit 0 if last expression is truthy, 1 if falsy",
         file=file,
     )
-    print("  -p, --print             force auto-print (overrides -P and --test)", file=file)
+    print(
+        "  -p, --print             force auto-print (overrides -P and --test)",
+        file=file,
+    )
     print(
         "  -P, --no-print          disable auto-print of implicit return value",
         file=file,

@@ -442,7 +442,9 @@ def test_inline_print(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "hi\n"
 
 
-def test_stdin_program(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stdin_program(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     set_stdin(monkeypatch, "print('hi')\n")
     assert main(["-f", "-"]) == 0
     captured = capsys.readouterr()
