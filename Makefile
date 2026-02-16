@@ -29,8 +29,7 @@ develop: sync
 # Run all tests
 test: test-rust test-python develop
 	$(UV) run -- python -m pytest python/tests
-	$(UV) run -- python -c 'from pathlib import Path; import hashlib; files=["CLAUDE.md", "AGENTS.md"]; digests=[hashlib.sha1(Path(f).read_bytes()).hexdigest() for f in files]; assert digests[0] == digests[1], "CLAUDE.md and AGENTS.md MUST BE THE SAME. AGENTS.md is canonical"'
-
+	$(UV) run -- snail -t 'Path("AGENTS.md").read_text() == Path("CLAUDE.md").read_text()'
 # Build release wheels
 build: sync
 	$(UV) run -- python -m maturin build --release
