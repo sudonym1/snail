@@ -439,8 +439,8 @@ fn parse_ast_py(
 }
 
 #[pyfunction(name = "preprocess")]
-fn preprocess_py(source: &str) -> String {
-    preprocess::preprocess(source)
+fn preprocess_py(source: &str) -> PyResult<String> {
+    preprocess::preprocess(source).map_err(|err| parse_error_to_syntax(err, "<snail>"))
 }
 
 #[pyfunction(name = "parse")]

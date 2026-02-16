@@ -4,6 +4,9 @@
 /// (ASCII Record Separator). This character is then treated as a statement
 /// separator by the Pest grammar, while being invisible to
 /// `check_trailing_semicolon` (which only looks for `;`).
+use snail_ast::{SourcePos, SourceSpan};
+use snail_error::ParseError;
+
 const RS: u8 = 0x1E; // ASCII Record Separator
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -24,7 +27,7 @@ enum LastToken {
 
 /// Preprocess Snail source: replace newlines at statement boundaries with \x1e.
 /// The returned string has the same byte length as the input.
-pub fn preprocess(source: &str) -> String {
+pub fn preprocess(source: &str) -> Result<String, ParseError> {
     let bytes = source.as_bytes();
     let mut out = bytes.to_vec();
     let len = bytes.len();
@@ -249,13 +252,81 @@ pub fn preprocess(source: &str) -> String {
             continue;
         }
 
+        // === Backslash line continuation ===
+        // Consume `\`, any trailing whitespace, and the newline.
+        // More forgiving than Python (which requires `\` immediately before newline).
+        // Only active at statement level — inside brackets/parens, `\` is a regular
+        // character (e.g. JMESPath escapes in $[\"key\"]).
+        if b == b'\\' && at_stmt_level(&bracket_stack) {
+            let mut j = i + 1;
+            while j < len && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                j += 1;
+            }
+            if j < len && bytes[j] == b'\n' {
+                // Replace \ + whitespace + LF with spaces
+                for slot in &mut out[i..=j] {
+                    *slot = b' ';
+                }
+                i = j + 1;
+                continue;
+            } else if j + 1 < len && bytes[j] == b'\r' && bytes[j + 1] == b'\n' {
+                // Replace \ + whitespace + CR LF with spaces
+                for slot in &mut out[i..=j + 1] {
+                    *slot = b' ';
+                }
+                i = j + 2;
+                continue;
+            }
+            // Stray backslash at statement level — not followed by a newline
+            return Err(stray_backslash_error(source, i));
+        }
+
         // === Anything else: skip ===
         prev_non_ws_byte = Some(b);
         i += 1;
     }
 
     // SAFETY: We only replaced \n (valid ASCII) with \x1e (valid ASCII), so the output is valid UTF-8.
-    String::from_utf8(out).expect("preprocessed output should be valid UTF-8")
+    Ok(String::from_utf8(out).expect("preprocessed output should be valid UTF-8"))
+}
+
+fn stray_backslash_error(source: &str, offset: usize) -> ParseError {
+    let (line, column) = line_col(source, offset);
+    let line_text = source.lines().nth(line - 1).map(|s| s.to_string());
+    let span = SourceSpan {
+        start: SourcePos {
+            offset,
+            line,
+            column,
+        },
+        end: SourcePos {
+            offset: offset + 1,
+            line,
+            column: column + 1,
+        },
+    };
+    let mut err =
+        ParseError::new("stray '\\' (backslash line continuation must be followed by a newline)");
+    err.span = Some(span);
+    err.line_text = line_text;
+    err
+}
+
+fn line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1usize;
+    let mut col = 1usize;
+    for (i, ch) in source.char_indices() {
+        if i >= offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
 }
 
 fn should_inject(
@@ -548,7 +619,7 @@ mod tests {
     use super::*;
 
     fn pp(s: &str) -> String {
-        preprocess(s)
+        preprocess(s).unwrap()
     }
 
     fn has_rs(s: &str) -> bool {
@@ -819,5 +890,142 @@ mod tests {
     fn dollar_var_is_stmt_ender() {
         let result = pp("$0\nx");
         assert!(has_rs(&result));
+    }
+
+    // === Backslash line continuation tests ===
+
+    #[test]
+    fn backslash_continuation_basic() {
+        let source = "return \\\n1";
+        let result = pp(source);
+        assert!(!has_rs(&result), "continuation should suppress injection");
+        assert_eq!(result.len(), source.len(), "length must be preserved");
+    }
+
+    #[test]
+    fn backslash_continuation_after_operator() {
+        let source = "x = 1 + \\\n2";
+        let result = pp(source);
+        assert!(!has_rs(&result));
+        assert_eq!(result.len(), source.len());
+    }
+
+    #[test]
+    fn backslash_continuation_suppresses_injection() {
+        // Without continuation, `x\ny` would inject \x1e
+        let source = "x \\\ny";
+        let result = pp(source);
+        assert!(!has_rs(&result), "backslash should prevent stmt boundary");
+        assert_eq!(result.len(), source.len());
+    }
+
+    #[test]
+    fn backslash_continuation_multiple() {
+        let source = "x = \\\n1 + \\\n2";
+        let result = pp(source);
+        assert!(!has_rs(&result));
+        assert_eq!(result.len(), source.len());
+    }
+
+    #[test]
+    fn backslash_in_string_not_continuation() {
+        // Backslash inside a string should not be treated as continuation
+        let source = "\"hello\\\nworld\"";
+        let result = pp(source);
+        // The string body is skipped before the backslash check runs,
+        // so the string content should be unchanged
+        assert_eq!(result, source);
+        assert_eq!(result.len(), source.len());
+    }
+
+    #[test]
+    fn backslash_in_comment_not_continuation() {
+        // `x` is StmtEnder, comment is transparent, `y` follows → inject
+        let source = "x # comment \\\ny";
+        let result = pp(source);
+        assert!(
+            has_rs(&result),
+            "comment backslash should not suppress injection"
+        );
+        assert_eq!(result.len(), source.len());
+    }
+
+    #[test]
+    fn backslash_continuation_crlf() {
+        let source = "return \\\r\n1";
+        let result = pp(source);
+        assert!(
+            !has_rs(&result),
+            "CRLF continuation should suppress injection"
+        );
+        assert_eq!(result.len(), source.len());
+    }
+
+    #[test]
+    fn backslash_trailing_space_is_continuation() {
+        // Trailing whitespace between backslash and newline is consumed
+        let source = "return \\ \n1";
+        let result = pp(source);
+        assert!(
+            !has_rs(&result),
+            "trailing space should not prevent continuation"
+        );
+        assert_eq!(result.len(), source.len());
+    }
+
+    #[test]
+    fn backslash_trailing_tabs_is_continuation() {
+        let source = "return \\\t\t\n1";
+        let result = pp(source);
+        assert!(
+            !has_rs(&result),
+            "trailing tabs should not prevent continuation"
+        );
+        assert_eq!(result.len(), source.len());
+    }
+
+    // === Stray backslash error tests ===
+
+    #[test]
+    fn stray_backslash_before_token() {
+        // `return \1` — backslash not followed by newline
+        let err = preprocess("return \\1").unwrap_err();
+        assert!(err.message.contains("stray '\\'"));
+    }
+
+    #[test]
+    fn stray_backslash_with_space_before_token() {
+        // `return \ 1` — backslash, space, then non-newline
+        let err = preprocess("return \\ 1").unwrap_err();
+        assert!(err.message.contains("stray '\\'"));
+    }
+
+    #[test]
+    fn stray_backslash_at_eof() {
+        let err = preprocess("return \\").unwrap_err();
+        assert!(err.message.contains("stray '\\'"));
+    }
+
+    #[test]
+    fn stray_backslash_reports_correct_position() {
+        let err = preprocess("x = 1\nreturn \\1").unwrap_err();
+        let span = err.span.unwrap();
+        assert_eq!(span.start.line, 2);
+        assert_eq!(span.start.column, 8);
+    }
+
+    #[test]
+    fn backslash_inside_brackets_not_error() {
+        // Backslash inside $[...] is a JMESPath escape, not a continuation
+        let source = "x = $[\\\"key\\\"]";
+        let result = pp(source);
+        assert_eq!(result.len(), source.len());
+    }
+
+    #[test]
+    fn backslash_inside_parens_not_error() {
+        let source = "f(\\x)";
+        let result = pp(source);
+        assert_eq!(result.len(), source.len());
     }
 }
