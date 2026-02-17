@@ -1,7 +1,7 @@
 mod common;
 
 use common::*;
-use snail_parser::{parse, parse_awk, parse_awk_cli, parse_main, parse_map};
+use snail_parser::{parse_for_files, parse_lines_program, parse_main};
 
 fn assert_regular_mode_error(source: &str, token: &str, mode_hint: &str) {
     let err = parse_err(source);
@@ -11,7 +11,7 @@ fn assert_regular_mode_error(source: &str, token: &str, mode_hint: &str) {
 }
 
 fn assert_map_mode_error(source: &str, token: &str, mode_hint: &str) {
-    let err = parse_map(source).expect_err("source should fail in map mode");
+    let err = parse_for_files(source).expect_err("source should fail in map mode");
     let message = err.to_string();
     assert!(message.contains(token), "{source:?} => {message:?}");
     assert!(message.contains(mode_hint), "{source:?} => {message:?}");
@@ -214,122 +214,18 @@ fn parser_rejects_invalid_parameter_syntax() {
     assert!(err.span.is_some());
 }
 
-// ========== Regular Mode BEGIN/END Parser Tests ==========
-
-#[test]
-fn program_begin_end_parsed_as_blocks() {
-    let (program, begin_blocks, end_blocks) =
-        parse("BEGIN { print(1) }\nprint(2)\nEND { print(3) }").expect("should parse");
-    assert_eq!(program.stmts.len(), 1);
-    assert_eq!(begin_blocks.len(), 1);
-    assert_eq!(end_blocks.len(), 1);
-
-    let (program, begin_blocks, end_blocks) = parse("x END { foo; }").expect("should parse");
-    assert_eq!(program.stmts.len(), 1);
-    assert!(begin_blocks.is_empty());
-    assert_eq!(end_blocks.len(), 1);
-}
-
-#[test]
-fn program_begin_end_rejects_awk_map_vars() {
-    let err = parse("BEGIN { print($0) }").expect_err("should reject awk vars");
-    assert!(err.to_string().contains("$0"));
-
-    let err = parse("BEGIN { print($src) }").expect_err("should reject map vars");
-    assert!(err.to_string().contains("$src"));
-}
-
 // ========== AWK Mode Parser Tests ==========
 
 #[test]
-fn awk_begin_end_parsed_as_blocks() {
-    let program =
-        parse_awk("BEGIN { print(1) } /foo/ { print($0) } END { print(2) }").expect("should parse");
-    assert_eq!(program.rules.len(), 1);
-    assert_eq!(program.begin_blocks.len(), 1);
-    assert_eq!(program.end_blocks.len(), 1);
-}
-
-#[test]
 fn awk_parses_simple_rules() {
-    let program = parse_awk("/foo/ { print($0) }").expect("should parse");
-    assert_eq!(program.rules.len(), 1);
-    assert!(program.begin_blocks.is_empty());
-    assert!(program.end_blocks.is_empty());
-}
-
-#[test]
-fn awk_with_begin_end_injects_blocks() {
-    let program = parse_awk_cli("/foo/ { print($0) }", &["x = 1", "y = 2"], &["print(x)"])
-        .expect("should parse");
-
-    assert_eq!(program.rules.len(), 1);
-    assert_eq!(program.begin_blocks.len(), 2);
-    assert_eq!(program.end_blocks.len(), 1);
-}
-
-#[test]
-fn awk_with_empty_begin_end() {
-    let program = parse_awk_cli("/foo/", &[], &[]).expect("should parse");
-    assert_eq!(program.rules.len(), 1);
-    assert!(program.begin_blocks.is_empty());
-    assert!(program.end_blocks.is_empty());
-}
-
-#[test]
-fn awk_begin_end_rejects_awk_vars() {
-    let err = parse_awk("BEGIN { print($0) }").expect_err("should reject awk vars");
-    assert!(err.to_string().contains("$0"));
-}
-
-#[test]
-fn awk_begin_end_rejects_additional_reserved_vars() {
-    for (source, token) in [
-        ("BEGIN { print($1) } /foo/ { print($0) }", "$1"),
-        ("BEGIN { print($n) } /foo/ { print($0) }", "$n"),
-        ("BEGIN { print($fn) } /foo/ { print($0) }", "$fn"),
-        ("BEGIN { print($m) } /foo/ { print($0) }", "$m"),
-        ("BEGIN { print($f) } /foo/ { print($0) }", "$f"),
-        ("BEGIN { print($src) } /foo/ { print($0) }", "$src"),
-        ("BEGIN { print($fd) } /foo/ { print($0) }", "$fd"),
-        ("BEGIN { print($text) } /foo/ { print($0) }", "$text"),
-    ] {
-        let err = parse_awk(source).expect_err("BEGIN/END should reject reserved variables");
-        let message = err.to_string();
-        assert!(message.contains(token), "{source:?} => {message:?}");
-    }
-}
-
-#[test]
-fn awk_cli_begin_end_rejects_reserved_vars() {
-    let err = parse_awk_cli("/foo/ { print($0) }", &["print($src)"], &[])
-        .expect_err("CLI BEGIN should reject reserved variables");
-    assert!(err.to_string().contains("$src"));
-
-    let err = parse_awk_cli("/foo/ { print($0) }", &[], &["print($n)"])
-        .expect_err("CLI END should reject reserved variables");
-    assert!(err.to_string().contains("$n"));
-}
-
-#[test]
-fn map_begin_end_parsed_as_blocks() {
-    let (program, begin_blocks, end_blocks) =
-        parse_map("BEGIN { print(1) } print($src) END { print(2) }").expect("should parse");
-    assert_eq!(program.stmts.len(), 1);
-    assert_eq!(begin_blocks.len(), 1);
-    assert_eq!(end_blocks.len(), 1);
-}
-
-#[test]
-fn map_begin_end_rejects_map_vars() {
-    let err = parse_map("BEGIN { print($src) }\nprint($src)")
-        .expect_err("should reject map vars in BEGIN/END");
-    assert!(err.to_string().contains("$src"));
+    let stmts = parse_lines_program("/foo/ { print($0) }").expect("should parse");
+    assert_eq!(stmts.len(), 1);
 }
 
 #[test]
 fn map_requires_separators_between_simple_statements() {
-    let err = parse_map("print($src) print($src)").expect_err("should reject missing separators");
+    let err =
+        parse_for_files("print($src) print($src)").expect_err("should reject missing separators");
     assert!(err.to_string().contains("expected statement separator"));
 }
 
@@ -529,76 +425,47 @@ fn map_allows_map_vars_in_nested_expr_contexts() {
         "items = [$src for n in $text if $fd]",
         "lookup = %{$src: $fd for n in $text if $src}",
     ] {
-        parse_map(source).expect("map mode source should parse");
+        parse_for_files(source).expect("map mode source should parse");
     }
 }
 
 #[test]
 fn map_rejects_awk_vars_in_nested_expr_contexts() {
+    // Named awk vars ($n) get "not valid inside files { } blocks"
     for source in [
         "items = [$n for n in nums if n > 0]",
         "items = [n for n in nums if $n]",
         "s = \"{$n}\"",
-        "s = \"{$1}\"",
         "ok = \"x\" in /{$n}/",
-        "ok = \"x\" in /{$1}/",
-        "out = $(echo {$0})",
-        "x = items[$1]",
         "x = risky():$n?",
     ] {
-        let token = if source.contains("$1") {
-            "$1"
-        } else if source.contains("$0") {
-            "$0"
-        } else {
-            "$n"
-        };
+        assert_map_mode_error(source, "$n", "not valid inside files");
+    }
+
+    // Field indices ($0, $1) get "use --awk"
+    for (source, token) in [
+        ("s = \"{$1}\"", "$1"),
+        ("ok = \"x\" in /{$1}/", "$1"),
+        ("out = $(echo {$0})", "$0"),
+        ("x = items[$1]", "$1"),
+    ] {
         assert_map_mode_error(source, token, "--awk");
     }
 }
 
 #[test]
 fn map_rejects_awk_names_in_assignment_target_positions() {
+    // Named awk vars ($n) get "not valid inside files { } blocks"
     for (source, token) in [
         ("items[$n] = 1", "$n"),
-        ("items[$1] = 1", "$1"),
         ("items[$n] += 1", "$n"),
-        ("items[$1]++", "$1"),
         ("++items[$n]", "$n"),
     ] {
+        assert_map_mode_error(source, token, "not valid inside files");
+    }
+
+    // Field indices ($1) get "use --awk"
+    for (source, token) in [("items[$1] = 1", "$1"), ("items[$1]++", "$1")] {
         assert_map_mode_error(source, token, "--awk");
-    }
-}
-
-#[test]
-fn map_begin_end_rejects_map_and_awk_vars_comprehensively() {
-    for (source, token) in [
-        ("BEGIN { print($fd) }\nprint($src)", "$fd"),
-        ("END { print($text) }\nprint($src)", "$text"),
-        ("BEGIN { print($0) }\nprint($src)", "$0"),
-        ("BEGIN { print($n) }\nprint($src)", "$n"),
-        ("BEGIN { print($fn) }\nprint($src)", "$fn"),
-        ("BEGIN { print($m) }\nprint($src)", "$m"),
-        ("BEGIN { print($f) }\nprint($src)", "$f"),
-        ("BEGIN { print($1) }\nprint($src)", "$1"),
-    ] {
-        let err = parse_map(source).expect_err("BEGIN/END variables should be rejected");
-        let message = err.to_string();
-        assert!(message.contains(token), "{source:?} => {message:?}");
-    }
-}
-
-#[test]
-fn program_begin_end_rejects_additional_reserved_vars() {
-    for (source, token) in [
-        ("BEGIN { print($fd) }", "$fd"),
-        ("END { print($text) }", "$text"),
-        ("BEGIN { print($fn) }", "$fn"),
-        ("BEGIN { print($m) }", "$m"),
-        ("BEGIN { print($f) }", "$f"),
-    ] {
-        let err = parse(source).expect_err("BEGIN/END reserved variables should be rejected");
-        let message = err.to_string();
-        assert!(message.contains(token), "{source:?} => {message:?}");
     }
 }

@@ -2,10 +2,6 @@
 # Each section includes comments to highlight the syntax being demonstrated.
 from __future__ import braces
 
-# ---- BEGIN/END blocks ----
-BEGIN { print("begin block") }
-END { print("end block") }
-
 # ---- Imports (regular, aliased, from-import, and relative imports) ----
 import math, sys as sysmod
 from math import sqrt as root
@@ -322,7 +318,6 @@ regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
 compiled_match = compiled_regex.search(text)
 # Awk mode match groups: $m.1 maps to $m[1]
-# Awk/map begin/end blocks: BEGIN { ... } / END { ... }
 
 # ---- Exception fallback hooks and compound expressions ----
 def fallback_handler() {

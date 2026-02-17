@@ -67,36 +67,15 @@ def test_debug_python_ast_basic(capsys: pytest.CaptureFixture[str]) -> None:
 def test_debug_snail_ast_awk(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug-snail-ast", "--awk", "/foo/"]) == 0
     captured = capsys.readouterr()
-    # After Phase 5 desugaring, --awk shows a Program with Lines wrapping
-    assert "Program" in captured.out
-    assert "Lines" in captured.out
+    # --awk parse_ast shows raw lines-program body (list of pattern-action stmts)
     assert "PatternAction" in captured.out
 
 
 def test_debug_snail_ast_map(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug-snail-ast", "--map", "print($src)"]) == 0
     captured = capsys.readouterr()
-    # After Phase 5 desugaring, --map shows a Program with Files wrapping
+    # --map parse_ast shows the parsed Program (Files wrapping happens at compile)
     assert "Program" in captured.out
-    assert "Files" in captured.out
-
-
-def test_debug_snail_ast_map_begin_end_in_file(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    assert (
-        main(
-            [
-                "--debug-snail-ast",
-                "--map",
-                "BEGIN { print(1) }\nprint($src)\nEND { print(2) }",
-            ]
-        )
-        == 0
-    )
-    captured = capsys.readouterr()
-    assert "begin_blocks" in captured.out
-    assert "end_blocks" in captured.out
 
 
 def test_debug_snail_ast_begin_end(capsys: pytest.CaptureFixture[str]) -> None:
@@ -115,9 +94,9 @@ def test_debug_snail_ast_begin_end(capsys: pytest.CaptureFixture[str]) -> None:
         == 0
     )
     captured = capsys.readouterr()
-    assert "begin_blocks" in captured.out
-    assert "end_blocks" in captured.out
+    # -b/-e code is merged into the Program stmts list
     assert "Assign" in captured.out
+    assert "Program" in captured.out
 
 
 def test_debug_snail_ast_file(
@@ -149,9 +128,10 @@ def test_parse_ast_api_snail_begin_end() -> None:
         begin_code=["print('start')"],
         end_code=["print('done')"],
     )
-    assert "begin_blocks" in result
-    assert "end_blocks" in result
+    # -b/-e code is merged into the Program stmts
     assert "Program" in result
+    assert "start" in result
+    assert "done" in result
 
 
 def test_parse_ast_api_map_begin_end() -> None:
@@ -161,9 +141,9 @@ def test_parse_ast_api_map_begin_end() -> None:
         begin_code=["x = 1"],
         end_code=["print(x)"],
     )
-    assert "begin_blocks" in result
-    assert "end_blocks" in result
+    # -b/-e code is merged into the Program stmts
     assert "Assign" in result
+    assert "Program" in result
 
 
 @pytest.mark.parametrize(
@@ -188,46 +168,27 @@ def test_exec_api_system_exit_non_int_returns_one() -> None:
 
 
 @pytest.mark.parametrize(
-    ("mode", "source", "cli_begin", "file_begin", "file_end", "cli_end"),
+    ("mode", "source"),
     [
-        (
-            "snail",
-            "BEGIN { print('snail-file-begin') }\nprint('body')\nEND { print('snail-file-end') }",
-            "snail-cli-begin",
-            "snail-file-begin",
-            "snail-file-end",
-            "snail-cli-end",
-        ),
-        (
-            "map",
-            "BEGIN { print('map-file-begin') }\nprint($src)\nEND { print('map-file-end') }",
-            "map-cli-begin",
-            "map-file-begin",
-            "map-file-end",
-            "map-cli-end",
-        ),
+        ("snail", "print('body')"),
+        ("map", "print($src)"),
     ],
 )
 def test_parse_ast_api_begin_end_merge_order(
     mode: str,
     source: str,
-    cli_begin: str,
-    file_begin: str,
-    file_end: str,
-    cli_end: str,
 ) -> None:
+    """Verify -b/-e code is included in parse_ast output."""
     result = snail.parse_ast(
         source,
         mode=mode,
-        begin_code=[f"print('{cli_begin}')"],
-        end_code=[f"print('{cli_end}')"],
+        begin_code=["print('cli-begin')"],
+        end_code=["print('cli-end')"],
     )
-    assert "begin_blocks" in result
-    assert "end_blocks" in result
-    assert result.index(f'value: "{cli_begin}"') < result.index(
-        f'value: "{file_begin}"'
-    )
-    assert result.index(f'value: "{file_end}"') < result.index(f'value: "{cli_end}"')
+    assert "cli-begin" in result
+    assert "cli-end" in result
+    assert "begin_code" in result
+    assert "end_code" in result
 
 
 @pytest.mark.parametrize(
@@ -247,8 +208,6 @@ def test_parse_ast_api_ignores_whitespace_only_begin_end_code(
         end_code=["\n", " \t ", "\n\n"],
     )
     assert result.lstrip().startswith("Program {")
-    assert "begin_blocks" not in result
-    assert "end_blocks" not in result
 
 
 def test_compile_api_traceback_uses_explicit_filename() -> None:
@@ -1650,7 +1609,7 @@ def test_awk_begin_end_file_and_cli_order(
     monkeypatch.setattr(sys, "stdin", io.StringIO("x\n"))
     script = tmp_path / "file.snail"
     script.write_text(
-        "BEGIN { print('file begin') }\n{ print($0) }\nEND { print('file end') }\n"
+        "print('file begin')\n{ print($0) }\nprint('file end')\n"
     )
     assert (
         main(
@@ -1691,10 +1650,10 @@ def test_begin_end_regular_mode(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "start\nbody\ndone\n"
 
 
-def test_begin_end_regular_mode_file_and_cli_order(
+def test_begin_end_regular_mode_cli_order(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    script = "BEGIN { print('file begin') }\nprint('body')\nEND { print('file end') }"
+    """Verify -b/-e code is prepended/appended in snail mode."""
     assert (
         main(
             [
@@ -1702,7 +1661,7 @@ def test_begin_end_regular_mode_file_and_cli_order(
                 "print('cli begin')",
                 "--end",
                 "print('cli end')",
-                script,
+                "print('body')",
             ]
         )
         == 0
@@ -1710,20 +1669,9 @@ def test_begin_end_regular_mode_file_and_cli_order(
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
         "cli begin",
-        "file begin",
         "body",
-        "file end",
         "cli end",
     ]
-
-
-def test_begin_end_regular_mode_oneliner_autoprint(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    result = main(["1 END { print('done') }"])
-    assert result == 0
-    captured = capsys.readouterr()
-    assert captured.out.splitlines() == ["1", "done"]
 
 
 # --- Tests for auto-import ---
@@ -2582,25 +2530,14 @@ def test_map_multiple_begin_end_flags(
     ]
 
 
-def test_map_begin_end_oneliner_whitespace(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    file_a = tmp_path / "a.txt"
-    file_a.write_text("alpha")
-    result = main(["--map", "BEGIN {1} $src END {2}", str(file_a)])
-    assert result == 0
-    captured = capsys.readouterr()
-    assert captured.out.splitlines() == ["1", str(file_a), "2"]
-
-
-def test_map_begin_end_file_and_cli_order(
+def test_map_file_and_cli_order(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     map_file = tmp_path / "file1"
     map_file.write_text("readme map input\n")
     script = tmp_path / "script.snail"
     script.write_text(
-        "BEGIN { print('file begin') }\nprint($src)\nEND { print('file end') }\n"
+        "print('file begin')\nprint($src)\nprint('file end')\n"
     )
     result = main(
         [
@@ -2623,21 +2560,6 @@ def test_map_begin_end_file_and_cli_order(
         "file end",
         "cli end",
     ]
-
-
-def test_map_begin_end_flags_reject_map_vars(tmp_path: Path) -> None:
-    file_a = tmp_path / "a.txt"
-    file_a.write_text("alpha")
-    with pytest.raises(SyntaxError):
-        main(
-            [
-                "--map",
-                "-b",
-                "print($src)",
-                "print($src)",
-                str(file_a),
-            ]
-        )
 
 
 def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) -> None:

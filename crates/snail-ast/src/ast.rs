@@ -11,6 +11,13 @@ pub struct SourceSpan {
     pub end: SourcePos,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompileMode {
+    Snail,
+    Awk,
+    Map,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub stmts: Vec<Stmt>,

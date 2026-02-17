@@ -5,14 +5,9 @@ mod linecache;
 mod lower;
 mod profiling;
 
-use compiler::{desugar_awk_to_program, desugar_map_to_program};
-pub use lower::{
-    lower_awk, lower_awk_main, lower_map, lower_map_auto, lower_map_main, lower_program,
-    lower_program_auto, lower_program_main,
-};
+pub use lower::lower_program;
 pub use pyo3::prelude::{PyObject, Python};
 
-use compiler::merge_cli_blocks;
 use linecache::{display_filename, register_linecache, strip_display_prefix};
 use profiling::{log_profile, profile_enabled};
 use pyo3::Bound;
@@ -20,18 +15,10 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 use snail_ast::{CompileMode, Stmt};
-use snail_error::{ParseError, format_snail_error};
+use snail_error::format_snail_error;
 use snail_parser::preprocess;
-use snail_parser::{parse, parse_awk, parse_awk_cli, parse_map};
-use std::fmt::Debug;
+use snail_parser::{parse_for_files, parse_lines_program, parse_main};
 use std::time::Instant;
-
-type ProgramWithBlocks = (
-    snail_ast::Program,
-    Vec<Vec<snail_ast::Stmt>>,
-    Vec<Vec<snail_ast::Stmt>>,
-);
-type ParseProgramFn = fn(&str) -> Result<ProgramWithBlocks, ParseError>;
 
 fn parse_mode(mode: &str) -> PyResult<CompileMode> {
     match mode {
@@ -44,7 +31,7 @@ fn parse_mode(mode: &str) -> PyResult<CompileMode> {
     }
 }
 
-fn parse_error_to_syntax(err: ParseError, filename: &str) -> PyErr {
+fn parse_error_to_syntax(err: snail_error::ParseError, filename: &str) -> PyErr {
     PySyntaxError::new_err(format_snail_error(&err.into(), filename))
 }
 
@@ -85,33 +72,6 @@ fn compile_source_to_code(
         log_profile("py_compile", compile_start.elapsed());
     }
     Ok(code.unbind())
-}
-
-fn parse_program_ast(
-    source: &str,
-    filename: &str,
-    begin_code: &[String],
-    end_code: &[String],
-    parse_program: ParseProgramFn,
-) -> PyResult<ProgramWithBlocks> {
-    let (program, begin_blocks, end_blocks) =
-        parse_program(source).map_err(|err| parse_error_to_syntax(err, filename))?;
-    merge_cli_blocks(begin_code, end_code, begin_blocks, end_blocks)
-        .map_err(|err| parse_error_to_syntax(err, filename))
-        .map(|(begin_blocks, end_blocks)| (program, begin_blocks, end_blocks))
-}
-
-fn format_program_ast<Ast: Debug>(
-    program: snail_ast::Program,
-    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
-    end_blocks: Vec<Vec<snail_ast::Stmt>>,
-    wrap: impl FnOnce(snail_ast::Program, Vec<Vec<snail_ast::Stmt>>, Vec<Vec<snail_ast::Stmt>>) -> Ast,
-) -> String {
-    if begin_blocks.is_empty() && end_blocks.is_empty() {
-        format!("{:#?}", program)
-    } else {
-        format!("{:#?}", wrap(program, begin_blocks, end_blocks))
-    }
 }
 
 fn build_info_dict(py: Python<'_>) -> PyResult<PyObject> {
@@ -267,8 +227,8 @@ fn compile_ast_py(
 /// expression (i.e. an expression that would be captured by AutoPrint/CaptureOnly).
 fn has_tail_expression(source: &str, mode: CompileMode) -> bool {
     match mode {
-        CompileMode::Snail => parse(source)
-            .map(|(program, _, _)| {
+        CompileMode::Snail => parse_main(source)
+            .map(|program| {
                 matches!(
                     program.stmts.last(),
                     Some(Stmt::Expr {
@@ -375,14 +335,6 @@ fn exec_py(
     result
 }
 
-#[allow(dead_code)]
-#[derive(Debug)]
-struct SnailAst {
-    program: snail_ast::Program,
-    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
-    end_blocks: Vec<Vec<snail_ast::Stmt>>,
-}
-
 #[pyfunction(name = "parse_ast")]
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
 fn parse_ast_py(
@@ -392,54 +344,60 @@ fn parse_ast_py(
     begin_code: Vec<String>,
     end_code: Vec<String>,
 ) -> PyResult<String> {
-    match parse_mode(mode)? {
+    let parsed_mode = parse_mode(mode)?;
+    let main_ast = match parsed_mode {
         CompileMode::Snail => {
-            let (program, begin_blocks, end_blocks) =
-                parse_program_ast(source, filename, &begin_code, &end_code, parse)?;
-            Ok(format_program_ast(
-                program,
-                begin_blocks,
-                end_blocks,
-                |program, begin_blocks, end_blocks| SnailAst {
-                    program,
-                    begin_blocks,
-                    end_blocks,
-                },
-            ))
+            let program = parse_main(source).map_err(|err| parse_error_to_syntax(err, filename))?;
+            format!("{:#?}", program)
         }
         CompileMode::Awk => {
-            let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
-            let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
-            let awk_program = parse_awk_cli(source, &begin_refs, &end_refs)
-                .map_err(|err| parse_error_to_syntax(err, filename))?;
-            let (program, begin_blocks, end_blocks) = desugar_awk_to_program(&awk_program);
-            Ok(format_program_ast(
-                program,
-                begin_blocks,
-                end_blocks,
-                |program, begin_blocks, end_blocks| SnailAst {
-                    program,
-                    begin_blocks,
-                    end_blocks,
-                },
-            ))
+            let body =
+                parse_lines_program(source).map_err(|err| parse_error_to_syntax(err, filename))?;
+            format!("{:#?}", body)
         }
         CompileMode::Map => {
-            let (program, begin_blocks, end_blocks) =
-                parse_program_ast(source, filename, &begin_code, &end_code, parse_map)?;
-            let program = desugar_map_to_program(&program);
-            Ok(format_program_ast(
-                program,
-                begin_blocks,
-                end_blocks,
-                |program, begin_blocks, end_blocks| SnailAst {
-                    program,
-                    begin_blocks,
-                    end_blocks,
-                },
-            ))
+            let program =
+                parse_for_files(source).map_err(|err| parse_error_to_syntax(err, filename))?;
+            format!("{:#?}", program)
         }
+    };
+
+    let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
+    let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
+    let has_begin = begin_refs.iter().any(|s| !s.trim().is_empty());
+    let has_end = end_refs.iter().any(|s| !s.trim().is_empty());
+
+    if !has_begin && !has_end {
+        return Ok(main_ast);
     }
+
+    let mut parts = vec![main_ast];
+    if has_begin {
+        let begin_programs: Vec<String> = begin_refs
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| {
+                parse_main(s)
+                    .map(|p| format!("{:#?}", p))
+                    .map_err(|err| parse_error_to_syntax(err, filename))
+            })
+            .collect::<PyResult<_>>()?;
+        parts.push(format!("begin_code: {:#?}", begin_programs));
+    }
+    if has_end {
+        let end_programs: Vec<String> = end_refs
+            .iter()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| {
+                parse_main(s)
+                    .map(|p| format!("{:#?}", p))
+                    .map_err(|err| parse_error_to_syntax(err, filename))
+            })
+            .collect::<PyResult<_>>()?;
+        parts.push(format!("end_code: {:#?}", end_programs));
+    }
+
+    Ok(parts.join("\n"))
 }
 
 #[pyfunction(name = "preprocess")]
@@ -451,13 +409,13 @@ fn preprocess_py(source: &str) -> PyResult<String> {
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>"))]
 fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
     match parse_mode(mode)? {
-        CompileMode::Snail => parse(source)
+        CompileMode::Snail => parse_main(source)
             .map(|_| ())
             .map_err(|err| parse_error_to_syntax(err, filename)),
-        CompileMode::Awk => parse_awk(source)
+        CompileMode::Awk => parse_lines_program(source)
             .map(|_| ())
             .map_err(|err| parse_error_to_syntax(err, filename)),
-        CompileMode::Map => parse_map(source)
+        CompileMode::Map => parse_for_files(source)
             .map(|_| ())
             .map_err(|err| parse_error_to_syntax(err, filename)),
     }
