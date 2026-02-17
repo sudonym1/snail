@@ -5,6 +5,7 @@ mod linecache;
 mod lower;
 mod profiling;
 
+use compiler::{desugar_awk_to_program, desugar_map_to_program};
 pub use lower::{
     lower_awk, lower_awk_main, lower_map, lower_map_auto, lower_map_main, lower_program,
     lower_program_auto, lower_program_main,
@@ -265,22 +266,22 @@ fn compile_ast_py(
 /// Check whether the main body of a program ends with a non-semicolon-terminated
 /// expression (i.e. an expression that would be captured by AutoPrint/CaptureOnly).
 fn has_tail_expression(source: &str, mode: CompileMode) -> bool {
-    let parse_fn: fn(&str) -> Result<_, _> = match mode {
-        CompileMode::Snail => parse,
-        CompileMode::Map => parse_map,
-        CompileMode::Awk => return false,
-    };
-    parse_fn(source)
-        .map(|(program, _, _)| {
-            matches!(
-                program.stmts.last(),
-                Some(Stmt::Expr {
-                    semicolon_terminated: false,
-                    ..
-                })
-            )
-        })
-        .unwrap_or(false)
+    match mode {
+        CompileMode::Snail => parse(source)
+            .map(|(program, _, _)| {
+                matches!(
+                    program.stmts.last(),
+                    Some(Stmt::Expr {
+                        semicolon_terminated: false,
+                        ..
+                    })
+                )
+            })
+            .unwrap_or(false),
+        // Awk and map modes desugar to lines { } / files { } wrappers,
+        // which are compound statements, not trailing expressions.
+        CompileMode::Awk | CompileMode::Map => false,
+    }
 }
 
 #[pyfunction(name = "exec")]
@@ -376,14 +377,6 @@ fn exec_py(
 
 #[allow(dead_code)]
 #[derive(Debug)]
-struct MapAst {
-    program: snail_ast::Program,
-    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
-    end_blocks: Vec<Vec<snail_ast::Stmt>>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
 struct SnailAst {
     program: snail_ast::Program,
     begin_blocks: Vec<Vec<snail_ast::Stmt>>,
@@ -417,18 +410,29 @@ fn parse_ast_py(
         CompileMode::Awk => {
             let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
             let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
-            let program = parse_awk_cli(source, &begin_refs, &end_refs)
+            let awk_program = parse_awk_cli(source, &begin_refs, &end_refs)
                 .map_err(|err| parse_error_to_syntax(err, filename))?;
-            Ok(format!("{:#?}", program))
-        }
-        CompileMode::Map => {
-            let (program, begin_blocks, end_blocks) =
-                parse_program_ast(source, filename, &begin_code, &end_code, parse_map)?;
+            let (program, begin_blocks, end_blocks) = desugar_awk_to_program(&awk_program);
             Ok(format_program_ast(
                 program,
                 begin_blocks,
                 end_blocks,
-                |program, begin_blocks, end_blocks| MapAst {
+                |program, begin_blocks, end_blocks| SnailAst {
+                    program,
+                    begin_blocks,
+                    end_blocks,
+                },
+            ))
+        }
+        CompileMode::Map => {
+            let (program, begin_blocks, end_blocks) =
+                parse_program_ast(source, filename, &begin_code, &end_code, parse_map)?;
+            let program = desugar_map_to_program(&program);
+            Ok(format_program_ast(
+                program,
+                begin_blocks,
+                end_blocks,
+                |program, begin_blocks, end_blocks| SnailAst {
                     program,
                     begin_blocks,
                     end_blocks,

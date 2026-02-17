@@ -10,19 +10,26 @@ use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_auto;
 use super::validate::{validate_yield_usage_blocks, validate_yield_usage_program};
 
-use super::stmt::lower_block;
-
 /// Lower a `files` statement: iterates files from a source or argv.
 pub(crate) fn lower_files_stmt(
     builder: &AstBuilder<'_>,
     source: &Option<Expr>,
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     if source.is_none() {
-        lower_files_no_source(builder, body, span)
+        lower_files_no_source(builder, body, span, auto_print, capture_last)
     } else {
-        lower_files_with_source(builder, source.as_ref().unwrap(), body, span)
+        lower_files_with_source(
+            builder,
+            source.as_ref().unwrap(),
+            body,
+            span,
+            auto_print,
+            capture_last,
+        )
     }
 }
 
@@ -31,6 +38,8 @@ fn lower_files_with_source(
     source_expr: &Expr,
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     // for __snail_src in <source_expr>:
     //     with __SnailLazyFile(__snail_src, 'r') as __snail_fd:
@@ -38,7 +47,7 @@ fn lower_files_with_source(
     //         <body>
     let mut stmts = Vec::new();
 
-    let with_body = build_files_with_body(builder, body, span)?;
+    let with_body = build_files_with_body(builder, body, span, auto_print, capture_last)?;
     let lazy_file_call = build_lazy_file_call(builder, span)?;
 
     let with_item = builder
@@ -94,6 +103,8 @@ fn lower_files_no_source(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     // import sys
     // __snail_paths = sys.argv[1:]
@@ -155,7 +166,7 @@ fn lower_files_no_source(
     )?);
     stmts.push(assign_name(builder, SNAIL_MAP_TEXT_PYVAR, none_expr, span)?);
 
-    let with_body = build_files_with_body(builder, body, span)?;
+    let with_body = build_files_with_body(builder, body, span, auto_print, capture_last)?;
     let lazy_file_call = build_lazy_file_call(builder, span)?;
 
     let with_item = builder
@@ -214,6 +225,8 @@ fn build_files_with_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut with_body = Vec::new();
 
@@ -251,7 +264,7 @@ fn build_files_with_body(
     )?);
 
     // Lower user code
-    let user_code = lower_block(builder, body, span)?;
+    let user_code = lower_block_auto(builder, body, auto_print, capture_last, span)?;
     with_body.extend(user_code);
 
     Ok(with_body)

@@ -1,20 +1,11 @@
-use crate::lower::{lower_awk, lower_map, lower_program};
+use crate::lower::lower_program;
 use pyo3::prelude::*;
-use snail_ast::{CompileMode, Program, Stmt};
-use snail_error::{LowerError, ParseError, SnailError};
+use snail_ast::{AwkProgram, CompileMode, Program, Stmt};
+use snail_error::{ParseError, SnailError};
 use snail_parser::{parse, parse_awk_cli, parse_main, parse_map};
 
 type BlockList = Vec<Vec<Stmt>>;
 type BeginEndBlocks = (BlockList, BlockList);
-type ParseFn = fn(&str) -> Result<(Program, BlockList, BlockList), ParseError>;
-type LowerFn = fn(
-    Python<'_>,
-    &Program,
-    &[Vec<Stmt>],
-    &[Vec<Stmt>],
-    bool,
-    bool,
-) -> Result<PyObject, LowerError>;
 
 pub(crate) fn compile_source(
     py: Python<'_>,
@@ -26,31 +17,95 @@ pub(crate) fn compile_source(
     capture_last: bool,
 ) -> Result<PyObject, SnailError> {
     match mode {
-        CompileMode::Snail => compile_program_mode(
-            py,
-            main_source,
-            begin_sources,
-            end_sources,
-            auto_print_last,
-            capture_last,
-            parse,
-            lower_program,
-        ),
-        CompileMode::Awk => {
-            let program = parse_awk_cli(main_source, begin_sources, end_sources)?;
-            let module = lower_awk(py, &program, auto_print_last, capture_last)?;
+        CompileMode::Snail => {
+            let (program, begin_blocks, end_blocks) = parse(main_source)?;
+            let begin_blocks = merge_cli_begin_blocks(begin_sources, begin_blocks)?;
+            let end_blocks = merge_cli_end_blocks(end_sources, end_blocks)?;
+            let module = lower_program(
+                py,
+                &program,
+                &begin_blocks,
+                &end_blocks,
+                auto_print_last,
+                capture_last,
+            )?;
             Ok(module)
         }
-        CompileMode::Map => compile_program_mode(
-            py,
-            main_source,
-            begin_sources,
-            end_sources,
-            auto_print_last,
-            capture_last,
-            parse_map,
-            lower_map,
-        ),
+        CompileMode::Awk => {
+            let awk_program = parse_awk_cli(main_source, begin_sources, end_sources)?;
+            let (program, begin_blocks, end_blocks) = desugar_awk_to_program(&awk_program);
+            let module = lower_program(py, &program, &begin_blocks, &end_blocks, false, false)?;
+            Ok(module)
+        }
+        CompileMode::Map => {
+            let (program, begin_blocks, end_blocks) = parse_map(main_source)?;
+            let begin_blocks = merge_cli_begin_blocks(begin_sources, begin_blocks)?;
+            let end_blocks = merge_cli_end_blocks(end_sources, end_blocks)?;
+            let program = desugar_map_to_program(&program);
+            let module = lower_program(
+                py,
+                &program,
+                &begin_blocks,
+                &end_blocks,
+                auto_print_last,
+                capture_last,
+            )?;
+            Ok(module)
+        }
+    }
+}
+
+/// Desugar an `AwkProgram` into a regular `Program` wrapping the rules in `lines { }`.
+///
+/// `--awk` source becomes: `BEGIN { ... }` + `lines { pattern/action... }` + `END { ... }`
+pub(crate) fn desugar_awk_to_program(program: &AwkProgram) -> (Program, BlockList, BlockList) {
+    let span = program.span.clone();
+
+    // Convert AwkRules to PatternAction statements
+    let body: Vec<Stmt> = program
+        .rules
+        .iter()
+        .map(|rule| Stmt::PatternAction {
+            pattern: rule.pattern.clone(),
+            action: rule.action.clone(),
+            span: rule.span.clone(),
+        })
+        .collect();
+
+    // Wrap in lines { }
+    let lines_stmt = Stmt::Lines {
+        source: None,
+        body,
+        span: span.clone(),
+    };
+
+    let desugared = Program {
+        stmts: vec![lines_stmt],
+        span,
+    };
+
+    (
+        desugared,
+        program.begin_blocks.clone(),
+        program.end_blocks.clone(),
+    )
+}
+
+/// Desugar a map-mode `Program` by wrapping its body in `files { }`.
+///
+/// `--map` source becomes: `files { original_body }`.
+pub(crate) fn desugar_map_to_program(program: &Program) -> Program {
+    let span = program.span.clone();
+
+    let files_stmt = Stmt::Files {
+        source: None,
+        body: program.stmts.clone(),
+        span: span.clone(),
+    };
+
+    Program {
+        stmts: vec![files_stmt],
+        span,
     }
 }
 
@@ -65,31 +120,6 @@ pub(crate) fn merge_cli_blocks(
     let begin_blocks = merge_cli_begin_blocks(&begin_refs, begin_blocks)?;
     let end_blocks = merge_cli_end_blocks(&end_refs, end_blocks)?;
     Ok((begin_blocks, end_blocks))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn compile_program_mode(
-    py: Python<'_>,
-    main_source: &str,
-    begin_sources: &[&str],
-    end_sources: &[&str],
-    auto_print_last: bool,
-    capture_last: bool,
-    parse_program: ParseFn,
-    lower_program: LowerFn,
-) -> Result<PyObject, SnailError> {
-    let (program, begin_blocks, end_blocks) = parse_program(main_source)?;
-    let begin_blocks = merge_cli_begin_blocks(begin_sources, begin_blocks)?;
-    let end_blocks = merge_cli_end_blocks(end_sources, end_blocks)?;
-    let module = lower_program(
-        py,
-        &program,
-        &begin_blocks,
-        &end_blocks,
-        auto_print_last,
-        capture_last,
-    )?;
-    Ok(module)
 }
 
 fn merge_cli_begin_blocks(

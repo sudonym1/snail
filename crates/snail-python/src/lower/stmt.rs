@@ -436,6 +436,16 @@ fn lower_block_with_tail(
                 _ => {}
             }
         }
+        // When lines/files is the last statement, propagate auto_print into the block
+        let (block_auto_print, block_capture_last) = if is_last {
+            match tail {
+                TailBehavior::AutoPrint => (true, false),
+                TailBehavior::CaptureOnly => (false, true),
+                _ => (false, false),
+            }
+        } else {
+            (false, false)
+        };
         match stmt {
             Stmt::If {
                 cond,
@@ -457,12 +467,26 @@ fn lower_block_with_tail(
             Stmt::Lines {
                 source, body, span, ..
             } => {
-                stmts.extend(super::awk::lower_lines_stmt(builder, source, body, span)?);
+                stmts.extend(super::awk::lower_lines_stmt(
+                    builder,
+                    source,
+                    body,
+                    span,
+                    block_auto_print,
+                    block_capture_last,
+                )?);
             }
             Stmt::Files {
                 source, body, span, ..
             } => {
-                stmts.extend(super::map::lower_files_stmt(builder, source, body, span)?);
+                stmts.extend(super::map::lower_files_stmt(
+                    builder,
+                    source,
+                    body,
+                    span,
+                    block_auto_print,
+                    block_capture_last,
+                )?);
             }
             _ => stmts.push(lower_stmt(builder, stmt)?),
         }

@@ -67,13 +67,18 @@ def test_debug_python_ast_basic(capsys: pytest.CaptureFixture[str]) -> None:
 def test_debug_snail_ast_awk(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug-snail-ast", "--awk", "/foo/"]) == 0
     captured = capsys.readouterr()
-    assert "AwkProgram" in captured.out
+    # After Phase 5 desugaring, --awk shows a Program with Lines wrapping
+    assert "Program" in captured.out
+    assert "Lines" in captured.out
+    assert "PatternAction" in captured.out
 
 
 def test_debug_snail_ast_map(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug-snail-ast", "--map", "print($src)"]) == 0
     captured = capsys.readouterr()
+    # After Phase 5 desugaring, --map shows a Program with Files wrapping
     assert "Program" in captured.out
+    assert "Files" in captured.out
 
 
 def test_debug_snail_ast_map_begin_end_in_file(
