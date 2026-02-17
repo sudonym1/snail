@@ -16,30 +16,6 @@ impl LambdaHoister {
         }
     }
 
-    pub(super) fn desugar_awk_program(&mut self, program: &AwkProgram) -> AwkProgram {
-        let begin_blocks = program
-            .begin_blocks
-            .iter()
-            .map(|block| self.desugar_block(block))
-            .collect();
-        let end_blocks = program
-            .end_blocks
-            .iter()
-            .map(|block| self.desugar_block(block))
-            .collect();
-        let rules = program
-            .rules
-            .iter()
-            .map(|rule| self.desugar_awk_rule(rule))
-            .collect();
-        AwkProgram {
-            begin_blocks,
-            rules,
-            end_blocks,
-            span: program.span.clone(),
-        }
-    }
-
     pub(super) fn desugar_block(&mut self, block: &[Stmt]) -> Vec<Stmt> {
         let mut out = Vec::new();
         for stmt in block {
@@ -49,15 +25,6 @@ impl LambdaHoister {
             out.push(stmt);
         }
         out
-    }
-
-    fn desugar_awk_rule(&mut self, rule: &AwkRule) -> AwkRule {
-        let action = rule.action.as_ref().map(|block| self.desugar_block(block));
-        AwkRule {
-            pattern: rule.pattern.clone(),
-            action,
-            span: rule.span.clone(),
-        }
     }
 
     fn next_lambda_name(&mut self) -> String {

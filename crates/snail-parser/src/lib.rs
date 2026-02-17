@@ -4,7 +4,6 @@ use pest_derive::Parser;
 use snail_ast::*;
 use snail_error::ParseError;
 
-mod awk;
 mod expr;
 mod literal;
 pub mod preprocess;
@@ -12,115 +11,92 @@ mod stmt;
 mod string;
 mod util;
 
-use awk::parse_awk_rule;
-use stmt::{parse_block, parse_stmt};
+use stmt::{parse_pattern_action, parse_stmt};
 use util::{error_with_span, full_span, parse_error_from_pest, span_from_offset, span_from_pair};
 
 #[derive(Parser)]
 #[grammar = "snail.pest"]
 pub struct SnailParser;
 
-pub type MapProgramWithBeginEnd = (Program, Vec<Vec<Stmt>>, Vec<Vec<Stmt>>);
-pub type ProgramWithBeginEnd = (Program, Vec<Vec<Stmt>>, Vec<Vec<Stmt>>);
-type ValidateProgramFn = fn(&Program, &str) -> Result<(), ParseError>;
-
+/// Parses a regular Snail program (main mode).
+/// Rejects all awk/map special variables.
 pub fn parse_main(source: &str) -> Result<Program, ParseError> {
-    let (program, _, _) = parse(source)?;
+    let program = parse_program_raw(source)?;
+    validate_program(&program, source, ValidationMode::Main)?;
     Ok(program)
 }
 
-/// Parses a regular Snail program with in-file BEGIN/END blocks.
-/// BEGIN/END blocks are parsed as regular Snail statement blocks (no map/awk vars).
-pub fn parse(source: &str) -> Result<ProgramWithBeginEnd, ParseError> {
+/// Parses a lines program body for --awk CLI mode.
+/// Returns statements that should be wrapped in Stmt::Lines by the compiler.
+/// Body is validated with Lines mode (allows awk vars like $0, $n, $fn, etc.).
+pub fn parse_lines_program(source: &str) -> Result<Vec<Stmt>, ParseError> {
     let preprocessed = preprocess::preprocess(source)?;
-    parse_program_entries(
-        source,
-        &preprocessed,
-        Rule::program,
-        Rule::program_entry_list,
-        Rule::program_entry,
-        Rule::program_begin,
-        Rule::program_end,
-        "missing program root",
-        "missing program entry",
-        validate_no_awk_syntax,
-    )
-}
-
-pub fn parse_awk(source: &str) -> Result<AwkProgram, ParseError> {
-    let preprocessed = preprocess::preprocess(source)?;
-    let mut pairs = SnailParser::parse(Rule::awk_program, &preprocessed)
+    let mut pairs = SnailParser::parse(Rule::lines_program, &preprocessed)
         .map_err(|err| parse_error_from_pest(err, source))?;
     let pair = pairs
         .next()
-        .ok_or_else(|| ParseError::new("missing awk program root"))?;
-    let span = full_span(source);
+        .ok_or_else(|| ParseError::new("missing lines program root"))?;
 
-    let mut begin_blocks = Vec::new();
-    let mut rules = Vec::new();
-    let mut end_blocks = Vec::new();
-
+    let mut stmts = Vec::new();
     for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::awk_entry_list {
+        if inner.as_rule() == Rule::lines_body {
             for entry in inner.into_inner() {
                 match entry.as_rule() {
-                    Rule::awk_begin => {
-                        let block = parse_begin_end_block(entry, source, "BEGIN")?;
-                        if !block.is_empty() {
-                            begin_blocks.push(block);
-                        }
+                    Rule::pattern_action => {
+                        stmts.push(parse_pattern_action(entry, source)?);
                     }
-                    Rule::awk_end => {
-                        let block = parse_begin_end_block(entry, source, "END")?;
-                        if !block.is_empty() {
-                            end_blocks.push(block);
-                        }
+                    _ => {
+                        stmts.push(parse_stmt(entry, source)?);
                     }
-                    Rule::awk_rule => rules.push(parse_awk_rule(entry, source)?),
-                    _ => {}
                 }
             }
         }
     }
 
-    Ok(AwkProgram {
-        begin_blocks,
-        rules,
-        end_blocks,
-        span,
-    })
+    validate_block_mode(&stmts, source, ValidationMode::Lines)?;
+    Ok(stmts)
 }
 
-/// Parses an awk program with separate CLI begin and end code sources.
-/// Each begin/end source is parsed as a regular Snail program and merged so CLI BEGIN
-/// blocks run before in-file BEGIN blocks, and CLI END blocks run after in-file END blocks.
-pub fn parse_awk_cli(
-    main_source: &str,
-    begin_sources: &[&str],
-    end_sources: &[&str],
-) -> Result<AwkProgram, ParseError> {
-    let mut program = parse_awk(main_source)?;
-
-    let mut cli_begin_blocks = Vec::new();
-    for source in begin_sources {
-        let begin_program = parse_main(source)?;
-        if !begin_program.stmts.is_empty() {
-            cli_begin_blocks.push(begin_program.stmts);
-        }
-    }
-    cli_begin_blocks.extend(program.begin_blocks);
-    program.begin_blocks = cli_begin_blocks;
-
-    let mut end_blocks = program.end_blocks;
-    for source in end_sources {
-        let end_program = parse_main(source)?;
-        if !end_program.stmts.is_empty() {
-            end_blocks.push(end_program.stmts);
-        }
-    }
-    program.end_blocks = end_blocks;
-
+/// Parses a program for --map CLI mode.
+/// Body is validated with Files mode (allows $src, $fd, $text; rejects awk vars).
+pub fn parse_for_files(source: &str) -> Result<Program, ParseError> {
+    let program = parse_program_raw(source)?;
+    validate_program(&program, source, ValidationMode::Files)?;
     Ok(program)
+}
+
+/// Internal: parse program without validation.
+fn parse_program_raw(source: &str) -> Result<Program, ParseError> {
+    let preprocessed = preprocess::preprocess(source)?;
+    let mut pairs = SnailParser::parse(Rule::program, &preprocessed)
+        .map_err(|err| parse_error_from_pest(err, source))?;
+    let pair = pairs
+        .next()
+        .ok_or_else(|| ParseError::new("missing program root"))?;
+    let span = full_span(source);
+    let mut stmts = Vec::new();
+    let mut entries = Vec::new();
+
+    for inner in pair.into_inner() {
+        if inner.as_rule() != Rule::program_entry_list {
+            continue;
+        }
+        for entry in inner.into_inner() {
+            if entry.as_rule() != Rule::program_entry {
+                continue;
+            }
+            let entry_span = span_from_pair(&entry, source);
+            let entry_pair = entry.into_inner().next().ok_or_else(|| {
+                error_with_span("missing program entry", entry_span.clone(), source)
+            })?;
+            let stmt = parse_stmt(entry_pair, source)?;
+            entries.push((entry_span, entry_kind_for_stmt(&stmt)));
+            stmts.push(stmt);
+        }
+    }
+
+    validate_entry_separators(&entries, source)?;
+    Ok(Program { stmts, span })
 }
 
 const AWK_ONLY_NAMES: [&str; 4] = ["$n", "$fn", "$m", "$f"];
@@ -132,118 +108,8 @@ const MAP_OR_AWK_NAMES: [&str; 1] = ["$src"];
 const MAP_OR_AWK_MESSAGE: &str =
     "map/awk variables are only valid in map or awk mode; use --map or --awk";
 
-/// Parses a map program that processes files one at a time.
-/// Allows map variables ($src, $fd, $text) but rejects awk variables.
-/// In-file BEGIN/END blocks are validated but not returned; use
-/// `parse_map` to access them.
-pub fn parse_map_main(source: &str) -> Result<Program, ParseError> {
-    let (program, _, _) = parse_map(source)?;
-    Ok(program)
-}
-
-fn validate_no_awk_syntax_for_map(program: &Program, source: &str) -> Result<(), ParseError> {
-    validate_program(program, source, ValidationMode::Map)
-}
-
-/// Parses a map program with in-file BEGIN/END blocks.
-/// BEGIN/END blocks are parsed as regular Snail statement blocks (no map/awk vars).
-pub fn parse_map(source: &str) -> Result<MapProgramWithBeginEnd, ParseError> {
-    let preprocessed = preprocess::preprocess(source)?;
-    parse_program_entries(
-        source,
-        &preprocessed,
-        Rule::map_program,
-        Rule::map_entry_list,
-        Rule::map_entry,
-        Rule::map_begin,
-        Rule::map_end,
-        "missing map program root",
-        "missing map entry",
-        validate_no_awk_syntax_for_map,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn parse_program_entries(
-    source: &str,
-    preprocessed: &str,
-    root_rule: Rule,
-    entry_list_rule: Rule,
-    entry_rule: Rule,
-    begin_rule: Rule,
-    end_rule: Rule,
-    missing_root: &str,
-    missing_entry: &str,
-    validate_program: ValidateProgramFn,
-) -> Result<ProgramWithBeginEnd, ParseError> {
-    let mut pairs = SnailParser::parse(root_rule, preprocessed)
-        .map_err(|err| parse_error_from_pest(err, source))?;
-    let pair = pairs.next().ok_or_else(|| ParseError::new(missing_root))?;
-    let span = full_span(source);
-    let mut stmts = Vec::new();
-    let mut begin_blocks = Vec::new();
-    let mut end_blocks = Vec::new();
-    let mut entries = Vec::new();
-
-    for inner in pair.into_inner() {
-        if inner.as_rule() != entry_list_rule {
-            continue;
-        }
-        for entry in inner.into_inner() {
-            if entry.as_rule() != entry_rule {
-                continue;
-            }
-            let entry_span = span_from_pair(&entry, source);
-            let mut entry_inner = entry.into_inner();
-            let entry_pair = entry_inner
-                .next()
-                .ok_or_else(|| error_with_span(missing_entry, entry_span.clone(), source))?;
-            let parsed_rule = entry_pair.as_rule();
-            if parsed_rule == begin_rule {
-                let block = parse_begin_end_block(entry_pair, source, "BEGIN")?;
-                if !block.is_empty() {
-                    begin_blocks.push(block);
-                }
-                entries.push((entry_span, EntryKind::BeginEnd));
-            } else if parsed_rule == end_rule {
-                let block = parse_begin_end_block(entry_pair, source, "END")?;
-                if !block.is_empty() {
-                    end_blocks.push(block);
-                }
-                entries.push((entry_span, EntryKind::BeginEnd));
-            } else {
-                let stmt = parse_stmt(entry_pair, source)?;
-                entries.push((entry_span, entry_kind_for_stmt(&stmt)));
-                stmts.push(stmt);
-            }
-        }
-    }
-
-    validate_entry_separators(&entries, source)?;
-
-    let program = Program { stmts, span };
-    validate_program(&program, source)?;
-    Ok((program, begin_blocks, end_blocks))
-}
-
-fn parse_begin_end_block(
-    pair: pest::iterators::Pair<'_, Rule>,
-    source: &str,
-    label: &str,
-) -> Result<Vec<Stmt>, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let block_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span(format!("missing {label} block"), span.clone(), source))?;
-    let block = parse_block(block_pair, source)?;
-    validate_block_mode(&block, source, ValidationMode::Main)?;
-    Ok(block)
-}
-
 #[derive(Clone, Copy)]
 enum EntryKind {
-    BeginEnd,
     Simple,
     Compound,
 }
@@ -269,11 +135,10 @@ fn validate_entry_separators(
 ) -> Result<(), ParseError> {
     for window in entries.windows(2) {
         let (prev_span, prev_kind) = &window[0];
-        let (next_span, next_kind) = &window[1];
+        let (next_span, _next_kind) = &window[1];
         let gap = &source[prev_span.end.offset..next_span.start.offset];
         let has_sep = gap.contains('\n') || gap.contains(';');
-        let can_omit_sep = matches!(next_kind, EntryKind::BeginEnd);
-        if !has_sep && matches!(prev_kind, EntryKind::Simple) && !can_omit_sep {
+        if !has_sep && matches!(prev_kind, EntryKind::Simple) {
             return Err(error_with_span(
                 "expected statement separator",
                 span_from_offset(next_span.start.offset, next_span.start.offset, source),
@@ -287,13 +152,8 @@ fn validate_entry_separators(
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum ValidationMode {
     Main,
-    Map,
     Lines,
     Files,
-}
-
-fn validate_no_awk_syntax(program: &Program, source: &str) -> Result<(), ParseError> {
-    validate_program(program, source, ValidationMode::Main)
 }
 
 fn validate_program(
@@ -597,12 +457,6 @@ fn validate_name_for_mode(
                     span.clone(),
                     source,
                 ));
-            }
-        }
-        ValidationMode::Map => {
-            // Map mode allows map vars but rejects awk-only vars
-            if AWK_ONLY_NAMES.contains(&name) {
-                return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
             }
         }
         ValidationMode::Main => {

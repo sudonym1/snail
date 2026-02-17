@@ -1719,7 +1719,7 @@ fn trailing_infix_operator_continues_expression() {
 fn newline_before_dot_separates_attribute_access() {
     // Under Go-style rules: obj\n.attr → separated (obj is StmtEnder)
     // This now fails to parse since .attr is not a valid statement start.
-    let result = snail_parser::parse("value = obj\n.attr");
+    let result = snail_parser::parse_main("value = obj\n.attr");
     assert!(
         result.is_err(),
         "obj\\n.attr should fail to parse under Go-style rules"
@@ -1730,7 +1730,7 @@ fn newline_before_dot_separates_attribute_access() {
 fn newline_before_dot_separates_attribute_assignment_target() {
     // Under Go-style rules: obj\n.attr = 1 → separated (obj is StmtEnder)
     // This now fails to parse since .attr is not a valid statement start.
-    let result = snail_parser::parse("obj\n.attr = 1");
+    let result = snail_parser::parse_main("obj\n.attr = 1");
     assert!(
         result.is_err(),
         "obj\\n.attr = 1 should fail to parse under Go-style rules"

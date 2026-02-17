@@ -1,8 +1,7 @@
 #!/usr/bin/env -S snail --map -f
 # Map mode example (process each file as a whole).
-
-# BEGIN block runs once before input is processed.
-BEGIN { print("map start") }
+# Code before the body runs once before input is processed.
+print("map start")
 
 # $src is the input path; $text is the full file contents.
 print("File:", $src)
@@ -10,5 +9,5 @@ print("Size:", len($text), "bytes")
 print("First line:", $text.split('\n')[0] if $text else "(empty)")
 print("---")
 
-# END block runs once after all input is processed.
-END { print("map done") }
+# Code after the body runs once after all input is processed.
+print("map done")

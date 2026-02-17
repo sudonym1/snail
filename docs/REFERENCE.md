@@ -33,16 +33,8 @@ Exit codes with `--test`:
 - **1**: last expression is falsy
 - **2**: no trailing expression to test (error, with a message on stderr)
 
-BEGIN/END blocks run once before/after the main program in regular mode:
-```snail
-BEGIN { print("start") }
-print("body")
-END { print("done") }
-```
-
-You can also provide setup/teardown code via `--begin` and `--end` in any mode.
-CLI BEGIN blocks run before in-file BEGIN blocks; CLI END blocks run after
-in-file END blocks.
+You can provide setup/teardown code via `--begin` and `--end` in any mode.
+`--begin` code runs before the main program; `--end` code runs after.
 
 ## Map mode
 Map mode processes input files one at a time:
@@ -61,21 +53,19 @@ missing/unreadable paths only error once `$fd`/`$text` are used. The file handle
 is closed when the per-file `with` scope ends, so `$fd`/`$text` behave like a
 closed file if accessed afterward.
 
-Begin/end blocks can live in the source file:
-```snail
-BEGIN { print("start") }
-print($src)
-END { print("done") }
-```
-
-You can also run setup/teardown blocks with `--begin` and `--end`, which execute
-once before the first file and once after the last file. CLI BEGIN blocks run before
-in-file BEGIN blocks; CLI END blocks run after in-file END blocks:
+Setup/teardown code can be provided with `--begin` and `--end`, which execute
+once before the first file and once after the last file:
 ```bash
 snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 ```
-`BEGIN` and `END` are reserved keywords in all modes.
-BEGIN/END blocks are regular Snail blocks, so awk/map-only variables are not available inside them.
+
+You can also put setup/teardown code directly in the source file, before or after
+the map body statements:
+```snail
+print("start")
+print($src)
+print("done")
+```
 
 ## Lines blocks
 
@@ -601,13 +591,12 @@ Invoke Snail's awk mode with `snail --awk`. Awk sources are composed of
 pattern/action pairs evaluated for each input line. A rule with only a pattern
 prints matching lines by default, and a lone block runs for every line.
 
-Begin and end blocks can live in the source file (`BEGIN { ... }` / `END { ... }`) or be
-specified via CLI flags:
+Setup/teardown code can be specified via CLI flags or placed before/after pattern-action
+rules in the source file:
 - `-b <code>` or `--begin <code>`: Code to run before processing lines (repeatable)
 - `-e <code>` or `--end <code>`: Code to run after processing lines (repeatable)
 - `-F <chars>` or `--field-separator <chars>`: Split `$0` on any of these characters (repeatable)
 - `-W` or `--whitespace`: Include whitespace as a separator (matches default awk field splitting)
-CLI BEGIN blocks run before in-file BEGIN blocks; CLI END blocks run after in-file END blocks.
 
 Example:
 ```bash
@@ -615,10 +604,8 @@ echo "hello" | snail --awk --begin 'print("start")' --end 'print("done")' '{ pri
 # Output: start\nhello\ndone
 ```
 
-Multiple `-b`/`--begin` and `-e`/`--end` flags are processed in order. `BEGIN` and `END`
-are reserved keywords in all modes. BEGIN/END blocks are regular Snail blocks, so
-awk/map-only variables are not available inside them. See `examples/awk.snail`
-for a runnable sample program.
+Multiple `-b`/`--begin` and `-e`/`--end` flags are processed in order.
+See `examples/awk.snail` for a runnable sample program.
 
 While processing, Snail populates awk-style variables:
 - `$0`: the current line with the trailing newline removed.
