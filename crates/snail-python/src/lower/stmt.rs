@@ -338,6 +338,15 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                 .call_node("Expr", vec![value], span)
                 .map_err(py_err_to_lower)
         }
+        Stmt::Lines { .. } => Err(LowerError::new(
+            "lines statement should be lowered via lower_block",
+        )),
+        Stmt::Files { .. } => Err(LowerError::new(
+            "files statement should be lowered via lower_block",
+        )),
+        Stmt::PatternAction { .. } => Err(LowerError::new(
+            "pattern/action should be lowered via lower_lines_body",
+        )),
     }
 }
 
@@ -444,6 +453,16 @@ fn lower_block_with_tail(
                 span,
             } => {
                 stmts.extend(lower_while_stmt(builder, cond, body, else_body, span)?);
+            }
+            Stmt::Lines {
+                source, body, span, ..
+            } => {
+                stmts.extend(super::awk::lower_lines_stmt(builder, source, body, span)?);
+            }
+            Stmt::Files {
+                source, body, span, ..
+            } => {
+                stmts.extend(super::map::lower_files_stmt(builder, source, body, span)?);
             }
             _ => stmts.push(lower_stmt(builder, stmt)?),
         }

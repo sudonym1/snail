@@ -155,6 +155,28 @@ fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
         | Stmt::Pass { .. }
         | Stmt::Import { .. }
         | Stmt::ImportFrom { .. } => {}
+        Stmt::Lines { source, body, .. } => {
+            if let Some(source) = source {
+                check_expr(source, in_function)?;
+            }
+            check_stmts(body, in_function)?;
+        }
+        Stmt::Files { source, body, .. } => {
+            if let Some(source) = source {
+                check_expr(source, in_function)?;
+            }
+            check_stmts(body, in_function)?;
+        }
+        Stmt::PatternAction {
+            pattern, action, ..
+        } => {
+            if let Some(pattern) = pattern {
+                check_expr(pattern, in_function)?;
+            }
+            if let Some(action) = action {
+                check_stmts(action, in_function)?;
+            }
+        }
     }
     Ok(())
 }

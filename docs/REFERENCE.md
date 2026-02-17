@@ -77,6 +77,77 @@ snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 `BEGIN` and `END` are reserved keywords in all modes.
 BEGIN/END blocks are regular Snail blocks, so awk/map-only variables are not available inside them.
 
+## Lines blocks
+
+`lines { }` is a first-class loop block that processes input line by line,
+bringing awk-style processing into regular Snail scripts:
+
+```snail
+# Read from stdin/argv (same as --awk mode)
+lines {
+    print($n, $0)
+}
+
+# Read from a specific file
+lines("server.log") {
+    /ERROR/ { print($0) }
+}
+
+# Read from a file handle or iterable
+lines(open("data.txt")) {
+    print($1, $2)
+}
+```
+
+Inside a `lines { }` block, the following variables are available:
+- `$0`: current line (stripped of trailing newline)
+- `$1`, `$2`, ...: whitespace-split fields
+- `$f`: all fields as a list
+- `$n`: global line number
+- `$fn`: per-file line number
+- `$src`: current file path
+- `$m`: last regex match object
+
+Pattern/action rules work inside `lines { }` blocks just like in awk mode:
+```snail
+lines("log.txt") {
+    /ERROR (\d+)/ { print("Error code:", $m.1) }
+    /WARNING/ { print("Warn:", $0) }
+}
+```
+
+A bare block `{ action }` runs for every line. A bare pattern `/regex/` prints
+matching lines.
+
+## Files blocks
+
+`files { }` is a first-class loop block that processes files one at a time,
+bringing map-mode processing into regular Snail scripts:
+
+```snail
+# Iterate file paths from an expression
+files(["a.txt", "b.txt"]) {
+    print($src, len(str($text)), "bytes")
+}
+```
+
+Inside a `files { }` block, the following variables are available:
+- `$src`: current file path
+- `$fd`: open file handle for the current file
+- `$text`: lazy text view of the current file contents
+
+### Composing lines and files
+
+`lines` and `files` blocks can be nested and composed with regular code:
+
+```snail
+results = []
+lines("server.log") {
+    /ERROR (\d+)/ { results.append($m.1) }
+}
+print(f"Found {len(results)} errors")
+```
+
 ## Modules and imports
 Snail uses Python's import semantics and exposes the same namespaces:
 ```snail

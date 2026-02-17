@@ -256,7 +256,9 @@ fn entry_kind_for_stmt(stmt: &Stmt) -> EntryKind {
         | Stmt::Def { .. }
         | Stmt::Class { .. }
         | Stmt::Try { .. }
-        | Stmt::With { .. } => EntryKind::Compound,
+        | Stmt::With { .. }
+        | Stmt::Lines { .. }
+        | Stmt::Files { .. } => EntryKind::Compound,
         _ => EntryKind::Simple,
     }
 }
@@ -286,6 +288,8 @@ fn validate_entry_separators(
 enum ValidationMode {
     Main,
     Map,
+    Lines,
+    Files,
 }
 
 fn validate_no_awk_syntax(program: &Program, source: &str) -> Result<(), ParseError> {
@@ -419,6 +423,42 @@ fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result
         Stmt::Expr { value, .. } => {
             validate_expr_mode(value, source, mode)?;
         }
+        Stmt::Lines {
+            source: src, body, ..
+        } => {
+            if let Some(src) = src {
+                validate_expr_mode(src, source, mode)?;
+            }
+            validate_block_mode(body, source, ValidationMode::Lines)?;
+        }
+        Stmt::Files {
+            source: src, body, ..
+        } => {
+            if let Some(src) = src {
+                validate_expr_mode(src, source, mode)?;
+            }
+            validate_block_mode(body, source, ValidationMode::Files)?;
+        }
+        Stmt::PatternAction {
+            pattern,
+            action,
+            span,
+            ..
+        } => {
+            if mode != ValidationMode::Lines {
+                return Err(error_with_span(
+                    "pattern/action rules are only valid inside lines { } blocks",
+                    span.clone(),
+                    source,
+                ));
+            }
+            if let Some(pattern) = pattern {
+                validate_expr_mode(pattern, source, mode)?;
+            }
+            if let Some(action) = action {
+                validate_block_mode(action, source, mode)?;
+            }
+        }
     }
     Ok(())
 }
@@ -538,15 +578,44 @@ fn validate_name_for_mode(
     source: &str,
     mode: ValidationMode,
 ) -> Result<(), ParseError> {
-    if AWK_ONLY_NAMES.contains(&name) {
-        return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
-    }
-    if mode == ValidationMode::Main {
-        if MAP_ONLY_NAMES.contains(&name) {
-            return Err(error_with_span(MAP_ONLY_MESSAGE, span.clone(), source));
+    match mode {
+        ValidationMode::Lines => {
+            // Lines mode allows awk vars ($n, $fn, $m, $f) and $src, but not $fd/$text
+            if MAP_ONLY_NAMES.contains(&name) {
+                return Err(error_with_span(
+                    "map variables ($fd, $text) are not valid inside lines { } blocks",
+                    span.clone(),
+                    source,
+                ));
+            }
         }
-        if MAP_OR_AWK_NAMES.contains(&name) {
-            return Err(error_with_span(MAP_OR_AWK_MESSAGE, span.clone(), source));
+        ValidationMode::Files => {
+            // Files mode allows map vars ($src, $fd, $text) but not awk-only vars
+            if AWK_ONLY_NAMES.contains(&name) {
+                return Err(error_with_span(
+                    "awk variables ($n, $fn, $m, $f) are not valid inside files { } blocks",
+                    span.clone(),
+                    source,
+                ));
+            }
+        }
+        ValidationMode::Map => {
+            // Map mode allows map vars but rejects awk-only vars
+            if AWK_ONLY_NAMES.contains(&name) {
+                return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
+            }
+        }
+        ValidationMode::Main => {
+            // Main mode rejects all special vars
+            if AWK_ONLY_NAMES.contains(&name) {
+                return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
+            }
+            if MAP_ONLY_NAMES.contains(&name) {
+                return Err(error_with_span(MAP_ONLY_MESSAGE, span.clone(), source));
+            }
+            if MAP_OR_AWK_NAMES.contains(&name) {
+                return Err(error_with_span(MAP_OR_AWK_MESSAGE, span.clone(), source));
+            }
         }
     }
     Ok(())
@@ -580,7 +649,9 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_name_for_mode(name, span, source, mode)?;
         }
         Expr::FieldIndex { span, .. } => {
-            return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
+            if mode != ValidationMode::Lines {
+                return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
+            }
         }
         Expr::Placeholder { .. }
         | Expr::StructuredAccessor { .. }

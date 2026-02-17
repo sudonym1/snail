@@ -45,6 +45,7 @@ fn stmt_kind(stmt: &Stmt) -> StmtKind {
         Stmt::ImportFrom { .. } => StmtKind::ImportFrom,
         Stmt::Assign { .. } => StmtKind::Assign,
         Stmt::Expr { .. } => StmtKind::Expr,
+        Stmt::Lines { .. } | Stmt::Files { .. } | Stmt::PatternAction { .. } => StmtKind::Expr,
     }
 }
 

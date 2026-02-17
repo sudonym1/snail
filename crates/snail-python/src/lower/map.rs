@@ -10,6 +10,287 @@ use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_auto;
 use super::validate::{validate_yield_usage_blocks, validate_yield_usage_program};
 
+use super::stmt::lower_block;
+
+/// Lower a `files` statement: iterates files from a source or argv.
+pub(crate) fn lower_files_stmt(
+    builder: &AstBuilder<'_>,
+    source: &Option<Expr>,
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    if source.is_none() {
+        lower_files_no_source(builder, body, span)
+    } else {
+        lower_files_with_source(builder, source.as_ref().unwrap(), body, span)
+    }
+}
+
+fn lower_files_with_source(
+    builder: &AstBuilder<'_>,
+    source_expr: &Expr,
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    // for __snail_src in <source_expr>:
+    //     with __SnailLazyFile(__snail_src, 'r') as __snail_fd:
+    //         __snail_text = __SnailLazyText(__snail_fd)
+    //         <body>
+    let mut stmts = Vec::new();
+
+    let with_body = build_files_with_body(builder, body, span)?;
+    let lazy_file_call = build_lazy_file_call(builder, span)?;
+
+    let with_item = builder
+        .call_node_no_loc(
+            "withitem",
+            vec![
+                lazy_file_call,
+                name_expr(
+                    builder,
+                    SNAIL_MAP_FD_PYVAR,
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+            ],
+        )
+        .map_err(py_err_to_lower)?;
+
+    let with_stmt = builder
+        .call_node(
+            "With",
+            vec![
+                PyList::new_bound(builder.py(), vec![with_item]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), with_body).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let source_lowered = super::expr::lower_expr(builder, source_expr)?;
+
+    let for_loop = builder
+        .call_node(
+            "For",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_MAP_SRC_PYVAR,
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+                source_lowered,
+                PyList::new_bound(builder.py(), vec![with_stmt]).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    stmts.push(for_loop);
+    Ok(stmts)
+}
+
+fn lower_files_no_source(
+    builder: &AstBuilder<'_>,
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    // import sys
+    // __snail_paths = sys.argv[1:]
+    // for __snail_src in __snail_paths:
+    //     with __SnailLazyFile(__snail_src, 'r') as __snail_fd:
+    //         __snail_text = __SnailLazyText(__snail_fd)
+    //         <body>
+    let mut stmts = Vec::new();
+
+    // import sys
+    let sys_import = builder
+        .call_node(
+            "Import",
+            vec![
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        builder
+                            .call_node_no_loc(
+                                "alias",
+                                vec![
+                                    "sys".to_string().into_py(builder.py()),
+                                    builder.py().None().into_py(builder.py()),
+                                ],
+                            )
+                            .map_err(py_err_to_lower)?,
+                    ],
+                )
+                .into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    stmts.push(sys_import);
+
+    // __snail_paths = sys.argv[1:]
+    let paths_expr = lower_paths_source(builder, span)?;
+    stmts.push(assign_name(builder, "__snail_paths", paths_expr, span)?);
+
+    // Initialize map variables
+    let none_expr = builder
+        .call_node(
+            "Constant",
+            vec![builder.py().None().into_py(builder.py())],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    stmts.push(assign_name(
+        builder,
+        SNAIL_MAP_SRC_PYVAR,
+        none_expr.clone_ref(builder.py()),
+        span,
+    )?);
+    stmts.push(assign_name(
+        builder,
+        SNAIL_MAP_FD_PYVAR,
+        none_expr.clone_ref(builder.py()),
+        span,
+    )?);
+    stmts.push(assign_name(builder, SNAIL_MAP_TEXT_PYVAR, none_expr, span)?);
+
+    let with_body = build_files_with_body(builder, body, span)?;
+    let lazy_file_call = build_lazy_file_call(builder, span)?;
+
+    let with_item = builder
+        .call_node_no_loc(
+            "withitem",
+            vec![
+                lazy_file_call,
+                name_expr(
+                    builder,
+                    SNAIL_MAP_FD_PYVAR,
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+            ],
+        )
+        .map_err(py_err_to_lower)?;
+
+    let with_stmt = builder
+        .call_node(
+            "With",
+            vec![
+                PyList::new_bound(builder.py(), vec![with_item]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), with_body).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let for_loop = builder
+        .call_node(
+            "For",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_MAP_SRC_PYVAR,
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+                name_expr(
+                    builder,
+                    "__snail_paths",
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(builder.py(), vec![with_stmt]).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    stmts.push(for_loop);
+    Ok(stmts)
+}
+
+fn build_files_with_body(
+    builder: &AstBuilder<'_>,
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let mut with_body = Vec::new();
+
+    // __snail_text = __SnailLazyText(__snail_fd)
+    let lazy_text_call = builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_LAZY_TEXT_CLASS,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(
+                    builder.py(),
+                    vec![name_expr(
+                        builder,
+                        SNAIL_MAP_FD_PYVAR,
+                        span,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    )?],
+                )
+                .into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    with_body.push(assign_name(
+        builder,
+        SNAIL_MAP_TEXT_PYVAR,
+        lazy_text_call,
+        span,
+    )?);
+
+    // Lower user code
+    let user_code = lower_block(builder, body, span)?;
+    with_body.extend(user_code);
+
+    Ok(with_body)
+}
+
+fn build_lazy_file_call(
+    builder: &AstBuilder<'_>,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_LAZY_FILE_CLASS,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        name_expr(
+                            builder,
+                            SNAIL_MAP_SRC_PYVAR,
+                            span,
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        )?,
+                        string_expr(builder, "r", false, StringDelimiter::Double, span)?,
+                    ],
+                )
+                .into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
 pub fn lower_map_main(py: Python<'_>, program: &Program) -> Result<PyObject, LowerError> {
     lower_map_auto(py, program, false)
 }

@@ -256,6 +256,25 @@ impl LambdaHoister {
                 semicolon_terminated: *semicolon_terminated,
                 span: span.clone(),
             },
+            Stmt::Lines { source, body, span } => Stmt::Lines {
+                source: source.as_ref().map(|src| self.desugar_expr(src, prelude)),
+                body: self.desugar_block(body),
+                span: span.clone(),
+            },
+            Stmt::Files { source, body, span } => Stmt::Files {
+                source: source.as_ref().map(|src| self.desugar_expr(src, prelude)),
+                body: self.desugar_block(body),
+                span: span.clone(),
+            },
+            Stmt::PatternAction {
+                pattern,
+                action,
+                span,
+            } => Stmt::PatternAction {
+                pattern: pattern.as_ref().map(|p| self.desugar_expr(p, prelude)),
+                action: action.as_ref().map(|a| self.desugar_block(a)),
+                span: span.clone(),
+            },
         }
     }
 

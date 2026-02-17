@@ -1860,6 +1860,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_awk_split",
         "__snail_awk_field_separators",
         "__snail_awk_include_whitespace",
+        "__snail_lines_iter",
         "__snail_env",
         "js",
         "path",
@@ -2795,3 +2796,124 @@ def test_path_helper_partial_match_raises_without_fallback(
     )
     with pytest.raises(Exception, match="no matches"):
         main(["-P", script])
+
+
+# --- Tests for lines { } blocks ---
+
+
+def test_lines_bare_stdin(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    set_stdin(monkeypatch, "hello\nworld\n")
+    result, captured = run_cli(capsys, ["-P", "lines { print($0) }"])
+    assert result == 0
+    assert captured.out == "hello\nworld\n"
+
+
+def test_lines_with_line_numbers(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    set_stdin(monkeypatch, "a\nb\nc\n")
+    result, captured = run_cli(capsys, ["-P", "lines { print($n, $0) }"])
+    assert result == 0
+    assert captured.out == "1 a\n2 b\n3 c\n"
+
+
+def test_lines_pattern_action(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    set_stdin(monkeypatch, "hello world\nfoo bar\nhello again\n")
+    result, captured = run_cli(
+        capsys, ["-P", 'lines { /hello/ { print("found:", $0) } }']
+    )
+    assert result == 0
+    assert captured.out == "found: hello world\nfound: hello again\n"
+
+
+def test_lines_with_file_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    f = tmp_path / "input.txt"
+    f.write_text("line one\nline two\n")
+    script = f'lines("{f.as_posix()}") {{ print($n, $0) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out == "1 line one\n2 line two\n"
+
+
+def test_lines_field_splitting(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    set_stdin(monkeypatch, "Alice 30\nBob 25\n")
+    result, captured = run_cli(capsys, ["-P", "lines { print($1, $2) }"])
+    assert result == 0
+    assert captured.out == "Alice 30\nBob 25\n"
+
+
+def test_lines_mixed_body(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """lines block can have both regular stmts and pattern/action rules."""
+    set_stdin(monkeypatch, "yes\nno\nyes\n")
+    script = "count = 0\nlines { /yes/ { count += 1 } }\nprint(count)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out == "2\n"
+
+
+def test_lines_before_and_after(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Code can appear before and after a lines block."""
+    set_stdin(monkeypatch, "a\nb\n")
+    script = 'print("before")\nlines { print($0) }\nprint("after")'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out == "before\na\nb\nafter\n"
+
+
+# --- Tests for files { } blocks ---
+
+
+def test_files_bare_from_args(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    f1 = tmp_path / "a.txt"
+    f2 = tmp_path / "b.txt"
+    f1.write_text("content a\n")
+    f2.write_text("content b\n")
+    script = f'files(["{f1.as_posix()}", "{f2.as_posix()}"]) {{ print($src) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert f1.as_posix() in captured.out
+    assert f2.as_posix() in captured.out
+
+
+def test_files_text_access(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    f = tmp_path / "test.txt"
+    f.write_text("hello world\n")
+    script = f'files(["{f.as_posix()}"]) {{ print(len(str($text))) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "12"
+
+
+# --- Validation tests for lines/files ---
+
+
+def test_lines_rejects_dollar_zero_outside() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["print($0)"])
+    assert "awk" in str(excinfo.value)
+
+
+def test_lines_rejects_fd_inside() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["lines { print($fd) }"])
+    assert "map variables" in str(excinfo.value)
+
+
+def test_files_rejects_awk_vars_inside() -> None:
+    with pytest.raises(SyntaxError) as excinfo:
+        main(["files { print($n) }"])
+    assert "awk variables" in str(excinfo.value)

@@ -460,6 +460,38 @@ print("byte strings", byte_text, byte_single, raw_byte, raw_byte_alt)
 print("byte interp", byte_interp)
 print(sysmod.version)
 
+# ---- Lines and Files blocks (inline awk/map) ----
+# lines { } processes lines from stdin or a source
+import tempfile
+temp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+temp.write("hello world\nfoo bar\nbaz qux\n")
+temp.close()
+
+line_count = 0
+lines(temp.name) {
+    line_count += 1
+}
+assert line_count == 3, "lines counted"
+print("lines count", line_count)
+
+# Pattern/action inside lines
+found = []
+lines(temp.name) {
+    /hello/ { found.append($0) }
+}
+assert found == ["hello world"], "pattern/action match"
+print("lines pattern found", found)
+
+# Files block with source expression
+file_sizes = []
+files([temp.name]) {
+    file_sizes.append(len(str($text)))
+}
+assert len(file_sizes) == 1
+print("files text size", file_sizes)
+
+os.unlink(temp.name)
+
 # The implicit return of the last non-semicolon expression is pretty printed
 # to stdout, unless -P is specified
 "automatically printed"

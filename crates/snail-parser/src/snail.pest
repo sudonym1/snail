@@ -35,7 +35,7 @@ stmt_sep = _{ ";" | "\x1E" }
 
 stmt = _{ compound_stmt | simple_stmt }
 
-compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt | try_stmt | with_stmt }
+compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt | try_stmt | with_stmt | lines_stmt | files_stmt }
 simple_stmt = _{
   return_stmt
   | break_stmt
@@ -72,6 +72,20 @@ try_finally_tail = _{ stmt_sep* ~ finally_clause }
 except_clause = { "except" ~ (expr ~ ("as" ~ identifier)?)? ~ block }
 else_clause = { "else" ~ block }
 finally_clause = { "finally" ~ block }
+
+// Lines block: iterate lines from a source
+lines_stmt = { "lines" ~ lines_source? ~ "{" ~ stmt_sep* ~ lines_body? ~ stmt_sep* ~ "}" }
+lines_source = { "(" ~ expr ~ ")" }
+lines_body = { lines_entry ~ (stmt_sep+ ~ lines_entry)* ~ stmt_sep* }
+lines_entry = _{ pattern_action | stmt }
+
+// Pattern/action (same shape as awk_rule)
+pattern_action = { block | pattern_action_pattern ~ block? }
+pattern_action_pattern = { expr }
+
+// Files block: iterate files from a source
+files_stmt = { "files" ~ files_source? ~ block }
+files_source = { "(" ~ expr ~ ")" }
 
 // Context managers
 with_stmt = { "with" ~ with_items ~ block }
@@ -301,6 +315,7 @@ keyword = _{
   | "finally" | "with" | "assert" | "del" | "and" | "or" | "not" | "import" | "from" | "as"
   | "yield"
   | "let"
+  | "lines" | "files"
   | "BEGIN" | "END"
   | "True" | "False" | "None") ~ !ident_continue
 }

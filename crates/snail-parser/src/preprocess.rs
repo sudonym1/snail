@@ -600,6 +600,7 @@ fn classify_keyword(word: &[u8]) -> (LastToken, bool) {
         // Simple continuation keywords (no header)
         b"in" | b"and" | b"or" | b"not" | b"as" => (LastToken::Continuation, false),
         b"from" | b"import" | b"del" | b"assert" | b"let" => (LastToken::Continuation, false),
+        b"lines" | b"files" => (LastToken::Continuation, true),
         b"BEGIN" | b"END" => (LastToken::Continuation, false),
         // Regular identifiers are StmtEnders
         _ => (LastToken::StmtEnder, false),

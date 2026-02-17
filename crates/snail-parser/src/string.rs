@@ -850,6 +850,41 @@ fn shift_stmt_spans(stmt: &mut Stmt, offset: usize, source: &str) {
             shift_expr_spans(value, offset, source);
             *span = shift_span(span, offset, source);
         }
+        Stmt::Lines {
+            source: src,
+            body,
+            span,
+        } => {
+            if let Some(src) = src {
+                shift_expr_spans(src, offset, source);
+            }
+            shift_block_spans(body, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::Files {
+            source: src,
+            body,
+            span,
+        } => {
+            if let Some(src) = src {
+                shift_expr_spans(src, offset, source);
+            }
+            shift_block_spans(body, offset, source);
+            *span = shift_span(span, offset, source);
+        }
+        Stmt::PatternAction {
+            pattern,
+            action,
+            span,
+        } => {
+            if let Some(pattern) = pattern {
+                shift_expr_spans(pattern, offset, source);
+            }
+            if let Some(action) = action {
+                shift_block_spans(action, offset, source);
+            }
+            *span = shift_span(span, offset, source);
+        }
     }
 }
 

@@ -109,6 +109,21 @@ pub enum Stmt {
         semicolon_terminated: bool,
         span: SourceSpan,
     },
+    Lines {
+        source: Option<Expr>,
+        body: Vec<Stmt>,
+        span: SourceSpan,
+    },
+    Files {
+        source: Option<Expr>,
+        body: Vec<Stmt>,
+        span: SourceSpan,
+    },
+    PatternAction {
+        pattern: Option<Expr>,
+        action: Option<Vec<Stmt>>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

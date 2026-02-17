@@ -41,6 +41,8 @@ pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError
         }),
         Rule::import_from => parse_import_from(pair, source),
         Rule::import_names => parse_import_names(pair, source),
+        Rule::lines_stmt => parse_lines_stmt(pair, source),
+        Rule::files_stmt => parse_files_stmt(pair, source),
         Rule::assign_stmt => parse_assign(pair, source),
         Rule::expr_stmt => parse_expr_stmt(pair, source),
         _ => Err(error_with_span(
@@ -773,6 +775,104 @@ fn parse_assign_target_star(
     let target = parse_assign_target(inner, source)?;
     Ok(AssignTarget::Starred {
         target: Box::new(target),
+        span,
+    })
+}
+
+fn parse_lines_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut source_expr = None;
+    let mut body = Vec::new();
+
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::lines_source => {
+                let expr_pair = inner
+                    .into_inner()
+                    .next()
+                    .ok_or_else(|| error_with_span("missing lines source", span.clone(), source))?;
+                source_expr = Some(parse_expr_pair(expr_pair, source)?);
+            }
+            Rule::lines_body => {
+                for entry in inner.into_inner() {
+                    match entry.as_rule() {
+                        Rule::pattern_action => {
+                            body.push(parse_pattern_action(entry, source)?);
+                        }
+                        _ => {
+                            body.push(parse_stmt(entry, source)?);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(Stmt::Lines {
+        source: source_expr,
+        body,
+        span,
+    })
+}
+
+fn parse_files_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut source_expr = None;
+    let mut body = Vec::new();
+
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::files_source => {
+                let expr_pair = inner
+                    .into_inner()
+                    .next()
+                    .ok_or_else(|| error_with_span("missing files source", span.clone(), source))?;
+                source_expr = Some(parse_expr_pair(expr_pair, source)?);
+            }
+            Rule::block => {
+                body = parse_block(inner, source)?;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(Stmt::Files {
+        source: source_expr,
+        body,
+        span,
+    })
+}
+
+pub fn parse_pattern_action(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut pattern = None;
+    let mut action = None;
+
+    for inner in pair.into_inner() {
+        match inner.as_rule() {
+            Rule::pattern_action_pattern => {
+                let expr_pair = inner.into_inner().next().ok_or_else(|| {
+                    error_with_span("missing pattern action pattern", span.clone(), source)
+                })?;
+                pattern = Some(parse_expr_pair(expr_pair, source)?);
+            }
+            Rule::block => action = Some(parse_block(inner, source)?),
+            _ => {}
+        }
+    }
+
+    if pattern.is_none() && action.is_none() {
+        return Err(error_with_span(
+            "pattern/action requires a pattern or a block",
+            span,
+            source,
+        ));
+    }
+
+    Ok(Stmt::PatternAction {
+        pattern,
+        action,
         span,
     })
 }

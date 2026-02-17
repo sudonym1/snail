@@ -1777,3 +1777,207 @@ fn compact_try_stmt_still_requires_separator() {
     let err = parse_err("x = risky()? y = 2");
     assert!(err.to_string().contains("expected statement separator"));
 }
+
+// ========== Lines/Files Block Tests ==========
+
+#[test]
+fn parses_bare_lines_block() {
+    let source = "lines { print($0) }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines {
+            source: src, body, ..
+        } => {
+            assert!(src.is_none());
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_with_source() {
+    let source = r#"lines("file.txt") { print($0) }"#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines {
+            source: src, body, ..
+        } => {
+            assert!(src.is_some());
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_with_pattern_action() {
+    let source = r#"lines("file.txt") { /pat/ { print($0) } }"#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines { body, .. } => {
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::PatternAction {
+                    pattern, action, ..
+                } => {
+                    assert!(pattern.is_some());
+                    assert!(action.is_some());
+                }
+                other => panic!("Expected pattern/action, got {other:?}"),
+            }
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_with_bare_block() {
+    let source = "lines { { print($0) } }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines { body, .. } => {
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::PatternAction {
+                    pattern, action, ..
+                } => {
+                    assert!(pattern.is_none());
+                    assert!(action.is_some());
+                }
+                other => panic!("Expected pattern/action (bare block), got {other:?}"),
+            }
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_with_bare_pattern() {
+    let source = "lines { /pat/ }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines { body, .. } => {
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::PatternAction {
+                    pattern, action, ..
+                } => {
+                    assert!(pattern.is_some());
+                    assert!(action.is_none());
+                }
+                other => panic!("Expected pattern/action (bare pattern), got {other:?}"),
+            }
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_bare_files_block() {
+    let source = "files { print($src) }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Files {
+            source: src, body, ..
+        } => {
+            assert!(src.is_none());
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected files statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_files_with_source() {
+    let source = "files(paths) { print($src) }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Files {
+            source: src, body, ..
+        } => {
+            assert!(src.is_some());
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected files statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_followed_by_stmt() {
+    let source = "lines { print($0) } x = 1";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::Lines { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Assign { .. }));
+}
+
+#[test]
+fn parses_files_followed_by_stmt() {
+    let source = "files { print($src) } x = 1";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(&program.stmts[0], Stmt::Files { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::Assign { .. }));
+}
+
+#[test]
+fn parses_lines_with_multiline() {
+    let source = "lines\n{\nprint($0)\n}";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    assert!(matches!(&program.stmts[0], Stmt::Lines { .. }));
+}
+
+#[test]
+fn parser_rejects_dollar_zero_outside_lines() {
+    let err = parse_err("print($0)");
+    let message = err.to_string();
+    assert!(message.contains("awk"));
+}
+
+#[test]
+fn parser_rejects_fd_inside_lines() {
+    let err = parse_err("lines { print($fd) }");
+    let message = err.to_string();
+    assert!(message.contains("map variables"));
+}
+
+#[test]
+fn parser_rejects_field_index_outside_lines() {
+    let err = parse_err("print($1)");
+    let message = err.to_string();
+    assert!(message.contains("awk"));
+}
+
+#[test]
+fn parser_rejects_awk_vars_inside_files() {
+    let err = parse_err("files { print($n) }");
+    let message = err.to_string();
+    assert!(message.contains("awk variables"));
+}
+
+#[test]
+fn parser_rejects_pattern_action_outside_lines() {
+    let err = parse_err("/pattern/ { print(1) }");
+    let message = err.to_string();
+    assert!(
+        message.contains("expected")
+            || message.contains("pattern")
+            || message.contains("statement")
+    );
+}

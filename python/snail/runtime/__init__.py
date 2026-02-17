@@ -191,6 +191,23 @@ def __snail_contains_not__(left, right):
     return left not in right
 
 
+def __snail_lines_iter(source):
+    """Iterate lines from a source for 'lines(expr) { }' blocks.
+
+    Handles:
+    - str: opens as file path, iterates lines
+    - file-like (has readline): iterates lines directly
+    - other iterable: iterates directly
+    """
+    if isinstance(source, str):
+        with open(source) as f:
+            yield from f
+    elif hasattr(source, "readline"):
+        yield from source
+    else:
+        yield from source
+
+
 def install_helpers(globals_dict: dict) -> None:
     for helper_name, wrapper_name in _INSTALL_LAZY_HELPER_REGISTRY.items():
         globals_dict[helper_name] = _LAZY_WRAPPERS[wrapper_name]
@@ -199,6 +216,7 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_contains__"] = __snail_contains__
     globals_dict["__snail_contains_not__"] = __snail_contains_not__
     globals_dict["__snail_awk_split"] = __snail_awk_split
+    globals_dict["__snail_lines_iter"] = __snail_lines_iter
     globals_dict["__snail_awk_field_separators"] = None
     globals_dict["__snail_awk_include_whitespace"] = False
 
