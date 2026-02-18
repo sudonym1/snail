@@ -1512,6 +1512,38 @@ def test_awk_field_separator_with_whitespace_flag(
     assert captured.out == "eth0 UP 172.20.223.220 20 fe80::215:5dff:fee5:ebb 64\n"
 
 
+def test_lines_sep_kwarg(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("a/b/c\n"))
+    assert main(["-P", 'lines(sep="/") { print($1, $2, $3) }']) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "a b c\n"
+
+
+def test_lines_sep_and_ws_kwargs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO("eth0  UP  172.20.223.220/20\n"),
+    )
+    assert main(["-P", 'lines(sep="/", ws=True) { print($1, $2, $3, $4) }']) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "eth0 UP 172.20.223.220 20\n"
+
+
+def test_lines_sep_with_file_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    p = tmp_path / "data.txt"
+    p.write_text("x,y,z\na,b,c\n")
+    assert main(["-P", f'lines("{p}", sep=",") {{ print($1, $2, $3) }}']) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "x y z\na b c\n"
+
+
 def test_awk_match_group_access(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1853,8 +1885,6 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_aug_attr",
         "__snail_aug_index",
         "__snail_awk_split",
-        "__snail_awk_field_separators",
-        "__snail_awk_include_whitespace",
         "__snail_lines_iter",
         "__snail_open_lines_source",
         "__snail_normalize_sources",
@@ -1888,8 +1918,6 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
     assert callable(globals_dict["__snail_contains__"])
     assert callable(globals_dict["__snail_contains_not__"])
     assert callable(globals_dict["__snail_awk_split"])
-    assert globals_dict["__snail_awk_field_separators"] is None
-    assert globals_dict["__snail_awk_include_whitespace"] is False
     assert isinstance(globals_dict["__snail_env"], runtime_env.EnvMap)
     assert inspect.isclass(globals_dict["__SnailLazyText"])
     assert inspect.isclass(globals_dict["__SnailLazyFile"])

@@ -415,6 +415,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         auto_print = True  # default
 
+    separators = "".join(namespace.field_separators)
+    field_separators = separators if separators else None
+    include_whitespace = namespace.include_whitespace or field_separators is None
+
     if namespace.debug_snail_preprocessor:
         from . import preprocess
 
@@ -431,6 +435,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             filename=filename,
             begin_code=namespace.begin_code,
             end_code=namespace.end_code,
+            field_separators=field_separators,
+            include_whitespace=include_whitespace,
         )
         print(snail_ast)
         return 0
@@ -445,6 +451,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             filename=filename,
             begin_code=namespace.begin_code,
             end_code=namespace.end_code,
+            field_separators=field_separators,
+            include_whitespace=include_whitespace,
         )
         try:
             output = ast.dump(python_ast, indent=2)
@@ -464,6 +472,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             filename=filename,
             begin_code=namespace.begin_code,
             end_code=namespace.end_code,
+            field_separators=field_separators,
+            include_whitespace=include_whitespace,
         )
         builtins.compile(python_ast, _display_filename(filename), "exec")
         try:
@@ -483,10 +493,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         if is_tty:
             print('Missing input (see "snail --help")', file=sys.stderr)
             return 1
-
-    separators = "".join(namespace.field_separators)
-    field_separators = separators if separators else None
-    include_whitespace = namespace.include_whitespace or field_separators is None
 
     return exec(
         source,

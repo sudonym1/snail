@@ -261,8 +261,6 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_lines_iter"] = __snail_lines_iter
     globals_dict["__snail_open_lines_source"] = __snail_open_lines_source
     globals_dict["__snail_normalize_sources"] = __snail_normalize_sources
-    globals_dict["__snail_awk_field_separators"] = None
-    globals_dict["__snail_awk_include_whitespace"] = False
 
     for helper_name, getter_name in _INSTALL_EAGER_HELPER_REGISTRY.items():
         globals_dict[helper_name] = _GETTERS[getter_name]()

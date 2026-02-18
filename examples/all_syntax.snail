@@ -514,6 +514,31 @@ files(temp.name, temp2.name) {
 assert len(multi_file_srcs) == 2
 print("files multi-source", len(multi_file_srcs))
 
+# Lines with sep kwarg (field separator)
+sep_fields = []
+temp3 = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+temp3.write("a/b/c\n")
+temp3.close()
+lines(temp3.name, sep="/") {
+    sep_fields.append($1)
+}
+assert sep_fields == ["a"], "lines sep kwarg"
+print("lines sep kwarg", sep_fields)
+
+# Lines with sep + ws kwargs (field separator with whitespace)
+ws_fields = []
+temp4 = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+temp4.write("x y/z\n")
+temp4.close()
+lines(temp4.name, sep="/", ws=True) {
+    ws_fields.append(str(len($f)))
+}
+assert ws_fields == ["3"], "lines sep+ws kwargs"
+print("lines sep+ws kwargs", ws_fields)
+
+os.unlink(temp3.name)
+os.unlink(temp4.name)
+
 os.unlink(temp.name)
 
 # The implicit return of the last non-semicolon expression is pretty printed

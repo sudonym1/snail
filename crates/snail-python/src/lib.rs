@@ -98,8 +98,6 @@ fn prepare_globals<'py>(
     filename: &str,
     argv: &[String],
     auto_import: bool,
-    awk_field_separators: Option<String>,
-    awk_include_whitespace: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let runtime = py.import_bound("snail.runtime")?;
 
@@ -119,16 +117,6 @@ fn prepare_globals<'py>(
     sys.setattr("argv", PyList::new_bound(py, argv))?;
 
     runtime.call_method1("install_helpers", (&globals,))?;
-    let separators = awk_field_separators
-        .as_deref()
-        .filter(|value| !value.is_empty());
-    let separators_value = match separators {
-        Some(separators) => separators.into_py(py),
-        None => py.None().into_py(py),
-    };
-    globals.set_item("__snail_awk_field_separators", separators_value)?;
-    let include_whitespace = awk_include_whitespace.unwrap_or(separators.is_none());
-    globals.set_item("__snail_awk_include_whitespace", include_whitespace)?;
 
     Ok(globals)
 }
@@ -153,7 +141,8 @@ fn has_tail_expression(source: &str) -> bool {
 }
 
 #[pyfunction(name = "compile")]
-#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
+#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new(), field_separators = None, include_whitespace = None))]
+#[allow(clippy::too_many_arguments)]
 fn compile_py(
     py: Python<'_>,
     source: &str,
@@ -162,10 +151,19 @@ fn compile_py(
     filename: &str,
     begin_code: Vec<String>,
     end_code: Vec<String>,
+    field_separators: Option<String>,
+    include_whitespace: Option<bool>,
 ) -> PyResult<PyObject> {
     let profile = profile_enabled();
     let total_start = Instant::now();
-    let wrapped = wrap_source(source, mode, &begin_code, &end_code)?;
+    let wrapped = wrap_source(
+        source,
+        mode,
+        &begin_code,
+        &end_code,
+        field_separators.as_deref(),
+        include_whitespace,
+    )?;
     let code = compile_source_to_code(py, &wrapped, auto_print, false, filename)?;
     if profile {
         log_profile("compile_py_total", total_start.elapsed());
@@ -174,7 +172,8 @@ fn compile_py(
 }
 
 #[pyfunction(name = "compile_ast")]
-#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
+#[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new(), field_separators = None, include_whitespace = None))]
+#[allow(clippy::too_many_arguments)]
 fn compile_ast_py(
     py: Python<'_>,
     source: &str,
@@ -183,8 +182,17 @@ fn compile_ast_py(
     filename: &str,
     begin_code: Vec<String>,
     end_code: Vec<String>,
+    field_separators: Option<String>,
+    include_whitespace: Option<bool>,
 ) -> PyResult<PyObject> {
-    let wrapped = wrap_source(source, mode, &begin_code, &end_code)?;
+    let wrapped = wrap_source(
+        source,
+        mode,
+        &begin_code,
+        &end_code,
+        field_separators.as_deref(),
+        include_whitespace,
+    )?;
     compile_source(py, &wrapped, auto_print, false, filename)
 }
 
@@ -208,7 +216,14 @@ fn exec_py(
     let profile = profile_enabled();
     let total_start = Instant::now();
 
-    let wrapped = wrap_source(source, mode, &begin_code, &end_code)?;
+    let wrapped = wrap_source(
+        source,
+        mode,
+        &begin_code,
+        &end_code,
+        field_separators.as_deref(),
+        include_whitespace,
+    )?;
 
     // Pre-flight check: --test requires a trailing expression.
     if test_last && !has_tail_expression(&wrapped) {
@@ -222,14 +237,7 @@ fn exec_py(
     let code = compile_source_to_code(py, &wrapped, auto_print, capture_last, filename)?;
     let builtins = py.import_bound("builtins")?;
     let globals_start = Instant::now();
-    let globals = prepare_globals(
-        py,
-        strip_display_prefix(filename),
-        &argv,
-        auto_import,
-        field_separators,
-        include_whitespace,
-    )?;
+    let globals = prepare_globals(py, strip_display_prefix(filename), &argv, auto_import)?;
     if profile {
         log_profile("prepare_globals", globals_start.elapsed());
     }
@@ -271,15 +279,25 @@ fn exec_py(
 }
 
 #[pyfunction(name = "parse_ast")]
-#[pyo3(signature = (source, *, mode = "snail", filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
+#[pyo3(signature = (source, *, mode = "snail", filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new(), field_separators = None, include_whitespace = None))]
+#[allow(clippy::too_many_arguments)]
 fn parse_ast_py(
     source: &str,
     mode: &str,
     filename: &str,
     begin_code: Vec<String>,
     end_code: Vec<String>,
+    field_separators: Option<String>,
+    include_whitespace: Option<bool>,
 ) -> PyResult<String> {
-    let wrapped = wrap_source(source, mode, &begin_code, &end_code)?;
+    let wrapped = wrap_source(
+        source,
+        mode,
+        &begin_code,
+        &end_code,
+        field_separators.as_deref(),
+        include_whitespace,
+    )?;
     let program = compiler::parse_program(&wrapped)
         .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
     Ok(format!("{:#?}", program))
@@ -291,9 +309,22 @@ fn preprocess_py(source: &str) -> PyResult<String> {
 }
 
 #[pyfunction(name = "parse")]
-#[pyo3(signature = (source, *, mode = "snail", filename = "<snail>"))]
-fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
-    let wrapped = wrap_source(source, mode, &[], &[])?;
+#[pyo3(signature = (source, *, mode = "snail", filename = "<snail>", field_separators = None, include_whitespace = None))]
+fn parse_py(
+    source: &str,
+    mode: &str,
+    filename: &str,
+    field_separators: Option<String>,
+    include_whitespace: Option<bool>,
+) -> PyResult<()> {
+    let wrapped = wrap_source(
+        source,
+        mode,
+        &[],
+        &[],
+        field_separators.as_deref(),
+        include_whitespace,
+    )?;
     snail_parser::parse(&wrapped)
         .map(|_| ())
         .map_err(|err| parse_error_to_syntax(err, filename))
@@ -306,6 +337,8 @@ fn wrap_source(
     mode: &str,
     begin_code: &[String],
     end_code: &[String],
+    field_separators: Option<&str>,
+    include_whitespace: Option<bool>,
 ) -> PyResult<String> {
     match mode {
         "snail" => {
@@ -328,7 +361,23 @@ fn wrap_source(
             for b in begin_code {
                 segments.push(b.clone());
             }
-            segments.push(format!("lines {{\n{source}\n}}"));
+            // Build kwargs for lines()
+            let mut kwargs = Vec::new();
+            if let Some(sep) = field_separators {
+                let escaped = lower::escape_for_python_string(sep);
+                kwargs.push(format!("sep=\"{escaped}\""));
+            }
+            if let Some(ws) = include_whitespace
+                && ws
+            {
+                kwargs.push("ws=True".to_string());
+            }
+            let kwargs_str = if kwargs.is_empty() {
+                String::new()
+            } else {
+                format!("({})", kwargs.join(", "))
+            };
+            segments.push(format!("lines{kwargs_str} {{\n{source}\n}}"));
             for e in end_code {
                 segments.push(e.clone());
             }

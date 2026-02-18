@@ -9,6 +9,35 @@ use super::helpers::{assign_name, name_expr, number_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_auto;
 
+/// Configuration extracted from `lines(sep=..., ws=...)` kwargs.
+struct LinesConfig<'a> {
+    sep: Option<&'a Expr>,
+    ws: Option<&'a Expr>,
+}
+
+/// Partition `sources` into config kwargs (`sep`, `ws`) and remaining source args.
+fn extract_lines_config(sources: &[Argument]) -> (LinesConfig<'_>, Vec<&Argument>) {
+    let mut config = LinesConfig {
+        sep: None,
+        ws: None,
+    };
+    let mut remaining = Vec::new();
+    for arg in sources {
+        match arg {
+            Argument::Keyword { name, value, .. } if name == "sep" => {
+                config.sep = Some(value);
+            }
+            Argument::Keyword { name, value, .. } if name == "ws" => {
+                config.ws = Some(value);
+            }
+            other => {
+                remaining.push(other);
+            }
+        }
+    }
+    (config, remaining)
+}
+
 /// Lower a `lines` statement: sets up line-processing variables and iterates lines.
 ///
 /// For `lines { body }` (no source), generates the full argv/stdin file loop.
@@ -19,12 +48,13 @@ pub(crate) fn lower_lines_stmt(
     body: &[Stmt],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    if sources.is_empty() {
+    let (config, remaining) = extract_lines_config(sources);
+    if remaining.is_empty() {
         // No source: generate the full argv/stdin file loop (same as awk mode)
-        lower_lines_no_source(builder, body, span)
+        lower_lines_no_source(builder, body, span, &config)
     } else {
         // With sources: generate two-level file loop
-        lower_lines_with_sources(builder, sources, body, span)
+        lower_lines_with_sources(builder, &remaining, body, span, &config)
     }
 }
 
@@ -45,6 +75,7 @@ fn lower_lines_loop(
     iter_expr: PyObject,
     body: &[Stmt],
     span: &SourceSpan,
+    config: &LinesConfig<'_>,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
 
@@ -83,7 +114,7 @@ fn lower_lines_loop(
     )?);
 
     // Build the file loop body
-    let file_loop_body = lower_lines_file_loop_body(builder, body, span)?;
+    let file_loop_body = lower_lines_file_loop_body(builder, body, span, config)?;
 
     // for __snail_source_item in <iter_expr>:
     let for_loop = builder
@@ -119,6 +150,7 @@ fn lower_lines_file_loop_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
+    config: &LinesConfig<'_>,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut file_loop = Vec::new();
 
@@ -191,7 +223,7 @@ fn lower_lines_file_loop_body(
         .map_err(py_err_to_lower)?;
 
     // Build the line loop body
-    let loop_body = build_line_loop_body(builder, body, span)?;
+    let loop_body = build_line_loop_body(builder, body, span, config)?;
 
     // for __snail_raw in __snail_file:
     let line_loop = builder
@@ -234,13 +266,15 @@ fn lower_lines_file_loop_body(
 
 fn lower_lines_with_sources(
     builder: &AstBuilder<'_>,
-    sources: &[Argument],
+    sources: &[&Argument],
     body: &[Stmt],
     span: &SourceSpan,
+    config: &LinesConfig<'_>,
 ) -> Result<Vec<PyObject>, LowerError> {
     // Lower all arguments via lower_call_arguments and generate:
     //   __snail_normalize_sources(arg1, arg2, *args, key=val, ...)
-    let (positional, keywords) = lower_call_arguments(builder, sources, None)?;
+    let owned: Vec<Argument> = sources.iter().map(|a| (*a).clone()).collect();
+    let (positional, keywords) = lower_call_arguments(builder, &owned, None)?;
     let iter_expr = builder
         .call_node(
             "Call",
@@ -258,13 +292,14 @@ fn lower_lines_with_sources(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_lines_loop(builder, iter_expr, body, span)
+    lower_lines_loop(builder, iter_expr, body, span, config)
 }
 
 fn lower_lines_no_source(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
+    config: &LinesConfig<'_>,
 ) -> Result<Vec<PyObject>, LowerError> {
     // Build files_expr: sys.argv[1:] or ["-"]
     let files_expr = builder
@@ -339,7 +374,7 @@ fn lower_lines_no_source(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_lines_loop(builder, files_expr, body, span)
+    lower_lines_loop(builder, files_expr, body, span, config)
 }
 
 /// Build the inner body of a line processing loop — sets up $0, $f, $n, $fn, $m, $src
@@ -348,6 +383,7 @@ fn build_line_loop_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
+    config: &LinesConfig<'_>,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut loop_body = Vec::new();
 
@@ -441,7 +477,27 @@ fn build_line_loop_body(
         span,
     )?);
 
-    // __snail_fields = __snail_awk_split(__snail_line, ...)
+    // __snail_fields = __snail_awk_split(__snail_line, <sep_expr>, <ws_expr>)
+    let sep_expr = if let Some(sep) = config.sep {
+        lower_expr(builder, sep)?
+    } else {
+        builder
+            .call_node(
+                "Constant",
+                vec![builder.py().None().into_py(builder.py())],
+                span,
+            )
+            .map_err(py_err_to_lower)?
+    };
+    // Default ws: False if sep is provided, True if sep is absent
+    let ws_expr = if let Some(ws) = config.ws {
+        lower_expr(builder, ws)?
+    } else {
+        let default_ws = config.sep.is_none();
+        builder
+            .call_node("Constant", vec![default_ws.into_py(builder.py())], span)
+            .map_err(py_err_to_lower)?
+    };
     let split_call = builder
         .call_node(
             "Call",
@@ -461,18 +517,8 @@ fn build_line_loop_body(
                             span,
                             builder.load_ctx().map_err(py_err_to_lower)?,
                         )?,
-                        name_expr(
-                            builder,
-                            SNAIL_AWK_FIELD_SEPARATORS_PYVAR,
-                            span,
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        )?,
-                        name_expr(
-                            builder,
-                            SNAIL_AWK_INCLUDE_WHITESPACE_PYVAR,
-                            span,
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        )?,
+                        sep_expr,
+                        ws_expr,
                     ],
                 )
                 .into_py(builder.py()),

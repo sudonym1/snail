@@ -28,8 +28,6 @@ pub(crate) const SNAIL_AWK_MATCH: &str = "$m";
 pub(crate) const SNAIL_AWK_FIELDS: &str = "$f";
 pub(crate) const SNAIL_AWK_LINE_PYVAR: &str = "__snail_line";
 pub(crate) const SNAIL_AWK_FIELDS_PYVAR: &str = "__snail_fields";
-pub(crate) const SNAIL_AWK_FIELD_SEPARATORS_PYVAR: &str = "__snail_awk_field_separators";
-pub(crate) const SNAIL_AWK_INCLUDE_WHITESPACE_PYVAR: &str = "__snail_awk_include_whitespace";
 pub(crate) const SNAIL_AWK_NR_PYVAR: &str = "__snail_nr_user";
 pub(crate) const SNAIL_AWK_FNR_PYVAR: &str = "__snail_fnr_user";
 pub(crate) const SNAIL_AWK_PATH_PYVAR: &str = "__snail_path_user";
@@ -65,7 +63,7 @@ pub(crate) fn injected_py_name(name: &str) -> Option<&'static str> {
     }
 }
 
-pub(crate) fn escape_for_python_string(value: &str) -> String {
+pub fn escape_for_python_string(value: &str) -> String {
     // Escape special characters for a Python string literal
     // This is used for raw source text that needs to be embedded in a Python string
     let mut escaped = String::with_capacity(value.len());
