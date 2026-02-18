@@ -242,6 +242,7 @@ impl LambdaHoister {
                 action: action.as_ref().map(|a| self.desugar_block(a)),
                 span: span.clone(),
             },
+            Stmt::SegmentBreak { span } => Stmt::SegmentBreak { span: span.clone() },
         }
     }
 

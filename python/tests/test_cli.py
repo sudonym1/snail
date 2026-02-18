@@ -2925,3 +2925,60 @@ def test_files_rejects_awk_vars_inside() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(["files { print($n) }"])
     assert "awk variables" in str(excinfo.value)
+
+
+# --- Tests for per-segment auto-print ---
+
+
+def test_segment_auto_print_multiple_begin(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Each -b segment's last bare expression should auto-print independently."""
+    result = main(["-b", "x=1", "-b", "x", "10"])
+    assert result == 0
+    captured = capsys.readouterr()
+    # x=1 produces no output (assignment), x prints 1, 10 prints 10
+    assert captured.out.splitlines() == ["1", "10"]
+
+
+def test_segment_auto_print_multiple_end(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Each -e segment's last bare expression should auto-print independently."""
+    result = main(["-e", "x=1", "-e", "x", "10"])
+    assert result == 0
+    captured = capsys.readouterr()
+    # 10 prints from main, then x=1 produces nothing, then x prints 1
+    assert captured.out.splitlines() == ["10", "1"]
+
+
+def test_segment_auto_print_begin_and_end(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Combined -b and -e segments all auto-print their last expressions."""
+    result = main(["-b", "x=1", "-b", "x", "10", "-e", "x", "-e", "x"])
+    assert result == 0
+    captured = capsys.readouterr()
+    # x=1 → nothing, x → 1, 10 → 10, x → 1, x → 1
+    assert captured.out.splitlines() == ["1", "10", "1", "1"]
+
+
+def test_segment_auto_print_single_segment_unchanged(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A single segment (no -b/-e) still auto-prints normally."""
+    result = main(["42"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "42"
+
+
+def test_segment_semicolon_suppresses_auto_print(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Semicolon-terminated expressions before segment breaks are NOT auto-printed."""
+    result = main(["-b", "1;", "2"])
+    assert result == 0
+    captured = capsys.readouterr()
+    # 1; is semicolon-terminated so not auto-printed, 2 is auto-printed
+    assert captured.out.splitlines() == ["2"]

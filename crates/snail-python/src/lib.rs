@@ -138,7 +138,11 @@ fn has_tail_expression(source: &str) -> bool {
     snail_parser::parse(source)
         .map(|program| {
             matches!(
-                program.stmts.last(),
+                program
+                    .stmts
+                    .iter()
+                    .rev()
+                    .find(|s| !matches!(s, Stmt::SegmentBreak { .. })),
                 Some(Stmt::Expr {
                     semicolon_terminated: false,
                     ..
@@ -316,34 +320,30 @@ fn wrap_source(
                 for e in end_code {
                     parts.push(e);
                 }
-                Ok(parts.join("\n"))
+                Ok(parts.join("\n\x1f"))
             }
         }
         "awk" => {
-            let mut parts: Vec<String> = Vec::new();
+            let mut segments: Vec<String> = Vec::new();
             for b in begin_code {
-                parts.push(b.clone());
+                segments.push(b.clone());
             }
-            parts.push("lines {".to_string());
-            parts.push(source.to_string());
-            parts.push("}".to_string());
+            segments.push(format!("lines {{\n{source}\n}}"));
             for e in end_code {
-                parts.push(e.clone());
+                segments.push(e.clone());
             }
-            Ok(parts.join("\n"))
+            Ok(segments.join("\n\x1f"))
         }
         "map" => {
-            let mut parts: Vec<String> = Vec::new();
+            let mut segments: Vec<String> = Vec::new();
             for b in begin_code {
-                parts.push(b.clone());
+                segments.push(b.clone());
             }
-            parts.push("files {".to_string());
-            parts.push(source.to_string());
-            parts.push("}".to_string());
+            segments.push(format!("files {{\n{source}\n}}"));
             for e in end_code {
-                parts.push(e.clone());
+                segments.push(e.clone());
             }
-            Ok(parts.join("\n"))
+            Ok(segments.join("\n\x1f"))
         }
         _ => Err(PyRuntimeError::new_err(format!(
             "unknown mode: {mode} (expected 'snail', 'awk', or 'map')"

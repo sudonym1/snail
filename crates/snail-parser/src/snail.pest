@@ -4,10 +4,11 @@ program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 // Statements: separated by semicolons or injected record separators
 // Compound statements (ending with }) don't need trailing separators
 // Simple statements need separators unless they're the last statement
-stmt_list = { stmt_item* ~ final_stmt? }
+stmt_list = { (stmt_item | segment_break)* ~ final_stmt? }
 stmt_item = _{ compound_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ }
 final_stmt = _{ compound_stmt | simple_stmt }
 stmt_sep = _{ ";" | "\x1E" }
+segment_break = { "\x1F" ~ stmt_sep* }
 
 stmt = _{ compound_stmt | simple_stmt }
 

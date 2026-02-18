@@ -172,7 +172,8 @@ fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result
         | Stmt::ImportFrom { .. }
         | Stmt::Break { .. }
         | Stmt::Continue { .. }
-        | Stmt::Pass { .. } => {}
+        | Stmt::Pass { .. }
+        | Stmt::SegmentBreak { .. } => {}
         Stmt::Assign { targets, value, .. } => {
             for target in targets {
                 validate_assign_target_mode(target, source, mode)?;

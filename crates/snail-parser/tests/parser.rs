@@ -1993,3 +1993,17 @@ fn parser_rejects_pattern_action_outside_lines() {
             || message.contains("statement")
     );
 }
+
+#[test]
+fn parses_segment_break() {
+    // \x1f (Unit Separator) produces SegmentBreak nodes in the AST
+    let source = "x = 1\n\x1f\ny = 2\n\x1f\nz = 3";
+    let program = parse_ok(source);
+    // Should have 5 nodes: Assign, SegmentBreak, Assign, SegmentBreak, Assign
+    assert_eq!(program.stmts.len(), 5);
+    assert!(matches!(&program.stmts[0], Stmt::Assign { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::SegmentBreak { .. }));
+    assert!(matches!(&program.stmts[2], Stmt::Assign { .. }));
+    assert!(matches!(&program.stmts[3], Stmt::SegmentBreak { .. }));
+    assert!(matches!(&program.stmts[4], Stmt::Assign { .. }));
+}

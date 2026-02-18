@@ -133,7 +133,8 @@ fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
         | Stmt::Continue { .. }
         | Stmt::Pass { .. }
         | Stmt::Import { .. }
-        | Stmt::ImportFrom { .. } => {}
+        | Stmt::ImportFrom { .. }
+        | Stmt::SegmentBreak { .. } => {}
         Stmt::Lines { source, body, .. } => {
             if let Some(source) = source {
                 check_expr(source, in_function)?;

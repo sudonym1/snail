@@ -124,6 +124,9 @@ pub enum Stmt {
         action: Option<Vec<Stmt>>,
         span: SourceSpan,
     },
+    SegmentBreak {
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

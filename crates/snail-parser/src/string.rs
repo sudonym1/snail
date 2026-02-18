@@ -885,6 +885,9 @@ fn shift_stmt_spans(stmt: &mut Stmt, offset: usize, source: &str) {
             }
             *span = shift_span(span, offset, source);
         }
+        Stmt::SegmentBreak { span } => {
+            *span = shift_span(span, offset, source);
+        }
     }
 }
 

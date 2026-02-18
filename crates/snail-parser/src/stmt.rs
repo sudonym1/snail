@@ -12,7 +12,13 @@ use crate::util::{error_with_span, span_from_pair};
 pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut stmts = Vec::new();
     for inner in pair.into_inner() {
-        stmts.push(parse_stmt(inner, source)?);
+        if inner.as_rule() == Rule::segment_break {
+            stmts.push(Stmt::SegmentBreak {
+                span: span_from_pair(&inner, source),
+            });
+        } else {
+            stmts.push(parse_stmt(inner, source)?);
+        }
     }
     Ok(stmts)
 }

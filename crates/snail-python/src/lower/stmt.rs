@@ -347,6 +347,9 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
         Stmt::PatternAction { .. } => Err(LowerError::new(
             "pattern/action should be lowered via lower_lines_body",
         )),
+        Stmt::SegmentBreak { .. } => Err(LowerError::new(
+            "segment break should be handled by lower_block_with_tail",
+        )),
     }
 }
 
@@ -391,8 +394,13 @@ fn lower_block_with_tail(
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
     for (idx, stmt) in block.iter().enumerate() {
+        // Skip SegmentBreak nodes — they are only markers for tail behavior
+        if matches!(stmt, Stmt::SegmentBreak { .. }) {
+            continue;
+        }
         let is_last = idx == block.len().saturating_sub(1);
-        if is_last {
+        let next_is_break = matches!(block.get(idx + 1), Some(Stmt::SegmentBreak { .. }));
+        if is_last || next_is_break {
             match (tail, stmt) {
                 (
                     TailBehavior::AutoPrint,
