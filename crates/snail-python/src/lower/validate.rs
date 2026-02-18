@@ -135,8 +135,8 @@ fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
         | Stmt::Import { .. }
         | Stmt::ImportFrom { .. }
         | Stmt::SegmentBreak { .. } => {}
-        Stmt::Lines { source, body, .. } => {
-            if let Some(source) = source {
+        Stmt::Lines { sources, body, .. } => {
+            for source in sources {
                 check_expr(source, in_function)?;
             }
             check_stmts(body, in_function)?;

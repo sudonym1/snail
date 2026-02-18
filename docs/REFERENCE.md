@@ -93,19 +93,36 @@ lines("server.log") {
     /ERROR/ { print($0) }
 }
 
-# Read from a file handle or iterable
+# Read from multiple files — $fn resets and $src updates per file
+lines("access.log", "error.log") {
+    print($src, $fn, $0)
+}
+
+# Read from a file handle
 lines(open("data.txt")) {
     print($1, $2)
 }
+
+# Read from a list of paths (single expression is normalized)
+paths = ["a.txt", "b.txt"]
+lines(paths) {
+    print($src, $0)
+}
 ```
+
+Sources can be file paths (strings), `"-"` for stdin, or file-like objects
+(anything with a `readline` method). When a single expression is provided, it
+is normalized: a string or file-like object becomes a single source, while any
+other iterable (e.g. a list of paths) is expanded so each element is processed
+as a separate source.
 
 Inside a `lines { }` block, the following variables are available:
 - `$0`: current line (stripped of trailing newline)
 - `$1`, `$2`, ...: whitespace-split fields
 - `$f`: all fields as a list
 - `$n`: global line number
-- `$fn`: per-file line number
-- `$src`: current file path
+- `$fn`: per-file line number (resets for each source)
+- `$src`: current file path (updates for each source)
 - `$m`: last regex match object
 
 Pattern/action rules work inside `lines { }` blocks just like in awk mode:

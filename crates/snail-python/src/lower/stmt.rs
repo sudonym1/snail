@@ -463,9 +463,12 @@ fn lower_block_with_tail(
                 stmts.extend(lower_while_stmt(builder, cond, body, else_body, span)?);
             }
             Stmt::Lines {
-                source, body, span, ..
+                sources,
+                body,
+                span,
+                ..
             } => {
-                stmts.extend(super::awk::lower_lines_stmt(builder, source, body, span)?);
+                stmts.extend(super::awk::lower_lines_stmt(builder, sources, body, span)?);
             }
             Stmt::Files {
                 source, body, span, ..

@@ -12,104 +12,43 @@ use super::stmt::lower_block_auto;
 /// Lower a `lines` statement: sets up line-processing variables and iterates lines.
 ///
 /// For `lines { body }` (no source), generates the full argv/stdin file loop.
-/// For `lines(expr) { body }`, calls `__snail_lines_iter(expr)` and iterates.
+/// For `lines(expr, ...) { body }`, generates a two-level file loop with per-file state.
 pub(crate) fn lower_lines_stmt(
     builder: &AstBuilder<'_>,
-    source: &Option<Expr>,
+    sources: &[Expr],
     body: &[Stmt],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    if source.is_none() {
+    if sources.is_empty() {
         // No source: generate the full argv/stdin file loop (same as awk mode)
         lower_lines_no_source(builder, body, span)
     } else {
-        // With source: iterate lines from the expression
-        lower_lines_with_source(builder, source.as_ref().unwrap(), body, span)
+        // With sources: generate two-level file loop
+        lower_lines_with_sources(builder, sources, body, span)
     }
 }
 
-fn lower_lines_with_source(
+/// Shared implementation for all `lines` variants.
+///
+/// Generates:
+/// ```python
+/// import sys
+/// __snail_nr = 0
+/// for __snail_source_item in <iter_expr>:
+///     __snail_fnr = 0
+///     with __snail_open_lines_source(__snail_source_item) as (__snail_file, __snail_path):
+///         for __snail_raw in __snail_file:
+///             # ... line loop body ...
+/// ```
+fn lower_lines_loop(
     builder: &AstBuilder<'_>,
-    source_expr: &Expr,
+    iter_expr: PyObject,
     body: &[Stmt],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
 
-    // Initialize counters and path
-    stmts.push(assign_name(
-        builder,
-        "__snail_nr",
-        number_expr(builder, "0", span)?,
-        span,
-    )?);
-    stmts.push(assign_name(
-        builder,
-        "__snail_fnr",
-        number_expr(builder, "0", span)?,
-        span,
-    )?);
-    stmts.push(assign_name(
-        builder,
-        "__snail_path",
-        string_expr(builder, "<lines>", false, StringDelimiter::Double, span)?,
-        span,
-    )?);
-
-    // Build the line loop body
-    let loop_body = build_line_loop_body(builder, body, span)?;
-
-    // __snail_lines_iter(source_expr)
-    let source_lowered = lower_expr(builder, source_expr)?;
-    let iter_call = builder
-        .call_node(
-            "Call",
-            vec![
-                name_expr(
-                    builder,
-                    SNAIL_LINES_ITER_HELPER,
-                    span,
-                    builder.load_ctx().map_err(py_err_to_lower)?,
-                )?,
-                PyList::new_bound(builder.py(), vec![source_lowered]).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    // for __snail_raw in __snail_lines_iter(source):
-    let for_loop = builder
-        .call_node(
-            "For",
-            vec![
-                name_expr(
-                    builder,
-                    "__snail_raw",
-                    span,
-                    builder.store_ctx().map_err(py_err_to_lower)?,
-                )?,
-                iter_call,
-                PyList::new_bound(builder.py(), loop_body).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-    stmts.push(for_loop);
-    Ok(stmts)
-}
-
-fn lower_lines_no_source(
-    builder: &AstBuilder<'_>,
-    body: &[Stmt],
-    span: &SourceSpan,
-) -> Result<Vec<PyObject>, LowerError> {
-    // Same structure as lower_awk in program.rs: import sys, contextlib;
-    // set up __snail_nr = 0; for __snail_path in (sys.argv[1:] or ["-"]): file loop
-    let mut stmts = Vec::new();
-
-    // import sys, contextlib
+    // import sys
     let sys_import = builder
         .call_node(
             "Import",
@@ -122,15 +61,6 @@ fn lower_lines_no_source(
                                 "alias",
                                 vec![
                                     "sys".to_string().into_py(builder.py()),
-                                    builder.py().None().into_py(builder.py()),
-                                ],
-                            )
-                            .map_err(py_err_to_lower)?,
-                        builder
-                            .call_node_no_loc(
-                                "alias",
-                                vec![
-                                    "contextlib".to_string().into_py(builder.py()),
                                     builder.py().None().into_py(builder.py()),
                                 ],
                             )
@@ -152,6 +82,208 @@ fn lower_lines_no_source(
         span,
     )?);
 
+    // Build the file loop body
+    let file_loop_body = lower_lines_file_loop_body(builder, body, span)?;
+
+    // for __snail_source_item in <iter_expr>:
+    let for_loop = builder
+        .call_node(
+            "For",
+            vec![
+                name_expr(
+                    builder,
+                    "__snail_source_item",
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+                iter_expr,
+                PyList::new_bound(builder.py(), file_loop_body).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    stmts.push(for_loop);
+    Ok(stmts)
+}
+
+/// Generates the per-file loop body shared by all `lines` variants.
+///
+/// ```python
+/// __snail_fnr = 0
+/// with __snail_open_lines_source(__snail_source_item) as (__snail_file, __snail_path):
+///     for __snail_raw in __snail_file:
+///         # ... line processing ...
+/// ```
+fn lower_lines_file_loop_body(
+    builder: &AstBuilder<'_>,
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let mut file_loop = Vec::new();
+
+    // __snail_fnr = 0
+    file_loop.push(assign_name(
+        builder,
+        "__snail_fnr",
+        number_expr(builder, "0", span)?,
+        span,
+    )?);
+
+    // with __snail_open_lines_source(__snail_source_item) as (__snail_file, __snail_path):
+    let open_source_call = builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_OPEN_LINES_SOURCE_HELPER,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(
+                    builder.py(),
+                    vec![name_expr(
+                        builder,
+                        "__snail_source_item",
+                        span,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    )?],
+                )
+                .into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    // Build the Tuple target: (__snail_file, __snail_path)
+    let tuple_target = builder
+        .call_node(
+            "Tuple",
+            vec![
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        name_expr(
+                            builder,
+                            "__snail_file",
+                            span,
+                            builder.store_ctx().map_err(py_err_to_lower)?,
+                        )?,
+                        name_expr(
+                            builder,
+                            "__snail_path",
+                            span,
+                            builder.store_ctx().map_err(py_err_to_lower)?,
+                        )?,
+                    ],
+                )
+                .into_py(builder.py()),
+                builder.store_ctx().map_err(py_err_to_lower)?,
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let with_item = builder
+        .call_node_no_loc("withitem", vec![open_source_call, tuple_target])
+        .map_err(py_err_to_lower)?;
+
+    // Build the line loop body
+    let loop_body = build_line_loop_body(builder, body, span)?;
+
+    // for __snail_raw in __snail_file:
+    let line_loop = builder
+        .call_node(
+            "For",
+            vec![
+                name_expr(
+                    builder,
+                    "__snail_raw",
+                    span,
+                    builder.store_ctx().map_err(py_err_to_lower)?,
+                )?,
+                name_expr(
+                    builder,
+                    "__snail_file",
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(builder.py(), loop_body).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let with_stmt = builder
+        .call_node(
+            "With",
+            vec![
+                PyList::new_bound(builder.py(), vec![with_item]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![line_loop]).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    file_loop.push(with_stmt);
+    Ok(file_loop)
+}
+
+fn lower_lines_with_sources(
+    builder: &AstBuilder<'_>,
+    sources: &[Expr],
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let iter_expr = if sources.len() == 1 {
+        // Single source: wrap in __snail_normalize_sources(expr) so a list of paths
+        // is iterated as individual sources, while a single string becomes [path]
+        let source_lowered = lower_expr(builder, &sources[0])?;
+        builder
+            .call_node(
+                "Call",
+                vec![
+                    name_expr(
+                        builder,
+                        SNAIL_NORMALIZE_SOURCES_HELPER,
+                        span,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    )?,
+                    PyList::new_bound(builder.py(), vec![source_lowered]).into_py(builder.py()),
+                    PyList::empty_bound(builder.py()).into_py(builder.py()),
+                ],
+                span,
+            )
+            .map_err(py_err_to_lower)?
+    } else {
+        // Multiple sources: build a list literal [e1, e2, ...]
+        let mut lowered_sources = Vec::new();
+        for src in sources {
+            lowered_sources.push(lower_expr(builder, src)?);
+        }
+        builder
+            .call_node(
+                "List",
+                vec![
+                    PyList::new_bound(builder.py(), lowered_sources).into_py(builder.py()),
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                ],
+                span,
+            )
+            .map_err(py_err_to_lower)?
+    };
+
+    lower_lines_loop(builder, iter_expr, body, span)
+}
+
+fn lower_lines_no_source(
+    builder: &AstBuilder<'_>,
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
     // Build files_expr: sys.argv[1:] or ["-"]
     let files_expr = builder
         .call_node(
@@ -225,250 +357,7 @@ fn lower_lines_no_source(
         )
         .map_err(py_err_to_lower)?;
 
-    // Build the file loop body (reuse lower_awk_file_loop_body)
-    let file_loop_body = lower_lines_file_loop_body(builder, body, span)?;
-
-    // for __snail_path in (sys.argv[1:] or ["-"]):
-    let for_loop = builder
-        .call_node(
-            "For",
-            vec![
-                name_expr(
-                    builder,
-                    "__snail_path",
-                    span,
-                    builder.store_ctx().map_err(py_err_to_lower)?,
-                )?,
-                files_expr,
-                PyList::new_bound(builder.py(), file_loop_body).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-    stmts.push(for_loop);
-    Ok(stmts)
-}
-
-/// Generates the file-level loop body for `lines { }` with no source.
-/// Opens each file path (or stdin for "-"), then iterates lines.
-fn lower_lines_file_loop_body(
-    builder: &AstBuilder<'_>,
-    body: &[Stmt],
-    span: &SourceSpan,
-) -> Result<Vec<PyObject>, LowerError> {
-    let mut file_loop = Vec::new();
-    file_loop.push(assign_name(
-        builder,
-        "__snail_fnr",
-        number_expr(builder, "0", span)?,
-        span,
-    )?);
-
-    // if __snail_path == "-": __snail_file = sys.stdin
-    // else: __snail_file = __snail_stack.enter_context(open(__snail_path))
-    let stdin_assign = assign_name(
-        builder,
-        "__snail_file",
-        builder
-            .call_node(
-                "Attribute",
-                vec![
-                    name_expr(
-                        builder,
-                        "sys",
-                        span,
-                        builder.load_ctx().map_err(py_err_to_lower)?,
-                    )?,
-                    "stdin".to_string().into_py(builder.py()),
-                    builder.load_ctx().map_err(py_err_to_lower)?,
-                ],
-                span,
-            )
-            .map_err(py_err_to_lower)?,
-        span,
-    )?;
-
-    let open_call = builder
-        .call_node(
-            "Call",
-            vec![
-                name_expr(
-                    builder,
-                    "open",
-                    span,
-                    builder.load_ctx().map_err(py_err_to_lower)?,
-                )?,
-                PyList::new_bound(
-                    builder.py(),
-                    vec![name_expr(
-                        builder,
-                        "__snail_path",
-                        span,
-                        builder.load_ctx().map_err(py_err_to_lower)?,
-                    )?],
-                )
-                .into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let enter_context_call = builder
-        .call_node(
-            "Call",
-            vec![
-                builder
-                    .call_node(
-                        "Attribute",
-                        vec![
-                            name_expr(
-                                builder,
-                                "__snail_stack",
-                                span,
-                                builder.load_ctx().map_err(py_err_to_lower)?,
-                            )?,
-                            "enter_context".to_string().into_py(builder.py()),
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)?,
-                PyList::new_bound(builder.py(), vec![open_call]).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let file_assign = assign_name(builder, "__snail_file", enter_context_call, span)?;
-
-    let test = builder
-        .call_node(
-            "Compare",
-            vec![
-                name_expr(
-                    builder,
-                    "__snail_path",
-                    span,
-                    builder.load_ctx().map_err(py_err_to_lower)?,
-                )?,
-                PyList::new_bound(
-                    builder.py(),
-                    vec![builder.op("Eq").map_err(py_err_to_lower)?],
-                )
-                .into_py(builder.py()),
-                PyList::new_bound(
-                    builder.py(),
-                    vec![string_expr(
-                        builder,
-                        "-",
-                        false,
-                        StringDelimiter::Double,
-                        span,
-                    )?],
-                )
-                .into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let if_stmt = builder
-        .call_node(
-            "If",
-            vec![
-                test,
-                PyList::new_bound(builder.py(), vec![stdin_assign]).into_py(builder.py()),
-                PyList::new_bound(builder.py(), vec![file_assign]).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    // Build ExitStack context manager
-    let exit_stack_call = builder
-        .call_node(
-            "Call",
-            vec![
-                builder
-                    .call_node(
-                        "Attribute",
-                        vec![
-                            name_expr(
-                                builder,
-                                "contextlib",
-                                span,
-                                builder.load_ctx().map_err(py_err_to_lower)?,
-                            )?,
-                            "ExitStack".to_string().into_py(builder.py()),
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)?,
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let with_item = builder
-        .call_node_no_loc(
-            "withitem",
-            vec![
-                exit_stack_call,
-                name_expr(
-                    builder,
-                    "__snail_stack",
-                    span,
-                    builder.store_ctx().map_err(py_err_to_lower)?,
-                )?,
-            ],
-        )
-        .map_err(py_err_to_lower)?;
-
-    // Build the line loop
-    let loop_body = build_line_loop_body(builder, body, span)?;
-
-    let line_loop = builder
-        .call_node(
-            "For",
-            vec![
-                name_expr(
-                    builder,
-                    "__snail_raw",
-                    span,
-                    builder.store_ctx().map_err(py_err_to_lower)?,
-                )?,
-                name_expr(
-                    builder,
-                    "__snail_file",
-                    span,
-                    builder.load_ctx().map_err(py_err_to_lower)?,
-                )?,
-                PyList::new_bound(builder.py(), loop_body).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let with_stmt = builder
-        .call_node(
-            "With",
-            vec![
-                PyList::new_bound(builder.py(), vec![with_item]).into_py(builder.py()),
-                PyList::new_bound(builder.py(), vec![if_stmt, line_loop]).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    file_loop.push(with_stmt);
-    Ok(file_loop)
+    lower_lines_loop(builder, files_expr, body, span)
 }
 
 /// Build the inner body of a line processing loop — sets up $0, $f, $n, $fn, $m, $src

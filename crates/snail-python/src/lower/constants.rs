@@ -46,7 +46,8 @@ pub(crate) const SNAIL_MAP_TEXT_PYVAR: &str = "__snail_text";
 pub(crate) const SNAIL_ENV_PYVAR: &str = "__snail_env";
 pub const SNAIL_LAZY_TEXT_CLASS: &str = "__SnailLazyText";
 pub const SNAIL_LAZY_FILE_CLASS: &str = "__SnailLazyFile";
-pub(crate) const SNAIL_LINES_ITER_HELPER: &str = "__snail_lines_iter";
+pub(crate) const SNAIL_OPEN_LINES_SOURCE_HELPER: &str = "__snail_open_lines_source";
+pub(crate) const SNAIL_NORMALIZE_SOURCES_HELPER: &str = "__snail_normalize_sources";
 
 pub(crate) fn injected_py_name(name: &str) -> Option<&'static str> {
     match name {

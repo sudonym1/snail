@@ -477,6 +477,18 @@ lines(temp.name) {
 assert found == ["hello world"], "pattern/action match"
 print("lines pattern found", found)
 
+# Multi-file lines: $fn resets per file, $src tracks path
+temp2 = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+temp2.write("extra line\n")
+temp2.close()
+multi_srcs = []
+lines(temp.name, temp2.name) {
+    multi_srcs.append(str($fn) + ":" + $src)
+}
+assert multi_srcs[0].endswith(temp.name.split("/")[-1])
+assert multi_srcs[-1].endswith(temp2.name.split("/")[-1])
+print("lines multi-source", len(multi_srcs))
+
 # Files block with source expression
 file_sizes = []
 files([temp.name]) {

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import importlib
 import re
+import sys
 from typing import Any, Callable, Optional
 
 __all__ = ["install_helpers", "AutoImportDict", "AUTO_IMPORT_NAMES"]
@@ -208,6 +210,40 @@ def __snail_lines_iter(source):
         yield from source
 
 
+@contextlib.contextmanager
+def __snail_open_lines_source(source):
+    """Context manager: open a lines() source item for reading.
+
+    - str: open as file path (or stdin for "-")
+    - file-like (has readline): use directly, don't close
+    - other: TypeError
+    """
+    if isinstance(source, str):
+        if source == "-":
+            yield sys.stdin, "-"
+        else:
+            with open(source) as f:
+                yield f, source
+    elif hasattr(source, "readline"):
+        yield source, getattr(source, "name", "<source>")
+    else:
+        raise TypeError(
+            f"lines() source must be a file path or file-like object, got {type(source).__name__}"
+        )
+
+
+def __snail_normalize_sources(source):
+    """Normalize a single lines(expr) argument to a list of sources.
+
+    - str: [source]  (single file path)
+    - file-like: [source]  (single file object)
+    - other iterable: list(source)  (list of sources)
+    """
+    if isinstance(source, str) or hasattr(source, "readline"):
+        return [source]
+    return list(source)
+
+
 def install_helpers(globals_dict: dict) -> None:
     for helper_name, wrapper_name in _INSTALL_LAZY_HELPER_REGISTRY.items():
         globals_dict[helper_name] = _LAZY_WRAPPERS[wrapper_name]
@@ -217,6 +253,8 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_contains_not__"] = __snail_contains_not__
     globals_dict["__snail_awk_split"] = __snail_awk_split
     globals_dict["__snail_lines_iter"] = __snail_lines_iter
+    globals_dict["__snail_open_lines_source"] = __snail_open_lines_source
+    globals_dict["__snail_normalize_sources"] = __snail_normalize_sources
     globals_dict["__snail_awk_field_separators"] = None
     globals_dict["__snail_awk_include_whitespace"] = False
 

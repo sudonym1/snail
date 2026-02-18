@@ -1799,10 +1799,8 @@ fn parses_bare_lines_block() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Lines {
-            source: src, body, ..
-        } => {
-            assert!(src.is_none());
+        Stmt::Lines { sources, body, .. } => {
+            assert!(sources.is_empty());
             assert_eq!(body.len(), 1);
         }
         other => panic!("Expected lines statement, got {other:?}"),
@@ -1816,10 +1814,38 @@ fn parses_lines_with_source() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Lines {
-            source: src, body, ..
-        } => {
-            assert!(src.is_some());
+        Stmt::Lines { sources, body, .. } => {
+            assert_eq!(sources.len(), 1);
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_with_multiple_sources() {
+    let source = r#"lines("a", "b") { print($0) }"#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines { sources, body, .. } => {
+            assert_eq!(sources.len(), 2);
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_with_trailing_comma() {
+    let source = r#"lines("a",) { print($0) }"#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines { sources, body, .. } => {
+            assert_eq!(sources.len(), 1);
             assert_eq!(body.len(), 1);
         }
         other => panic!("Expected lines statement, got {other:?}"),

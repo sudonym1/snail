@@ -1856,6 +1856,8 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_awk_field_separators",
         "__snail_awk_include_whitespace",
         "__snail_lines_iter",
+        "__snail_open_lines_source",
+        "__snail_normalize_sources",
         "__snail_env",
         "js",
         "path",
@@ -2878,6 +2880,90 @@ def test_lines_before_and_after(
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
     assert captured.out == "before\na\nb\nafter\n"
+
+
+# --- Tests for lines() multi-source ---
+
+
+def test_lines_multi_file_fn_resets(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """$fn resets per file when using lines() with multiple sources."""
+    f1 = tmp_path / "a.txt"
+    f2 = tmp_path / "b.txt"
+    f1.write_text("a1\na2\n")
+    f2.write_text("b1\nb2\nb3\n")
+    script = f'lines("{f1.as_posix()}", "{f2.as_posix()}") {{ print($fn, $0) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out == "1 a1\n2 a2\n1 b1\n2 b2\n3 b3\n"
+
+
+def test_lines_multi_file_src_tracks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """$src tracks the actual file path for each source."""
+    f1 = tmp_path / "a.txt"
+    f2 = tmp_path / "b.txt"
+    f1.write_text("line\n")
+    f2.write_text("line\n")
+    script = f'lines("{f1.as_posix()}", "{f2.as_posix()}") {{ print($src) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    lines = captured.out.strip().split("\n")
+    assert lines[0] == f1.as_posix()
+    assert lines[1] == f2.as_posix()
+
+
+def test_lines_single_file_src_tracks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """$src shows actual path (not '<lines>') for single-source lines()."""
+    f = tmp_path / "input.txt"
+    f.write_text("hello\n")
+    script = f'lines("{f.as_posix()}") {{ print($src) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == f.as_posix()
+
+
+def test_lines_source_stdin_dash(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """lines("-") reads from stdin."""
+    set_stdin(monkeypatch, "hello\nworld\n")
+    result, captured = run_cli(capsys, ["-P", 'lines("-") { print($0) }'])
+    assert result == 0
+    assert captured.out == "hello\nworld\n"
+
+
+def test_lines_file_like_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """lines(open('file')) works with file-like objects."""
+    f = tmp_path / "input.txt"
+    f.write_text("alpha\nbeta\n")
+    script = f'lines(open("{f.as_posix()}")) {{ print($0) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out == "alpha\nbeta\n"
+
+
+def test_lines_expression_source_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """lines(path_list) iterates list items as individual sources."""
+    f1 = tmp_path / "a.txt"
+    f2 = tmp_path / "b.txt"
+    f1.write_text("aaa\n")
+    f2.write_text("bbb\n")
+    script = (
+        f'paths = ["{f1.as_posix()}", "{f2.as_posix()}"]\n'
+        f'lines(paths) {{ print($0) }}'
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out == "aaa\nbbb\n"
 
 
 # --- Tests for files { } blocks ---

@@ -52,7 +52,7 @@ finally_clause = { "finally" ~ block }
 
 // Lines block: iterate lines from a source
 lines_stmt = { "lines" ~ lines_source? ~ "{" ~ stmt_sep* ~ lines_body? ~ stmt_sep* ~ "}" }
-lines_source = { "(" ~ expr ~ ")" }
+lines_source = { "(" ~ expr ~ ("," ~ expr)* ~ ","? ~ ")" }
 lines_body = { lines_entry ~ (stmt_sep+ ~ lines_entry)* ~ stmt_sep* }
 lines_entry = _{ pattern_action | stmt }
 

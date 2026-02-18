@@ -183,10 +183,8 @@ fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result
         Stmt::Expr { value, .. } => {
             validate_expr_mode(value, source, mode)?;
         }
-        Stmt::Lines {
-            source: src, body, ..
-        } => {
-            if let Some(src) = src {
+        Stmt::Lines { sources, body, .. } => {
+            for src in sources {
                 validate_expr_mode(src, source, mode)?;
             }
             validate_block_mode(body, source, ValidationMode::Lines)?;

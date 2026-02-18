@@ -787,17 +787,17 @@ fn parse_assign_target_star(
 
 fn parse_lines_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut source_expr = None;
+    let mut sources = Vec::new();
     let mut body = Vec::new();
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::lines_source => {
-                let expr_pair = inner
-                    .into_inner()
-                    .next()
-                    .ok_or_else(|| error_with_span("missing lines source", span.clone(), source))?;
-                source_expr = Some(parse_expr_pair(expr_pair, source)?);
+                for expr_pair in inner.into_inner() {
+                    if expr_pair.as_rule() == Rule::expr {
+                        sources.push(parse_expr_pair(expr_pair, source)?);
+                    }
+                }
             }
             Rule::lines_body => {
                 for entry in inner.into_inner() {
@@ -816,7 +816,7 @@ fn parse_lines_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseErr
     }
 
     Ok(Stmt::Lines {
-        source: source_expr,
+        sources,
         body,
         span,
     })

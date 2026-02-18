@@ -110,7 +110,7 @@ pub enum Stmt {
         span: SourceSpan,
     },
     Lines {
-        source: Option<Expr>,
+        sources: Vec<Expr>,
         body: Vec<Stmt>,
         span: SourceSpan,
     },
