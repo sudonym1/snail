@@ -1,7 +1,0 @@
-[package]
-name = "snail-lower"
-version = "0.8.1"
-edition = "2024"
-
-[dependencies]
-snail-python = { path = "../snail-python" }

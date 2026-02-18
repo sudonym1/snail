@@ -21,7 +21,7 @@ cargo build
 # Build/install the Python extension in the uv environment
 uv run -- python -m maturin develop
 
-# Run all Rust tests (parser, lowering, awk mode)
+# Run all Rust tests (parser, compiler/lowering, awk mode)
 cargo test
 
 # Run Python CLI tests
@@ -98,15 +98,14 @@ The repository is organized as a Cargo workspace with the following crates:
 
 - **`snail-ast`**: Snail AST definitions (Program, AwkProgram, statements, expressions)
 - **`snail-parser`**: Pest-based parser that converts Snail source to AST
-- **`snail-lower`**: Lowers Snail AST to Python `ast` nodes via pyo3
 - **`snail-error`**: Error types (ParseError, LowerError, SnailError)
-- **`snail-python`**: Compilation API plus the pyo3 module used by the Python package and CLI
+- **`snail-python`**: Compilation API plus the pyo3 module used by the Python package and CLI (including lowering to Python AST)
 
 ## High-Level Architecture
 
 ### Compilation Pipeline
 
-Snail → Preprocessor → Parser → AST → Lowering → Python AST → in-process exec
+Snail → Preprocessor → Parser → AST → Lowering (`snail-python`) → Python AST → in-process exec
 
 1. **Preprocessor** (`crates/snail-parser/src/preprocess.rs`):
    - Go-style semicolon injection: scans source and replaces statement-boundary newlines with `\x1e` (ASCII Record Separator)
@@ -126,7 +125,7 @@ Snail → Preprocessor → Parser → AST → Lowering → Python AST → in-pro
    - All nodes carry `SourceSpan` for traceback accuracy
    - Awk mode has special `$`-prefixed variables (`$0`, `$1`, `$n`, `$fn`, `$f`, `$src`, `$m`)
 
-4. **Lowering** (`crates/snail-lower/`):
+4. **Lowering** (`crates/snail-python/src/lower/`):
    - Transforms Snail AST into Python `ast` nodes via pyo3
    - Handles Snail-specific features by generating helper calls (provided by `snail.runtime`):
      - `?` operator → compact try/except using `__snail_compact_try`
@@ -134,7 +133,8 @@ Snail → Preprocessor → Parser → AST → Lowering → Python AST → in-pro
      - `@(cmd)` subprocess status → `__SnailSubprocessStatus`
      - Regex expressions → `__snail_regex_search` and `__snail_regex_compile`
    - Awk variables (`$0`, `$n`, etc.) map to Python names (`__snail_line`, `__snail_nr_user`, etc.)
-   - Awk mode wrapping: lower_awk_program() generates a Python main loop over input files/stdin
+   - Main lowering entrypoint is `lower_program()` (`crates/snail-python/src/lower/program.rs`)
+   - Awk/lines lowering is implemented in `crates/snail-python/src/lower/awk.rs`
 
 5. **Python AST**:
    - Uses Python's built-in `ast` nodes constructed in Rust via pyo3

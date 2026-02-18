@@ -23,8 +23,7 @@ None - this crate has no dependencies and provides pure data structures.
 
 - **snail-error**: Uses `SourceSpan` for error reporting with source locations
 - **snail-parser**: Produces `Program` and `AwkProgram` as output
-- **snail-lower**: Consumes Snail AST and transforms it to Python `ast` nodes via pyo3
-- **snail-python**: Uses AST types as part of the compilation pipeline
+- **snail-python**: Consumes Snail AST, lowers it to Python `ast`, and exposes compilation APIs
 
 ## Design
 

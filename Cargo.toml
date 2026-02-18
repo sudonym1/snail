@@ -4,7 +4,6 @@ members = [
     "crates/snail-ast",
     "crates/snail-error",
     "crates/snail-parser",
-    "crates/snail-lower",
     "crates/snail-python",
 ]
 

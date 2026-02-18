@@ -323,13 +323,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "snail-lower"
-version = "0.8.1"
-dependencies = [
- "snail-python",
-]
-
-[[package]]
 name = "snail-parser"
 version = "0.8.1"
 dependencies = [
