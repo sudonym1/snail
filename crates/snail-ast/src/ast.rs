@@ -110,12 +110,12 @@ pub enum Stmt {
         span: SourceSpan,
     },
     Lines {
-        sources: Vec<Expr>,
+        sources: Vec<Argument>,
         body: Vec<Stmt>,
         span: SourceSpan,
     },
     Files {
-        sources: Vec<Expr>,
+        sources: Vec<Argument>,
         body: Vec<Stmt>,
         span: SourceSpan,
     },

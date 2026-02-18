@@ -1394,7 +1394,7 @@ fn lower_subprocess_object(
         .map_err(py_err_to_lower)
 }
 
-fn lower_call_arguments(
+pub(super) fn lower_call_arguments(
     builder: &AstBuilder<'_>,
     args: &[Argument],
     exception_name: Option<&str>,

@@ -185,13 +185,13 @@ fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result
         }
         Stmt::Lines { sources, body, .. } => {
             for src in sources {
-                validate_expr_mode(src, source, mode)?;
+                validate_argument_mode(src, source, mode)?;
             }
             validate_block_mode(body, source, ValidationMode::Lines)?;
         }
         Stmt::Files { sources, body, .. } => {
             for src in sources {
-                validate_expr_mode(src, source, mode)?;
+                validate_argument_mode(src, source, mode)?;
             }
             validate_block_mode(body, source, ValidationMode::Files)?;
         }

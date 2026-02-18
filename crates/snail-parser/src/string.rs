@@ -856,7 +856,7 @@ fn shift_stmt_spans(stmt: &mut Stmt, offset: usize, source: &str) {
             span,
         } => {
             for src in sources {
-                shift_expr_spans(src, offset, source);
+                shift_argument_spans(src, offset, source);
             }
             shift_block_spans(body, offset, source);
             *span = shift_span(span, offset, source);
@@ -867,7 +867,7 @@ fn shift_stmt_spans(stmt: &mut Stmt, offset: usize, source: &str) {
             span,
         } => {
             for src in sources {
-                shift_expr_spans(src, offset, source);
+                shift_argument_spans(src, offset, source);
             }
             shift_block_spans(body, offset, source);
             *span = shift_span(span, offset, source);

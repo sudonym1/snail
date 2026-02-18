@@ -677,7 +677,7 @@ fn parse_call(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Argument>, Parse
     Ok(args)
 }
 
-fn parse_argument(pair: Pair<'_, Rule>, source: &str) -> Result<Argument, ParseError> {
+pub(crate) fn parse_argument(pair: Pair<'_, Rule>, source: &str) -> Result<Argument, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
     let first = inner

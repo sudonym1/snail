@@ -52,7 +52,7 @@ finally_clause = { "finally" ~ block }
 
 // Lines block: iterate lines from a source
 lines_stmt = { "lines" ~ lines_source? ~ "{" ~ stmt_sep* ~ lines_body? ~ stmt_sep* ~ "}" }
-lines_source = { "(" ~ expr ~ ("," ~ expr)* ~ ","? ~ ")" }
+lines_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
 lines_body = { lines_entry ~ (stmt_sep+ ~ lines_entry)* ~ stmt_sep* }
 lines_entry = _{ pattern_action | stmt }
 
@@ -62,7 +62,7 @@ pattern_action_pattern = { expr }
 
 // Files block: iterate files from a source
 files_stmt = { "files" ~ files_source? ~ block }
-files_source = { "(" ~ expr ~ ("," ~ expr)* ~ ","? ~ ")" }
+files_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
 
 // Context managers
 with_stmt = { "with" ~ with_items ~ block }

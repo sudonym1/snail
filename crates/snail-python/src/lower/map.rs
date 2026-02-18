@@ -4,7 +4,7 @@ use snail_ast::*;
 use snail_error::LowerError;
 
 use super::constants::*;
-use super::expr::lower_expr;
+use super::expr::lower_call_arguments;
 use super::helpers::{assign_name, name_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 
@@ -13,7 +13,7 @@ use super::stmt::lower_block;
 /// Lower a `files` statement: iterates files from sources or argv.
 pub(crate) fn lower_files_stmt(
     builder: &AstBuilder<'_>,
-    sources: &[Expr],
+    sources: &[Argument],
     body: &[Stmt],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
@@ -93,47 +93,29 @@ fn lower_files_loop(
 
 fn lower_files_with_sources(
     builder: &AstBuilder<'_>,
-    sources: &[Expr],
+    sources: &[Argument],
     body: &[Stmt],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    let iter_expr = if sources.len() == 1 {
-        // Single source: wrap in __snail_normalize_sources(expr) so a list of paths
-        // is iterated as individual sources, while a single string becomes [path]
-        let source_lowered = lower_expr(builder, &sources[0])?;
-        builder
-            .call_node(
-                "Call",
-                vec![
-                    name_expr(
-                        builder,
-                        SNAIL_NORMALIZE_SOURCES_HELPER,
-                        span,
-                        builder.load_ctx().map_err(py_err_to_lower)?,
-                    )?,
-                    PyList::new_bound(builder.py(), vec![source_lowered]).into_py(builder.py()),
-                    PyList::empty_bound(builder.py()).into_py(builder.py()),
-                ],
-                span,
-            )
-            .map_err(py_err_to_lower)?
-    } else {
-        // Multiple sources: build a list literal [e1, e2, ...]
-        let mut lowered_sources = Vec::new();
-        for src in sources {
-            lowered_sources.push(lower_expr(builder, src)?);
-        }
-        builder
-            .call_node(
-                "List",
-                vec![
-                    PyList::new_bound(builder.py(), lowered_sources).into_py(builder.py()),
+    // Lower all arguments via lower_call_arguments and generate:
+    //   __snail_normalize_sources(arg1, arg2, *args, key=val, ...)
+    let (positional, keywords) = lower_call_arguments(builder, sources, None)?;
+    let iter_expr = builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_NORMALIZE_SOURCES_HELPER,
+                    span,
                     builder.load_ctx().map_err(py_err_to_lower)?,
-                ],
-                span,
-            )
-            .map_err(py_err_to_lower)?
-    };
+                )?,
+                PyList::new_bound(builder.py(), positional).into_py(builder.py()),
+                PyList::new_bound(builder.py(), keywords).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
 
     lower_files_loop(builder, iter_expr, body, span)
 }

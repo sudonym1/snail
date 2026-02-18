@@ -232,13 +232,19 @@ def __snail_open_lines_source(source):
         )
 
 
-def __snail_normalize_sources(source):
-    """Normalize a single lines(expr) argument to a list of sources.
+def __snail_normalize_sources(*sources):
+    """Normalize lines()/files() source arguments to a flat list of sources.
 
+    Single arg:
     - str: [source]  (single file path)
     - file-like: [source]  (single file object)
     - other iterable: list(source)  (list of sources)
+
+    Multiple args: each arg is treated as an individual source.
     """
+    if len(sources) != 1:
+        return list(sources)
+    source = sources[0]
     if isinstance(source, str) or hasattr(source, "readline"):
         return [source]
     return list(source)

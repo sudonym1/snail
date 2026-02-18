@@ -6,7 +6,9 @@ use snail_ast::{
 use snail_error::ParseError;
 
 use crate::Rule;
-use crate::expr::{apply_attr_index_suffix, assign_target_from_expr, parse_expr_pair};
+use crate::expr::{
+    apply_attr_index_suffix, assign_target_from_expr, parse_argument, parse_expr_pair,
+};
 use crate::util::{error_with_span, span_from_pair};
 
 pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {
@@ -793,9 +795,9 @@ fn parse_lines_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseErr
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::lines_source => {
-                for expr_pair in inner.into_inner() {
-                    if expr_pair.as_rule() == Rule::expr {
-                        sources.push(parse_expr_pair(expr_pair, source)?);
+                for arg_pair in inner.into_inner() {
+                    if arg_pair.as_rule() == Rule::argument {
+                        sources.push(parse_argument(arg_pair, source)?);
                     }
                 }
             }
@@ -830,8 +832,10 @@ fn parse_files_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseErr
     for inner in pair.into_inner() {
         match inner.as_rule() {
             Rule::files_source => {
-                for expr_pair in inner.into_inner() {
-                    sources.push(parse_expr_pair(expr_pair, source)?);
+                for arg_pair in inner.into_inner() {
+                    if arg_pair.as_rule() == Rule::argument {
+                        sources.push(parse_argument(arg_pair, source)?);
+                    }
                 }
             }
             Rule::block => {

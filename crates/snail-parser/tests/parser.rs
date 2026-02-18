@@ -2036,6 +2036,73 @@ fn parser_rejects_awk_vars_inside_files() {
 }
 
 #[test]
+fn parses_lines_with_star_arg() {
+    let source = "lines(*args) { print($0) }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines { sources, body, .. } => {
+            assert_eq!(sources.len(), 1);
+            assert!(matches!(&sources[0], Argument::Star { .. }));
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_with_kw_arg() {
+    let source = r#"lines("file", encoding="utf-8") { print($0) }"#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines { sources, body, .. } => {
+            assert_eq!(sources.len(), 2);
+            assert!(matches!(&sources[0], Argument::Positional { .. }));
+            match &sources[1] {
+                Argument::Keyword { name, .. } => assert_eq!(name, "encoding"),
+                other => panic!("Expected keyword argument, got {other:?}"),
+            }
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_files_with_star_arg() {
+    let source = "files(*paths) { print($src) }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Files { sources, body, .. } => {
+            assert_eq!(sources.len(), 1);
+            assert!(matches!(&sources[0], Argument::Star { .. }));
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected files statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lines_empty_parens() {
+    let source = "lines() { print($0) }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Lines { sources, body, .. } => {
+            assert!(sources.is_empty());
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected lines statement, got {other:?}"),
+    }
+}
+
+#[test]
 fn parser_rejects_pattern_action_outside_lines() {
     let err = parse_err("/pattern/ { print(1) }");
     let message = err.to_string();

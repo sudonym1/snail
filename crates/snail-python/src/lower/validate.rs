@@ -137,13 +137,23 @@ fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
         | Stmt::SegmentBreak { .. } => {}
         Stmt::Lines { sources, body, .. } => {
             for source in sources {
-                check_expr(source, in_function)?;
+                match source {
+                    Argument::Positional { value, .. }
+                    | Argument::Keyword { value, .. }
+                    | Argument::Star { value, .. }
+                    | Argument::KwStar { value, .. } => check_expr(value, in_function)?,
+                }
             }
             check_stmts(body, in_function)?;
         }
         Stmt::Files { sources, body, .. } => {
             for source in sources {
-                check_expr(source, in_function)?;
+                match source {
+                    Argument::Positional { value, .. }
+                    | Argument::Keyword { value, .. }
+                    | Argument::Star { value, .. }
+                    | Argument::KwStar { value, .. } => check_expr(value, in_function)?,
+                }
             }
             check_stmts(body, in_function)?;
         }

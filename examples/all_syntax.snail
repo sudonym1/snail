@@ -485,6 +485,15 @@ multi_srcs = []
 lines(temp.name, temp2.name) {
     multi_srcs.append(str($fn) + ":" + $src)
 }
+
+# Lines/files with call argument syntax: *args, **kwargs, keyword args
+src_list = [temp.name, temp2.name]
+star_count = 0
+lines(*src_list) {
+    star_count += 1
+}
+assert star_count == 4, "lines *args counted"
+print("lines *args count", star_count)
 assert multi_srcs[0].endswith(temp.name.split("/")[-1])
 assert multi_srcs[-1].endswith(temp2.name.split("/")[-1])
 print("lines multi-source", len(multi_srcs))

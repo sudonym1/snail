@@ -230,7 +230,7 @@ impl LambdaHoister {
             } => Stmt::Lines {
                 sources: sources
                     .iter()
-                    .map(|src| self.desugar_expr(src, prelude))
+                    .map(|src| self.desugar_argument(src, prelude))
                     .collect(),
                 body: self.desugar_block(body),
                 span: span.clone(),
@@ -242,7 +242,7 @@ impl LambdaHoister {
             } => Stmt::Files {
                 sources: sources
                     .iter()
-                    .map(|src| self.desugar_expr(src, prelude))
+                    .map(|src| self.desugar_argument(src, prelude))
                     .collect(),
                 body: self.desugar_block(body),
                 span: span.clone(),
