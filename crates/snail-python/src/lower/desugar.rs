@@ -235,8 +235,15 @@ impl LambdaHoister {
                 body: self.desugar_block(body),
                 span: span.clone(),
             },
-            Stmt::Files { source, body, span } => Stmt::Files {
-                source: source.as_ref().map(|src| self.desugar_expr(src, prelude)),
+            Stmt::Files {
+                sources,
+                body,
+                span,
+            } => Stmt::Files {
+                sources: sources
+                    .iter()
+                    .map(|src| self.desugar_expr(src, prelude))
+                    .collect(),
                 body: self.desugar_block(body),
                 span: span.clone(),
             },

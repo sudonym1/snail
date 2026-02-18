@@ -2992,6 +2992,60 @@ def test_files_text_access(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     assert captured.out.strip() == "12"
 
 
+def test_files_multi_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test files() with multiple comma-separated source paths."""
+    f1 = tmp_path / "a.txt"
+    f2 = tmp_path / "b.txt"
+    f1.write_text("content a\n")
+    f2.write_text("content b\n")
+    script = f'files("{f1.as_posix()}", "{f2.as_posix()}") {{ print($src) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert f1.as_posix() in captured.out
+    assert f2.as_posix() in captured.out
+
+
+def test_files_single_source_src_tracks(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that $src shows actual path for files() with single source."""
+    f = tmp_path / "a.txt"
+    f.write_text("hello\n")
+    script = f'files("{f.as_posix()}") {{ print($src) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert f.as_posix() in captured.out
+
+
+def test_files_expression_source_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that files(list_expr) iterates list items as individual sources."""
+    f1 = tmp_path / "a.txt"
+    f2 = tmp_path / "b.txt"
+    f1.write_text("alpha\n")
+    f2.write_text("beta\n")
+    script = f'paths = ["{f1.as_posix()}", "{f2.as_posix()}"]; files(paths) {{ print($src) }}'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert f1.as_posix() in captured.out
+    assert f2.as_posix() in captured.out
+
+
+def test_files_stdin_dash(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that files('-') reads from stdin."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO("stdin content"))
+    script = 'files("-") { print($src, len(str($text))) }'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert "-" in captured.out
+    assert "13" in captured.out
+
+
 # --- Validation tests for lines/files ---
 
 

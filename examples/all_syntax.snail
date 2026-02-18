@@ -497,6 +497,14 @@ files([temp.name]) {
 assert len(file_sizes) == 1
 print("files text size", file_sizes)
 
+# Multi-file files: comma-separated sources
+multi_file_srcs = []
+files(temp.name, temp2.name) {
+    multi_file_srcs.append($src)
+}
+assert len(multi_file_srcs) == 2
+print("files multi-source", len(multi_file_srcs))
+
 os.unlink(temp.name)
 
 # The implicit return of the last non-semicolon expression is pretty printed

@@ -862,11 +862,11 @@ fn shift_stmt_spans(stmt: &mut Stmt, offset: usize, source: &str) {
             *span = shift_span(span, offset, source);
         }
         Stmt::Files {
-            source: src,
+            sources,
             body,
             span,
         } => {
-            if let Some(src) = src {
+            for src in sources {
                 shift_expr_spans(src, offset, source);
             }
             shift_block_spans(body, offset, source);

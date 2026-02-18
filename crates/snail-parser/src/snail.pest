@@ -62,7 +62,7 @@ pattern_action_pattern = { expr }
 
 // Files block: iterate files from a source
 files_stmt = { "files" ~ files_source? ~ block }
-files_source = { "(" ~ expr ~ ")" }
+files_source = { "(" ~ expr ~ ("," ~ expr)* ~ ","? ~ ")" }
 
 // Context managers
 with_stmt = { "with" ~ with_items ~ block }

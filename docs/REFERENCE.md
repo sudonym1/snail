@@ -142,11 +142,19 @@ matching lines.
 bringing map-mode processing into regular Snail scripts:
 
 ```snail
-# Iterate file paths from an expression
-files(["a.txt", "b.txt"]) {
+# Multiple comma-separated sources
+files("a.txt", "b.txt") {
     print($src, len(str($text)), "bytes")
 }
+
+# Single expression source (list is iterated as individual sources)
+files(path("*.log")) {
+    print($src)
+}
 ```
+
+A bare `files { }` block (no source) reads file paths from `sys.argv[1:]`,
+matching the behavior of `snail --map`.
 
 Inside a `files { }` block, the following variables are available:
 - `$src`: current file path

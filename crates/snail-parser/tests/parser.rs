@@ -1928,10 +1928,8 @@ fn parses_bare_files_block() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Files {
-            source: src, body, ..
-        } => {
-            assert!(src.is_none());
+        Stmt::Files { sources, body, .. } => {
+            assert!(sources.is_empty());
             assert_eq!(body.len(), 1);
         }
         other => panic!("Expected files statement, got {other:?}"),
@@ -1945,10 +1943,38 @@ fn parses_files_with_source() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Files {
-            source: src, body, ..
-        } => {
-            assert!(src.is_some());
+        Stmt::Files { sources, body, .. } => {
+            assert_eq!(sources.len(), 1);
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected files statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_files_with_multiple_sources() {
+    let source = r#"files("a", "b") { print($src) }"#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Files { sources, body, .. } => {
+            assert_eq!(sources.len(), 2);
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected files statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_files_with_trailing_comma() {
+    let source = r#"files("a",) { print($src) }"#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
+        Stmt::Files { sources, body, .. } => {
+            assert_eq!(sources.len(), 1);
             assert_eq!(body.len(), 1);
         }
         other => panic!("Expected files statement, got {other:?}"),

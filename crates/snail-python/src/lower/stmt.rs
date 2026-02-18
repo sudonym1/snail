@@ -471,9 +471,12 @@ fn lower_block_with_tail(
                 stmts.extend(super::awk::lower_lines_stmt(builder, sources, body, span)?);
             }
             Stmt::Files {
-                source, body, span, ..
+                sources,
+                body,
+                span,
+                ..
             } => {
-                stmts.extend(super::map::lower_files_stmt(builder, source, body, span)?);
+                stmts.extend(super::map::lower_files_stmt(builder, sources, body, span)?);
             }
             _ => stmts.push(lower_stmt(builder, stmt)?),
         }

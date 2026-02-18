@@ -189,10 +189,8 @@ fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result
             }
             validate_block_mode(body, source, ValidationMode::Lines)?;
         }
-        Stmt::Files {
-            source: src, body, ..
-        } => {
-            if let Some(src) = src {
+        Stmt::Files { sources, body, .. } => {
+            for src in sources {
                 validate_expr_mode(src, source, mode)?;
             }
             validate_block_mode(body, source, ValidationMode::Files)?;

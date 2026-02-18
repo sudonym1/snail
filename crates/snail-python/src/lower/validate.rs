@@ -141,8 +141,8 @@ fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
             }
             check_stmts(body, in_function)?;
         }
-        Stmt::Files { source, body, .. } => {
-            if let Some(source) = source {
+        Stmt::Files { sources, body, .. } => {
+            for source in sources {
                 check_expr(source, in_function)?;
             }
             check_stmts(body, in_function)?;
