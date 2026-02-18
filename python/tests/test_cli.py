@@ -1539,7 +1539,10 @@ def test_lines_sep_with_file_source(
 ) -> None:
     p = tmp_path / "data.txt"
     p.write_text("x,y,z\na,b,c\n")
-    assert main(["-P", f'lines("{p}", sep=",") {{ print($1, $2, $3) }}']) == 0
+    # Use forward slashes so backslashes in Windows paths aren't interpreted
+    # as escape sequences inside the Snail string literal (e.g. \a -> bell).
+    path_str = str(p).replace("\\", "/")
+    assert main(["-P", f'lines("{path_str}", sep=",") {{ print($1, $2, $3) }}']) == 0
     captured = capsys.readouterr()
     assert captured.out == "x y z\na b c\n"
 
