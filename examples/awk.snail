@@ -1,8 +1,6 @@
-#!/usr/bin/env -S snail --awk -f
-# Awk mode example (pattern/action rules with BEGIN/END blocks).
-
-# BEGIN block runs once before input is processed.
-BEGIN { print("demo begin") }
+#!/usr/bin/env -S snail --awk -b 'print("demo begin")' -e 'print("demo end")' -f
+# Awk mode example (pattern/action rules with -b/-e flags for setup/teardown).
+# -b and -e flags in the shebang run code before/after the lines { } block.
 
 # $0 is the current line.
 $0.startswith("d") { print("matched:", $0) }
@@ -15,6 +13,3 @@ $0.startswith("d") { print("matched:", $0) }
 
 # $f is a list of fields split on whitespace.
 $f[0] == "test" { print("first field:", $f[0]) }
-
-# END block runs once after all input is processed.
-END { print("demo end") }

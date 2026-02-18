@@ -1,29 +1,5 @@
-// Top-level program entry points
-program = { SOI ~ stmt_sep* ~ program_entry_list? ~ stmt_sep* ~ EOI }
-awk_program = { SOI ~ stmt_sep* ~ awk_entry_list? ~ stmt_sep* ~ EOI }
-map_program = { SOI ~ stmt_sep* ~ map_entry_list? ~ stmt_sep* ~ EOI }
-
-// Regular mode: program with optional BEGIN/END blocks
-program_entry_list = { program_entry ~ (stmt_sep* ~ program_entry)* ~ stmt_sep* }
-program_entry = { program_begin_end | stmt }
-program_begin_end = _{ program_begin | program_end }
-program_begin = { "BEGIN" ~ block }
-program_end = { "END" ~ block }
-
-// AWK mode: pattern-action rules
-awk_entry_list = { awk_entry ~ (stmt_sep* ~ awk_entry)* ~ stmt_sep* }
-awk_entry = _{ awk_begin | awk_end | awk_rule }
-awk_begin = { "BEGIN" ~ block }
-awk_end = { "END" ~ block }
-awk_rule = { block | awk_pattern ~ block? }
-awk_pattern = { expr }
-
-// Map mode: program with optional BEGIN/END blocks
-map_entry_list = { map_entry ~ (stmt_sep* ~ map_entry)* ~ stmt_sep* }
-map_entry = { map_begin_end | stmt }
-map_begin_end = _{ map_begin | map_end }
-map_begin = { "BEGIN" ~ block }
-map_end = { "END" ~ block }
+// Top-level program entry point
+program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 
 // Statements: separated by semicolons or injected record separators
 // Compound statements (ending with }) don't need trailing separators
@@ -79,7 +55,7 @@ lines_source = { "(" ~ expr ~ ")" }
 lines_body = { lines_entry ~ (stmt_sep+ ~ lines_entry)* ~ stmt_sep* }
 lines_entry = _{ pattern_action | stmt }
 
-// Pattern/action (same shape as awk_rule)
+// Pattern/action (same shape as former awk_rule)
 pattern_action = { block | pattern_action_pattern ~ block? }
 pattern_action_pattern = { expr }
 
@@ -316,7 +292,6 @@ keyword = _{
   | "yield"
   | "let"
   | "lines" | "files"
-  | "BEGIN" | "END"
   | "True" | "False" | "None") ~ !ident_continue
 }
 

@@ -5,27 +5,6 @@ pub(crate) fn validate_yield_usage_program(program: &Program) -> Result<(), Lowe
     check_stmts(&program.stmts, false)
 }
 
-pub(crate) fn validate_yield_usage_blocks(blocks: &[Vec<Stmt>]) -> Result<(), LowerError> {
-    for block in blocks {
-        check_stmts(block, false)?;
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_yield_usage_awk(program: &AwkProgram) -> Result<(), LowerError> {
-    validate_yield_usage_blocks(&program.begin_blocks)?;
-    validate_yield_usage_blocks(&program.end_blocks)?;
-    for rule in &program.rules {
-        if let Some(pattern) = &rule.pattern {
-            check_expr(pattern, false)?;
-        }
-        if let Some(action) = &rule.action {
-            check_stmts(action, false)?;
-        }
-    }
-    Ok(())
-}
-
 fn check_stmts(stmts: &[Stmt], in_function: bool) -> Result<(), LowerError> {
     for stmt in stmts {
         check_stmt(stmt, in_function)?;

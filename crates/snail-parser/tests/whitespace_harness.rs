@@ -2,7 +2,7 @@
 mod whitespace_cases;
 
 use snail_ast::Program;
-use snail_parser::parse_main as parse_program;
+use snail_parser::parse as parse_program;
 use whitespace_cases::{BoundaryExpectation, WsCase};
 
 #[test]

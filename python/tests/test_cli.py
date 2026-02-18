@@ -67,7 +67,9 @@ def test_debug_python_ast_basic(capsys: pytest.CaptureFixture[str]) -> None:
 def test_debug_snail_ast_awk(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug-snail-ast", "--awk", "/foo/"]) == 0
     captured = capsys.readouterr()
-    assert "AwkProgram" in captured.out
+    # awk mode wraps source in lines { }, producing a regular Program with Lines
+    assert "Program" in captured.out
+    assert "Lines" in captured.out
 
 
 def test_debug_snail_ast_map(capsys: pytest.CaptureFixture[str]) -> None:
@@ -76,25 +78,32 @@ def test_debug_snail_ast_map(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Program" in captured.out
 
 
-def test_debug_snail_ast_map_begin_end_in_file(
+def test_debug_snail_ast_map_with_begin_end_flags(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    # BEGIN/END blocks no longer exist as syntax; use -b/-e flags instead
     assert (
         main(
             [
                 "--debug-snail-ast",
                 "--map",
-                "BEGIN { print(1) }\nprint($src)\nEND { print(2) }",
+                "-b",
+                "print(1)",
+                "-e",
+                "print(2)",
+                "print($src)",
             ]
         )
         == 0
     )
     captured = capsys.readouterr()
-    assert "begin_blocks" in captured.out
-    assert "end_blocks" in captured.out
+    # -b/-e code is placed outside the files { } block in the AST
+    assert "Program" in captured.out
+    assert "Files" in captured.out
 
 
 def test_debug_snail_ast_begin_end(capsys: pytest.CaptureFixture[str]) -> None:
+    # -b/-e code is prepended/appended outside the lines { } wrapper
     assert (
         main(
             [
@@ -110,9 +119,10 @@ def test_debug_snail_ast_begin_end(capsys: pytest.CaptureFixture[str]) -> None:
         == 0
     )
     captured = capsys.readouterr()
-    assert "begin_blocks" in captured.out
-    assert "end_blocks" in captured.out
+    # begin/end code becomes regular statements in the Program
+    assert "Program" in captured.out
     assert "Assign" in captured.out
+    assert "Lines" in captured.out
 
 
 def test_debug_snail_ast_file(
@@ -139,26 +149,28 @@ def test_parse_ast_api_basic() -> None:
 
 
 def test_parse_ast_api_snail_begin_end() -> None:
+    # -b/-e code is now prepended/appended as regular statements
     result = snail.parse_ast(
         "print('body')",
         begin_code=["print('start')"],
         end_code=["print('done')"],
     )
-    assert "begin_blocks" in result
-    assert "end_blocks" in result
     assert "Program" in result
+    # All three print calls should appear as regular statements
+    assert result.count("Call") >= 3
 
 
 def test_parse_ast_api_map_begin_end() -> None:
+    # -b/-e code is prepended/appended outside the files { } wrapper
     result = snail.parse_ast(
         "print($src)",
         mode="map",
         begin_code=["x = 1"],
         end_code=["print(x)"],
     )
-    assert "begin_blocks" in result
-    assert "end_blocks" in result
+    assert "Program" in result
     assert "Assign" in result
+    assert "Files" in result
 
 
 @pytest.mark.parametrize(
@@ -183,46 +195,28 @@ def test_exec_api_system_exit_non_int_returns_one() -> None:
 
 
 @pytest.mark.parametrize(
-    ("mode", "source", "cli_begin", "file_begin", "file_end", "cli_end"),
+    ("mode", "source"),
     [
-        (
-            "snail",
-            "BEGIN { print('snail-file-begin') }\nprint('body')\nEND { print('snail-file-end') }",
-            "snail-cli-begin",
-            "snail-file-begin",
-            "snail-file-end",
-            "snail-cli-end",
-        ),
-        (
-            "map",
-            "BEGIN { print('map-file-begin') }\nprint($src)\nEND { print('map-file-end') }",
-            "map-cli-begin",
-            "map-file-begin",
-            "map-file-end",
-            "map-cli-end",
-        ),
+        ("snail", "print('body')"),
+        ("map", "print($src)"),
     ],
 )
-def test_parse_ast_api_begin_end_merge_order(
+def test_parse_ast_api_begin_end_ordering(
     mode: str,
     source: str,
-    cli_begin: str,
-    file_begin: str,
-    file_end: str,
-    cli_end: str,
 ) -> None:
+    # -b code appears before the main source, -e code appears after
     result = snail.parse_ast(
         source,
         mode=mode,
-        begin_code=[f"print('{cli_begin}')"],
-        end_code=[f"print('{cli_end}')"],
+        begin_code=["print('begin')"],
+        end_code=["print('end')"],
     )
-    assert "begin_blocks" in result
-    assert "end_blocks" in result
-    assert result.index(f'value: "{cli_begin}"') < result.index(
-        f'value: "{file_begin}"'
-    )
-    assert result.index(f'value: "{file_end}"') < result.index(f'value: "{cli_end}"')
+    assert "Program" in result
+    # begin code should appear before body, end code after
+    begin_pos = result.index('value: "begin"')
+    end_pos = result.index('value: "end"')
+    assert begin_pos < end_pos
 
 
 @pytest.mark.parametrize(
@@ -1530,7 +1524,8 @@ def test_awk_match_group_access(
 def test_awk_identifiers_require_awk_mode() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(["print($0)"])
-    assert "--awk" in str(excinfo.value)
+    # awk variables are only valid inside lines { } blocks
+    assert "lines" in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
@@ -1642,11 +1637,11 @@ def test_awk_begin_after_args(
 def test_awk_begin_end_file_and_cli_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # BEGIN/END blocks no longer exist as syntax; -b/-e code is prepended/appended
+    # outside the lines { } wrapper
     monkeypatch.setattr(sys, "stdin", io.StringIO("x\n"))
     script = tmp_path / "file.snail"
-    script.write_text(
-        "BEGIN { print('file begin') }\n{ print($0) }\nEND { print('file end') }\n"
-    )
+    script.write_text("{ print($0) }\n")
     assert (
         main(
             [
@@ -1664,9 +1659,7 @@ def test_awk_begin_end_file_and_cli_order(
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
         "cli begin",
-        "file begin",
         "x",
-        "file end",
         "cli end",
     ]
 
@@ -1689,7 +1682,8 @@ def test_begin_end_regular_mode(capsys: pytest.CaptureFixture[str]) -> None:
 def test_begin_end_regular_mode_file_and_cli_order(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    script = "BEGIN { print('file begin') }\nprint('body')\nEND { print('file end') }"
+    # BEGIN/END blocks no longer exist as syntax; -b/-e code is prepended/appended
+    script = "print('body')"
     assert (
         main(
             [
@@ -1705,17 +1699,18 @@ def test_begin_end_regular_mode_file_and_cli_order(
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
         "cli begin",
-        "file begin",
         "body",
-        "file end",
         "cli end",
     ]
 
 
-def test_begin_end_regular_mode_oneliner_autoprint(
+def test_begin_end_regular_mode_oneliner_with_end_flag(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = main(["1 END { print('done') }"])
+    # -e code is appended after the main source as regular statements.
+    # Since end code is the last statement, auto-print applies to it (not to "1").
+    # Use explicit print to verify both the body and end code run.
+    result = main(["--end", "print('done')", "print(1)"])
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == ["1", "done"]
@@ -2189,7 +2184,19 @@ def test_example_awk(
 ) -> None:
     """Test that examples/awk.snail runs successfully."""
     monkeypatch.setattr(sys, "stdin", io.StringIO("demo line\nother line\n"))
-    result = main(["--awk", "-f", str(EXAMPLES_DIR / "awk.snail")])
+    # -b/-e flags from the shebang are not picked up by the test runner,
+    # so supply them explicitly to test begin/end behavior
+    result = main(
+        [
+            "--awk",
+            "-b",
+            'print("demo begin")',
+            "-e",
+            'print("demo end")',
+            "-f",
+            str(EXAMPLES_DIR / "awk.snail"),
+        ]
+    )
     assert result == 0, f"awk.snail failed with exit code {result}"
     captured = capsys.readouterr()
     # Verify expected output from the awk script
@@ -2577,12 +2584,15 @@ def test_map_multiple_begin_end_flags(
     ]
 
 
-def test_map_begin_end_oneliner_whitespace(
+def test_map_begin_end_oneliner_via_flags(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # BEGIN/END blocks no longer exist; use -b/-e flags instead
     file_a = tmp_path / "a.txt"
     file_a.write_text("alpha")
-    result = main(["--map", "BEGIN {1} $src END {2}", str(file_a)])
+    result = main(
+        ["--map", "-b", "print(1)", "-e", "print(2)", "print($src)", str(file_a)]
+    )
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == ["1", str(file_a), "2"]
@@ -2591,12 +2601,11 @@ def test_map_begin_end_oneliner_whitespace(
 def test_map_begin_end_file_and_cli_order(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # BEGIN/END blocks no longer exist as syntax; -b/-e code is prepended/appended
     map_file = tmp_path / "file1"
     map_file.write_text("readme map input\n")
     script = tmp_path / "script.snail"
-    script.write_text(
-        "BEGIN { print('file begin') }\nprint($src)\nEND { print('file end') }\n"
-    )
+    script.write_text("print($src)\n")
     result = main(
         [
             "--map",
@@ -2613,9 +2622,7 @@ def test_map_begin_end_file_and_cli_order(
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
         "cli begin",
-        "file begin",
         str(map_file),
-        "file end",
         "cli end",
     ]
 
@@ -2636,28 +2643,28 @@ def test_map_begin_end_flags_reject_map_vars(tmp_path: Path) -> None:
 
 
 def test_map_identifiers_require_map_mode(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test that $src is rejected in snail mode."""
+    """Test that $src is rejected outside lines { } or files { } blocks."""
     with pytest.raises(SyntaxError) as excinfo:
         main(["print($src)"])
-    assert "map or awk mode" in str(excinfo.value)
+    assert "lines" in str(excinfo.value) or "files" in str(excinfo.value)
 
 
 def test_map_identifiers_require_map_mode_in_fstring_interpolation() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(['print("{$src}")'])
-    assert "map or awk mode" in str(excinfo.value)
+    assert "lines" in str(excinfo.value) or "files" in str(excinfo.value)
 
 
 def test_map_identifiers_require_map_mode_in_subprocess_interpolation() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(["x = $(echo {$src})"])
-    assert "map or awk mode" in str(excinfo.value)
+    assert "lines" in str(excinfo.value) or "files" in str(excinfo.value)
 
 
 def test_map_identifiers_require_map_mode_in_regex_interpolation() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(['print("x" in /{$src}/)'])
-    assert "map or awk mode" in str(excinfo.value)
+    assert "lines" in str(excinfo.value) or "files" in str(excinfo.value)
 
 
 def test_map_identifiers_require_map_mode_in_lambda_call_arguments() -> None:
@@ -2669,7 +2676,7 @@ def test_map_identifiers_require_map_mode_in_lambda_call_arguments() -> None:
     ]:
         with pytest.raises(SyntaxError) as excinfo:
             main([source])
-        assert "map or awk mode" in str(excinfo.value)
+        assert "lines" in str(excinfo.value) or "files" in str(excinfo.value)
 
 
 def test_map_begin_end_flags_reject_map_vars_fd_text(tmp_path: Path) -> None:
@@ -2700,6 +2707,7 @@ def test_example_map(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     """Test that examples/map.snail runs successfully."""
     file_a = tmp_path / "test.txt"
     file_a.write_text("test content here\n")
+    # -b/-e flags from the shebang are not picked up by the test runner
     result = main(["--map", "-f", str(EXAMPLES_DIR / "map.snail"), str(file_a)])
     assert result == 0, f"map.snail failed with exit code {result}"
     captured = capsys.readouterr()

@@ -5,43 +5,19 @@ mod linecache;
 mod lower;
 mod profiling;
 
-pub use lower::{
-    lower_awk, lower_awk_main, lower_map, lower_map_auto, lower_map_main, lower_program,
-    lower_program_auto, lower_program_main,
-};
+pub use lower::{lower_program, lower_program_auto, lower_program_main};
 pub use pyo3::prelude::{PyObject, Python};
 
-use compiler::merge_cli_blocks;
 use linecache::{display_filename, register_linecache, strip_display_prefix};
 use profiling::{log_profile, profile_enabled};
 use pyo3::Bound;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule};
-use snail_ast::{CompileMode, Stmt};
+use pyo3::types::{PyList, PyModule};
+use snail_ast::Stmt;
 use snail_error::{ParseError, format_snail_error};
 use snail_parser::preprocess;
-use snail_parser::{parse, parse_awk, parse_awk_cli, parse_map};
-use std::fmt::Debug;
 use std::time::Instant;
-
-type ProgramWithBlocks = (
-    snail_ast::Program,
-    Vec<Vec<snail_ast::Stmt>>,
-    Vec<Vec<snail_ast::Stmt>>,
-);
-type ParseProgramFn = fn(&str) -> Result<ProgramWithBlocks, ParseError>;
-
-fn parse_mode(mode: &str) -> PyResult<CompileMode> {
-    match mode {
-        "snail" => Ok(CompileMode::Snail),
-        "awk" => Ok(CompileMode::Awk),
-        "map" => Ok(CompileMode::Map),
-        _ => Err(PyRuntimeError::new_err(format!(
-            "unknown mode: {mode} (expected 'snail', 'awk', or 'map')"
-        ))),
-    }
-}
 
 fn parse_error_to_syntax(err: ParseError, filename: &str) -> PyErr {
     PySyntaxError::new_err(format_snail_error(&err.into(), filename))
@@ -51,24 +27,12 @@ fn parse_error_to_syntax(err: ParseError, filename: &str) -> PyErr {
 fn compile_source_to_code(
     py: Python<'_>,
     source: &str,
-    mode: CompileMode,
     auto_print: bool,
     capture_last: bool,
     filename: &str,
-    begin_code: &[String],
-    end_code: &[String],
 ) -> PyResult<PyObject> {
     let profile = profile_enabled();
-    let python_ast = compile_source(
-        py,
-        source,
-        mode,
-        auto_print,
-        capture_last,
-        filename,
-        begin_code,
-        end_code,
-    )?;
+    let python_ast = compile_source(py, source, auto_print, capture_last, filename)?;
     let display = display_filename(filename);
     let linecache_start = Instant::now();
     register_linecache(py, &display, source)?;
@@ -86,35 +50,8 @@ fn compile_source_to_code(
     Ok(code.unbind())
 }
 
-fn parse_program_ast(
-    source: &str,
-    filename: &str,
-    begin_code: &[String],
-    end_code: &[String],
-    parse_program: ParseProgramFn,
-) -> PyResult<ProgramWithBlocks> {
-    let (program, begin_blocks, end_blocks) =
-        parse_program(source).map_err(|err| parse_error_to_syntax(err, filename))?;
-    merge_cli_blocks(begin_code, end_code, begin_blocks, end_blocks)
-        .map_err(|err| parse_error_to_syntax(err, filename))
-        .map(|(begin_blocks, end_blocks)| (program, begin_blocks, end_blocks))
-}
-
-fn format_program_ast<Ast: Debug>(
-    program: snail_ast::Program,
-    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
-    end_blocks: Vec<Vec<snail_ast::Stmt>>,
-    wrap: impl FnOnce(snail_ast::Program, Vec<Vec<snail_ast::Stmt>>, Vec<Vec<snail_ast::Stmt>>) -> Ast,
-) -> String {
-    if begin_blocks.is_empty() && end_blocks.is_empty() {
-        format!("{:#?}", program)
-    } else {
-        format!("{:#?}", wrap(program, begin_blocks, end_blocks))
-    }
-}
-
 fn build_info_dict(py: Python<'_>) -> PyResult<PyObject> {
-    let info = PyDict::new_bound(py);
+    let info = pyo3::types::PyDict::new_bound(py);
     if let Some(rev) = option_env!("SNAIL_GIT_SHA") {
         info.set_item("git_rev", rev)?;
     }
@@ -127,33 +64,19 @@ fn build_info_dict(py: Python<'_>) -> PyResult<PyObject> {
     Ok(info.into_py(py))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn compile_source(
     py: Python<'_>,
     source: &str,
-    mode: CompileMode,
     auto_print: bool,
     capture_last: bool,
     filename: &str,
-    begin_code: &[String],
-    end_code: &[String],
 ) -> Result<PyObject, PyErr> {
     let profile = profile_enabled();
     let total_start = Instant::now();
     let compile_start = Instant::now();
 
-    let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
-    let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
-    let module = compiler::compile_source(
-        py,
-        source,
-        mode,
-        &begin_refs,
-        &end_refs,
-        auto_print,
-        capture_last,
-    )
-    .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+    let module = compiler::compile_source(py, source, auto_print, capture_last)
+        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
 
     if profile {
         log_profile("compile_snail_source", compile_start.elapsed());
@@ -184,7 +107,7 @@ fn prepare_globals<'py>(
     let globals: Bound<'py, PyAny> = if auto_import {
         runtime.getattr("AutoImportDict")?.call0()?
     } else {
-        PyDict::new_bound(py).into_any()
+        pyo3::types::PyDict::new_bound(py).into_any()
     };
 
     let builtins = py.import_bound("builtins")?;
@@ -210,6 +133,21 @@ fn prepare_globals<'py>(
     Ok(globals)
 }
 
+/// Check whether the program ends with a non-semicolon-terminated expression.
+fn has_tail_expression(source: &str) -> bool {
+    snail_parser::parse(source)
+        .map(|program| {
+            matches!(
+                program.stmts.last(),
+                Some(Stmt::Expr {
+                    semicolon_terminated: false,
+                    ..
+                })
+            )
+        })
+        .unwrap_or(false)
+}
+
 #[pyfunction(name = "compile")]
 #[pyo3(signature = (source, *, mode = "snail", auto_print = true, filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
 fn compile_py(
@@ -223,16 +161,8 @@ fn compile_py(
 ) -> PyResult<PyObject> {
     let profile = profile_enabled();
     let total_start = Instant::now();
-    let code = compile_source_to_code(
-        py,
-        source,
-        parse_mode(mode)?,
-        auto_print,
-        false,
-        filename,
-        &begin_code,
-        &end_code,
-    )?;
+    let wrapped = wrap_source(source, mode, &begin_code, &end_code)?;
+    let code = compile_source_to_code(py, &wrapped, auto_print, false, filename)?;
     if profile {
         log_profile("compile_py_total", total_start.elapsed());
     }
@@ -250,37 +180,8 @@ fn compile_ast_py(
     begin_code: Vec<String>,
     end_code: Vec<String>,
 ) -> PyResult<PyObject> {
-    compile_source(
-        py,
-        source,
-        parse_mode(mode)?,
-        auto_print,
-        false,
-        filename,
-        &begin_code,
-        &end_code,
-    )
-}
-
-/// Check whether the main body of a program ends with a non-semicolon-terminated
-/// expression (i.e. an expression that would be captured by AutoPrint/CaptureOnly).
-fn has_tail_expression(source: &str, mode: CompileMode) -> bool {
-    let parse_fn: fn(&str) -> Result<_, _> = match mode {
-        CompileMode::Snail => parse,
-        CompileMode::Map => parse_map,
-        CompileMode::Awk => return false,
-    };
-    parse_fn(source)
-        .map(|(program, _, _)| {
-            matches!(
-                program.stmts.last(),
-                Some(Stmt::Expr {
-                    semicolon_terminated: false,
-                    ..
-                })
-            )
-        })
-        .unwrap_or(false)
+    let wrapped = wrap_source(source, mode, &begin_code, &end_code)?;
+    compile_source(py, &wrapped, auto_print, false, filename)
 }
 
 #[pyfunction(name = "exec")]
@@ -302,11 +203,11 @@ fn exec_py(
 ) -> PyResult<i32> {
     let profile = profile_enabled();
     let total_start = Instant::now();
-    let parsed_mode = parse_mode(mode)?;
+
+    let wrapped = wrap_source(source, mode, &begin_code, &end_code)?;
 
     // Pre-flight check: --test requires a trailing expression.
-    // Reject before compiling/executing so no side effects occur.
-    if test_last && !has_tail_expression(source, parsed_mode) {
+    if test_last && !has_tail_expression(&wrapped) {
         let sys = py.import_bound("sys")?;
         let stderr = sys.getattr("stderr")?;
         stderr.call_method1("write", ("snail: --test requires a trailing expression\n",))?;
@@ -314,16 +215,7 @@ fn exec_py(
     }
 
     let capture_last = test_last && !auto_print;
-    let code = compile_source_to_code(
-        py,
-        source,
-        parsed_mode,
-        auto_print,
-        capture_last,
-        filename,
-        &begin_code,
-        &end_code,
-    )?;
+    let code = compile_source_to_code(py, &wrapped, auto_print, capture_last, filename)?;
     let builtins = py.import_bound("builtins")?;
     let globals_start = Instant::now();
     let globals = prepare_globals(
@@ -374,22 +266,6 @@ fn exec_py(
     result
 }
 
-#[allow(dead_code)]
-#[derive(Debug)]
-struct MapAst {
-    program: snail_ast::Program,
-    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
-    end_blocks: Vec<Vec<snail_ast::Stmt>>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-struct SnailAst {
-    program: snail_ast::Program,
-    begin_blocks: Vec<Vec<snail_ast::Stmt>>,
-    end_blocks: Vec<Vec<snail_ast::Stmt>>,
-}
-
 #[pyfunction(name = "parse_ast")]
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>", begin_code = Vec::new(), end_code = Vec::new()))]
 fn parse_ast_py(
@@ -399,43 +275,10 @@ fn parse_ast_py(
     begin_code: Vec<String>,
     end_code: Vec<String>,
 ) -> PyResult<String> {
-    match parse_mode(mode)? {
-        CompileMode::Snail => {
-            let (program, begin_blocks, end_blocks) =
-                parse_program_ast(source, filename, &begin_code, &end_code, parse)?;
-            Ok(format_program_ast(
-                program,
-                begin_blocks,
-                end_blocks,
-                |program, begin_blocks, end_blocks| SnailAst {
-                    program,
-                    begin_blocks,
-                    end_blocks,
-                },
-            ))
-        }
-        CompileMode::Awk => {
-            let begin_refs: Vec<&str> = begin_code.iter().map(String::as_str).collect();
-            let end_refs: Vec<&str> = end_code.iter().map(String::as_str).collect();
-            let program = parse_awk_cli(source, &begin_refs, &end_refs)
-                .map_err(|err| parse_error_to_syntax(err, filename))?;
-            Ok(format!("{:#?}", program))
-        }
-        CompileMode::Map => {
-            let (program, begin_blocks, end_blocks) =
-                parse_program_ast(source, filename, &begin_code, &end_code, parse_map)?;
-            Ok(format_program_ast(
-                program,
-                begin_blocks,
-                end_blocks,
-                |program, begin_blocks, end_blocks| MapAst {
-                    program,
-                    begin_blocks,
-                    end_blocks,
-                },
-            ))
-        }
-    }
+    let wrapped = wrap_source(source, mode, &begin_code, &end_code)?;
+    let program = compiler::parse_program(&wrapped)
+        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+    Ok(format!("{:#?}", program))
 }
 
 #[pyfunction(name = "preprocess")]
@@ -446,16 +289,65 @@ fn preprocess_py(source: &str) -> PyResult<String> {
 #[pyfunction(name = "parse")]
 #[pyo3(signature = (source, *, mode = "snail", filename = "<snail>"))]
 fn parse_py(source: &str, mode: &str, filename: &str) -> PyResult<()> {
-    match parse_mode(mode)? {
-        CompileMode::Snail => parse(source)
-            .map(|_| ())
-            .map_err(|err| parse_error_to_syntax(err, filename)),
-        CompileMode::Awk => parse_awk(source)
-            .map(|_| ())
-            .map_err(|err| parse_error_to_syntax(err, filename)),
-        CompileMode::Map => parse_map(source)
-            .map(|_| ())
-            .map_err(|err| parse_error_to_syntax(err, filename)),
+    let wrapped = wrap_source(source, mode, &[], &[])?;
+    snail_parser::parse(&wrapped)
+        .map(|_| ())
+        .map_err(|err| parse_error_to_syntax(err, filename))
+}
+
+/// Wrap source code based on mode. For awk mode, wraps in `lines { ... }`.
+/// For map mode, wraps in `files { ... }`. Begin/end code is prepended/appended.
+fn wrap_source(
+    source: &str,
+    mode: &str,
+    begin_code: &[String],
+    end_code: &[String],
+) -> PyResult<String> {
+    match mode {
+        "snail" => {
+            if begin_code.is_empty() && end_code.is_empty() {
+                Ok(source.to_string())
+            } else {
+                let mut parts: Vec<&str> = Vec::new();
+                for b in begin_code {
+                    parts.push(b);
+                }
+                parts.push(source);
+                for e in end_code {
+                    parts.push(e);
+                }
+                Ok(parts.join("\n"))
+            }
+        }
+        "awk" => {
+            let mut parts: Vec<String> = Vec::new();
+            for b in begin_code {
+                parts.push(b.clone());
+            }
+            parts.push("lines {".to_string());
+            parts.push(source.to_string());
+            parts.push("}".to_string());
+            for e in end_code {
+                parts.push(e.clone());
+            }
+            Ok(parts.join("\n"))
+        }
+        "map" => {
+            let mut parts: Vec<String> = Vec::new();
+            for b in begin_code {
+                parts.push(b.clone());
+            }
+            parts.push("files {".to_string());
+            parts.push(source.to_string());
+            parts.push("}".to_string());
+            for e in end_code {
+                parts.push(e.clone());
+            }
+            Ok(parts.join("\n"))
+        }
+        _ => Err(PyRuntimeError::new_err(format!(
+            "unknown mode: {mode} (expected 'snail', 'awk', or 'map')"
+        ))),
     }
 }
 

@@ -2,7 +2,7 @@
 
 use snail_ast::{AssignTarget, Condition, Expr, Program, SourceSpan, Stmt, StringDelimiter};
 use snail_error::ParseError;
-use snail_parser::parse_main as parse_program;
+use snail_parser::parse as parse_program;
 
 pub fn parse_ok(source: &str) -> Program {
     parse_program(source).expect("program should parse")

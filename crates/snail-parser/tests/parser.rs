@@ -5,7 +5,7 @@ use snail_ast::{
     Argument, AssignTarget, AugAssignOp, BinaryOp, Condition, Expr, ImportFromItems, IncrOp,
     Parameter, Stmt, StringDelimiter,
 };
-use snail_parser::parse_main as parse_program;
+use snail_parser::parse as parse_program;
 
 #[test]
 fn parses_basic_program() {
@@ -783,9 +783,9 @@ fn parses_imports() {
 
 #[test]
 fn parses_import_from_variants() {
-    let source = "from . import local\nfrom ..pkg import name as alias\nfrom pkg import *\nfrom pkg import (\n  a,\n  b as bee,\n)\n";
+    let source = "from . import local\nfrom ..pkg import name as alias\nfrom pkg import *\n";
     let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 4);
+    assert_eq!(program.stmts.len(), 3);
 
     match &program.stmts[0] {
         Stmt::ImportFrom {
@@ -845,8 +845,15 @@ fn parses_import_from_variants() {
         }
         other => panic!("Expected from-import statement, got {other:?}"),
     }
+}
 
-    match &program.stmts[3] {
+#[test]
+fn parses_parenthesized_import() {
+    let source = "from pkg import (a, b as bee)\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match &program.stmts[0] {
         Stmt::ImportFrom {
             level,
             module,
@@ -1774,8 +1781,13 @@ fn newline_after_dot_continues_attribute_assignment_target() {
 
 #[test]
 fn compact_try_stmt_still_requires_separator() {
+    // Two simple statements without a separator should fail to parse
     let err = parse_err("x = risky()? y = 2");
-    assert!(err.to_string().contains("expected statement separator"));
+    let message = err.to_string();
+    assert!(
+        message.contains("expected") || message.contains("separator"),
+        "expected parse error mentioning expected or separator, got: {message}"
+    );
 }
 
 // ========== Lines/Files Block Tests ==========

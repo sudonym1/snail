@@ -2,10 +2,6 @@
 # Each section includes comments to highlight the syntax being demonstrated.
 from __future__ import braces
 
-# ---- BEGIN/END blocks ----
-BEGIN { print("begin block") }
-END { print("end block") }
-
 # ---- Imports (regular, aliased, from-import, and relative imports) ----
 import math, sys as sysmod
 from math import sqrt as root
@@ -16,7 +12,7 @@ from snail_import_demo import (
     ANSWER as demo_answer,
     greet as demo_greet,
 )
-from snail_import_demo import *
+from snail_import_demo import *;
 print("import demo", demo_answer, demo_greet("snail"), NAME)
 
 # Relative imports (exercise a real package under examples).
@@ -321,8 +317,7 @@ text = "abc123"
 regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
 compiled_match = compiled_regex.search(text)
-# Awk mode match groups: $m.1 maps to $m[1]
-# Awk/map begin/end blocks: BEGIN { ... } / END { ... }
+# Match groups: $m.1 maps to $m[1] (inside lines { } blocks)
 
 # ---- Exception fallback hooks and compound expressions ----
 def fallback_handler() {

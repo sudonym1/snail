@@ -45,10 +45,8 @@ semicolons are optional. You can separate statements with newlines.
 Process files line-by-line with familiar awk semantics:
 
 ```snail-awk("hello world\nfoo bar\n")
-BEGIN { print("start") }
 /hello/ { print("matched:", $0) }
 { print($1, "->", $2) }
-END { print("done") }
 ```
 
 **Built-in variables:**
@@ -64,11 +62,9 @@ END { print("done") }
 | `$m` | Last regex match object |
 
 
-Begin/end blocks can live in the source file (`BEGIN { ... }` / `END { ... }`) or be supplied
-via CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown. CLI BEGIN blocks run
-before in-file BEGIN blocks; CLI END blocks run after in-file END blocks.
-`BEGIN` and `END` are reserved keywords in all modes.
-BEGIN/END blocks are regular Snail blocks, so awk/map-only `$` variables are not available inside them.
+Setup and teardown code can be supplied via CLI flags (`-b`/`--begin`, `-e`/`--end`).
+Begin code runs before the line-processing loop, end code runs after.
+Awk `$` variables are not available in begin/end code (they are outside the `lines { }` block).
 ```bash
 echo -e "5\n4\n3\n2\n1" | snail --awk --begin 'total = 0' --end 'print("Sum:", total)' '/^[0-9]+/ { total = total + int($1) }'
 ```
@@ -78,10 +74,8 @@ echo -e "5\n4\n3\n2\n1" | snail --awk --begin 'total = 0' --end 'print("Sum:", t
 Process files one at a time instead of line-by-line:
 
 ```snail-map
-BEGIN { print("start") }
 print("File:", $src)
 print("Size:", len($text), "bytes")
-END { print("done") }
 ```
 
 **Built-in variables:**
@@ -92,11 +86,9 @@ END { print("done") }
 | `$fd` | Open file handle for the current file |
 | `$text` | Lazy text view of the current file contents |
 
-Begin/end blocks can live in the source file (`BEGIN { ... }` / `END { ... }`) or be supplied
-via CLI flags (`-b`/`--begin`, `-e`/`--end`) for setup and teardown. CLI BEGIN blocks run
-before in-file BEGIN blocks; CLI END blocks run after in-file END blocks.
-BEGIN/END blocks are regular Snail blocks, so awk/map-only `$` variables are not available inside them.
-`BEGIN` and `END` are reserved keywords in all modes.
+Setup and teardown code can be supplied via CLI flags (`-b`/`--begin`, `-e`/`--end`).
+Begin code runs before the file-processing loop, end code runs after.
+Map `$` variables are not available in begin/end code (they are outside the `files { }` block).
 ```bash
 snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 ```
@@ -108,19 +100,14 @@ snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 | `$e` | Exception object in `expr:fallback?` |
 | `$env` | Environment map (wrapper around `os.environ`) |
 
-### Begin/End Blocks
+### Begin/End Flags
 
-Regular Snail programs can include `BEGIN { ... }` and `END { ... }` blocks for
-setup and teardown. These blocks can also be supplied via CLI flags (`-b`/`--begin`,
-`-e`/`--end`) in all modes. CLI BEGIN blocks run before in-file BEGIN blocks; CLI
-END blocks run after in-file END blocks.
-BEGIN/END blocks are regular Snail blocks, so awk/map-only `$` variables are not
-available inside them.
+The `-b`/`--begin` and `-e`/`--end` CLI flags prepend and append code around the
+main program in all modes. In awk mode the code runs outside the `lines { }` wrapper;
+in map mode it runs outside the `files { }` wrapper.
 
 ```snail
 print("running")
-BEGIN { print("start") }
-END { print("done") }
 ```
 
 In regular mode, my main use case for this feature is passing unexported
