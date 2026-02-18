@@ -47,14 +47,24 @@ pub(crate) fn lower_lines_stmt(
     sources: &[Argument],
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let (config, remaining) = extract_lines_config(sources);
     if remaining.is_empty() {
         // No source: generate the full argv/stdin file loop (same as awk mode)
-        lower_lines_no_source(builder, body, span, &config)
+        lower_lines_no_source(builder, body, span, &config, auto_print, capture_last)
     } else {
         // With sources: generate two-level file loop
-        lower_lines_with_sources(builder, &remaining, body, span, &config)
+        lower_lines_with_sources(
+            builder,
+            &remaining,
+            body,
+            span,
+            &config,
+            auto_print,
+            capture_last,
+        )
     }
 }
 
@@ -76,6 +86,8 @@ fn lower_lines_loop(
     body: &[Stmt],
     span: &SourceSpan,
     config: &LinesConfig<'_>,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
 
@@ -114,7 +126,8 @@ fn lower_lines_loop(
     )?);
 
     // Build the file loop body
-    let file_loop_body = lower_lines_file_loop_body(builder, body, span, config)?;
+    let file_loop_body =
+        lower_lines_file_loop_body(builder, body, span, config, auto_print, capture_last)?;
 
     // for __snail_source_item in <iter_expr>:
     let for_loop = builder
@@ -151,6 +164,8 @@ fn lower_lines_file_loop_body(
     body: &[Stmt],
     span: &SourceSpan,
     config: &LinesConfig<'_>,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut file_loop = Vec::new();
 
@@ -223,7 +238,7 @@ fn lower_lines_file_loop_body(
         .map_err(py_err_to_lower)?;
 
     // Build the line loop body
-    let loop_body = build_line_loop_body(builder, body, span, config)?;
+    let loop_body = build_line_loop_body(builder, body, span, config, auto_print, capture_last)?;
 
     // for __snail_raw in __snail_file:
     let line_loop = builder
@@ -270,6 +285,8 @@ fn lower_lines_with_sources(
     body: &[Stmt],
     span: &SourceSpan,
     config: &LinesConfig<'_>,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     // Lower all arguments via lower_call_arguments and generate:
     //   __snail_normalize_sources(arg1, arg2, *args, key=val, ...)
@@ -292,7 +309,15 @@ fn lower_lines_with_sources(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_lines_loop(builder, iter_expr, body, span, config)
+    lower_lines_loop(
+        builder,
+        iter_expr,
+        body,
+        span,
+        config,
+        auto_print,
+        capture_last,
+    )
 }
 
 fn lower_lines_no_source(
@@ -300,6 +325,8 @@ fn lower_lines_no_source(
     body: &[Stmt],
     span: &SourceSpan,
     config: &LinesConfig<'_>,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     // Build files_expr: sys.argv[1:] or ["-"]
     let files_expr = builder
@@ -374,7 +401,15 @@ fn lower_lines_no_source(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_lines_loop(builder, files_expr, body, span, config)
+    lower_lines_loop(
+        builder,
+        files_expr,
+        body,
+        span,
+        config,
+        auto_print,
+        capture_last,
+    )
 }
 
 /// Build the inner body of a line processing loop — sets up $0, $f, $n, $fn, $m, $src
@@ -384,6 +419,8 @@ fn build_line_loop_body(
     body: &[Stmt],
     span: &SourceSpan,
     config: &LinesConfig<'_>,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut loop_body = Vec::new();
 
@@ -581,7 +618,13 @@ fn build_line_loop_body(
     )?);
 
     // Lower user body (mix of pattern/action and regular statements)
-    loop_body.extend(lower_lines_body(builder, body)?);
+    loop_body.extend(lower_lines_body(
+        builder,
+        body,
+        span,
+        auto_print,
+        capture_last,
+    )?);
 
     Ok(loop_body)
 }
@@ -590,9 +633,17 @@ fn build_line_loop_body(
 pub(crate) fn lower_lines_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
+    span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
-    for stmt in body {
+    for (idx, stmt) in body.iter().enumerate() {
+        if matches!(stmt, Stmt::SegmentBreak { .. }) {
+            continue;
+        }
+        let is_last = idx == body.len().saturating_sub(1);
+        let next_is_break = matches!(body.get(idx + 1), Some(Stmt::SegmentBreak { .. }));
         match stmt {
             Stmt::PatternAction {
                 pattern,
@@ -604,10 +655,26 @@ pub(crate) fn lower_lines_body(
                     action: action.clone(),
                     span: span.clone(),
                 };
-                stmts.extend(lower_awk_rules(builder, &[rule], false, false)?);
+                stmts.extend(lower_awk_rules(builder, &[rule], auto_print, capture_last)?);
             }
             other => {
-                stmts.push(super::stmt::lower_stmt(builder, other)?);
+                let stmt_auto_print = if is_last || next_is_break {
+                    auto_print
+                } else {
+                    false
+                };
+                let stmt_capture_last = if is_last || next_is_break {
+                    capture_last
+                } else {
+                    false
+                };
+                stmts.extend(lower_block_auto(
+                    builder,
+                    std::slice::from_ref(other),
+                    stmt_auto_print,
+                    stmt_capture_last,
+                    span,
+                )?);
             }
         }
     }

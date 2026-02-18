@@ -3150,3 +3150,23 @@ def test_segment_semicolon_suppresses_auto_print(
     captured = capsys.readouterr()
     # 1; is semicolon-terminated so not auto-printed, 2 is auto-printed
     assert captured.out.splitlines() == ["2"]
+
+
+def test_awk_mode_auto_prints_tail_expression(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("1\n2\n"))
+    result = main(["-a", "{$0}"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["1", "2"]
+
+
+def test_map_mode_auto_prints_tail_expression(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = main(["-m", "$src", "1", "2", "3"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["1", "2", "3"]

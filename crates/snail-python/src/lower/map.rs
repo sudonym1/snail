@@ -8,7 +8,7 @@ use super::expr::lower_call_arguments;
 use super::helpers::{assign_name, name_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 
-use super::stmt::lower_block;
+use super::stmt::lower_block_auto;
 
 /// Lower a `files` statement: iterates files from sources or argv.
 pub(crate) fn lower_files_stmt(
@@ -16,11 +16,13 @@ pub(crate) fn lower_files_stmt(
     sources: &[Argument],
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     if sources.is_empty() {
-        lower_files_no_source(builder, body, span)
+        lower_files_no_source(builder, body, span, auto_print, capture_last)
     } else {
-        lower_files_with_sources(builder, sources, body, span)
+        lower_files_with_sources(builder, sources, body, span, auto_print, capture_last)
     }
 }
 
@@ -38,10 +40,12 @@ fn lower_files_loop(
     iter_expr: PyObject,
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
 
-    let with_body = build_files_with_body(builder, body, span)?;
+    let with_body = build_files_with_body(builder, body, span, auto_print, capture_last)?;
     let lazy_file_call = build_lazy_file_call(builder, span)?;
 
     let with_item = builder
@@ -96,6 +100,8 @@ fn lower_files_with_sources(
     sources: &[Argument],
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     // Lower all arguments via lower_call_arguments and generate:
     //   __snail_normalize_sources(arg1, arg2, *args, key=val, ...)
@@ -117,13 +123,15 @@ fn lower_files_with_sources(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_files_loop(builder, iter_expr, body, span)
+    lower_files_loop(builder, iter_expr, body, span, auto_print, capture_last)
 }
 
 fn lower_files_no_source(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     // import sys
     // for __snail_src in sys.argv[1:]:
@@ -161,7 +169,14 @@ fn lower_files_no_source(
     // sys.argv[1:]
     let iter_expr = lower_paths_source(builder, span)?;
 
-    stmts.extend(lower_files_loop(builder, iter_expr, body, span)?);
+    stmts.extend(lower_files_loop(
+        builder,
+        iter_expr,
+        body,
+        span,
+        auto_print,
+        capture_last,
+    )?);
     Ok(stmts)
 }
 
@@ -169,6 +184,8 @@ fn build_files_with_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
+    auto_print: bool,
+    capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut with_body = Vec::new();
 
@@ -206,7 +223,7 @@ fn build_files_with_body(
     )?);
 
     // Lower user code
-    let user_code = lower_block(builder, body, span)?;
+    let user_code = lower_block_auto(builder, body, auto_print, capture_last, span)?;
     with_body.extend(user_code);
 
     Ok(with_body)

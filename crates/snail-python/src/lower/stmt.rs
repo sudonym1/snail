@@ -441,6 +441,58 @@ fn lower_block_with_tail(
                     stmts.push(return_stmt);
                     continue;
                 }
+                (
+                    TailBehavior::AutoPrint,
+                    Stmt::Lines {
+                        sources,
+                        body,
+                        span,
+                    },
+                ) => {
+                    stmts.extend(super::awk::lower_lines_stmt(
+                        builder, sources, body, span, true, false,
+                    )?);
+                    continue;
+                }
+                (
+                    TailBehavior::CaptureOnly,
+                    Stmt::Lines {
+                        sources,
+                        body,
+                        span,
+                    },
+                ) => {
+                    stmts.extend(super::awk::lower_lines_stmt(
+                        builder, sources, body, span, false, true,
+                    )?);
+                    continue;
+                }
+                (
+                    TailBehavior::AutoPrint,
+                    Stmt::Files {
+                        sources,
+                        body,
+                        span,
+                    },
+                ) => {
+                    stmts.extend(super::map::lower_files_stmt(
+                        builder, sources, body, span, true, false,
+                    )?);
+                    continue;
+                }
+                (
+                    TailBehavior::CaptureOnly,
+                    Stmt::Files {
+                        sources,
+                        body,
+                        span,
+                    },
+                ) => {
+                    stmts.extend(super::map::lower_files_stmt(
+                        builder, sources, body, span, false, true,
+                    )?);
+                    continue;
+                }
                 _ => {}
             }
         }
@@ -468,7 +520,9 @@ fn lower_block_with_tail(
                 span,
                 ..
             } => {
-                stmts.extend(super::awk::lower_lines_stmt(builder, sources, body, span)?);
+                stmts.extend(super::awk::lower_lines_stmt(
+                    builder, sources, body, span, false, false,
+                )?);
             }
             Stmt::Files {
                 sources,
@@ -476,7 +530,9 @@ fn lower_block_with_tail(
                 span,
                 ..
             } => {
-                stmts.extend(super::map::lower_files_stmt(builder, sources, body, span)?);
+                stmts.extend(super::map::lower_files_stmt(
+                    builder, sources, body, span, false, false,
+                )?);
             }
             _ => stmts.push(lower_stmt(builder, stmt)?),
         }
