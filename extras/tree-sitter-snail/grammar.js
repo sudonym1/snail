@@ -31,6 +31,7 @@ module.exports = grammar({
   extras: $ => [
     /[ \t]/,           // whitespace (not newlines)
     $.comment,
+    $.line_continuation, // backslash line continuation
   ],
 
   externals: $ => [],
@@ -848,5 +849,8 @@ module.exports = grammar({
 
     // Comment
     comment: $ => /#[^\r\n]*/,
+
+    // Backslash line continuation: \ followed by optional whitespace and newline
+    line_continuation: $ => /\\[ \t]*\r?\n/,
   },
 });

@@ -3,6 +3,9 @@
 ; Comments
 (comment) @comment
 
+; Line continuation
+(line_continuation) @punctuation.special
+
 ; Strings
 (double_string) @string
 (single_string) @string

@@ -2481,6 +2481,11 @@
     "named": false
   },
   {
+    "type": "line_continuation",
+    "named": true,
+    "extra": true
+  },
+  {
     "type": "none",
     "named": true
   },
