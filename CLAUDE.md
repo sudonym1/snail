@@ -50,10 +50,6 @@ cargo clippy -- -D warnings
 
 ```
 
-## Planning Requirements (GitHub Issues)
-
-**CRITICAL**: When creating a medium or large plan, you must create a GitHub issue using the `gh` CLI instead of adding files under `plans/`. The issue must include enough detail to execute later with no additional context (assumptions, steps, commands, and verification).
-
 ## ⚠️ MANDATORY: CI Requirements Before Committing/Pushing
 
 **CRITICAL**: Before creating ANY commit, push, or pull request, you MUST run `make test` as the **final** command and ensure it passes. No exceptions.
