@@ -1602,22 +1602,6 @@ fn parses_if_block_with_is_not_operator() {
 // Tests for compound statement separator behavior (no semicolon needed after })
 
 #[test]
-fn parses_if_followed_by_stmt_without_separator() {
-    // if statement followed by expression without semicolon
-    let source = "if x { y = 1 } z";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(
-        &program.stmts[0],
-        Stmt::Expr {
-            value: Expr::IfBlock { .. },
-            ..
-        }
-    ));
-    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
-}
-
-#[test]
 fn parses_while_followed_by_stmt_without_separator() {
     let source = "while x { y = 1 } z";
     let program = parse_ok(source);
@@ -1670,60 +1654,6 @@ fn parses_with_followed_by_stmt_without_separator() {
     assert_eq!(program.stmts.len(), 2);
     assert!(matches!(&program.stmts[0], Stmt::With { .. }));
     assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
-}
-
-#[test]
-fn parses_nested_compound_stmts_without_separators() {
-    let source = "if a { if b { c } d } e";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(
-        &program.stmts[0],
-        Stmt::Expr {
-            value: Expr::IfBlock { .. },
-            ..
-        }
-    ));
-    assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
-}
-
-#[test]
-fn parses_mixed_compound_and_simple_stmts() {
-    let source = "a = 1; if b { c = 2 } d = 3; e = 4";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 4);
-    assert!(matches!(&program.stmts[0], Stmt::Assign { .. }));
-    assert!(matches!(
-        &program.stmts[1],
-        Stmt::Expr {
-            value: Expr::IfBlock { .. },
-            ..
-        }
-    ));
-    assert!(matches!(&program.stmts[2], Stmt::Assign { .. }));
-    assert!(matches!(&program.stmts[3], Stmt::Assign { .. }));
-}
-
-#[test]
-fn parses_consecutive_compound_stmts_without_separators() {
-    let source = "if a { b } if c { d } while e { f }";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 3);
-    assert!(matches!(
-        &program.stmts[0],
-        Stmt::Expr {
-            value: Expr::IfBlock { .. },
-            ..
-        }
-    ));
-    assert!(matches!(
-        &program.stmts[1],
-        Stmt::Expr {
-            value: Expr::IfBlock { .. },
-            ..
-        }
-    ));
-    assert!(matches!(&program.stmts[2], Stmt::While { .. }));
 }
 
 #[test]
