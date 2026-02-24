@@ -449,13 +449,9 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             }
             validate_block_mode(body, source, mode)?;
         }
-        Expr::Compound {
-            expressions: elements,
-            ..
+        Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
+            validate_exprs_mode(elements, source, mode)?
         }
-        | Expr::List { elements, .. }
-        | Expr::Tuple { elements, .. }
-        | Expr::Set { elements, .. } => validate_exprs_mode(elements, source, mode)?,
         Expr::Regex { pattern, .. } => {
             validate_regex_pattern_mode(pattern, source, mode)?;
         }

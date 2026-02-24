@@ -301,11 +301,6 @@ Explicit semicolons always separate statements regardless of these rules.
 - If-expressions produce values: `fallback = if flag { "yes" } else { "no" }`.
   Branches can contain multiple statements; the last expression's value is used.
   Elif chains are supported: `x = if a { 1 } elif b { 2 } else { 3 }`.
-- Compound expressions `(expr1; expr2; expr3)` evaluate each expression from
-  left to right and return the final value. Newlines after the opening `(` and
-  between expressions are allowed, making them convenient for bundling setup
-  work and a risky call into a single expression alongside Snail's `?`
-  fallback operator.
 - Tuple literals plus slicing use Python syntax: `(1, 2)`,
   `data[1:3]`, `data[:2]`, and `data[2:]`.
 - Collection literals use Python-inspired forms: lists `[1, 2]`, dicts

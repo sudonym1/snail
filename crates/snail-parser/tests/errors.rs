@@ -317,13 +317,7 @@ fn rejects_awk_vars_in_unary_yieldfrom_paren() {
 
 #[test]
 fn rejects_awk_vars_in_structural_exprs_and_compare() {
-    for source in [
-        "x = (1; $n)",
-        "x = [$n]",
-        "x = ($n,)",
-        "x = #{$n}",
-        "x = 1 < $n < 3",
-    ] {
+    for source in ["x = [$n]", "x = ($n,)", "x = #{$n}", "x = 1 < $n < 3"] {
         assert_regular_mode_error(source, "$n", "lines");
     }
 }

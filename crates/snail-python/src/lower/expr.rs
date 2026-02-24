@@ -778,39 +778,6 @@ pub(crate) fn lower_expr_with_exception(
         Expr::Lambda { .. } => Err(LowerError::new(
             "def expressions should be desugared before lowering",
         )),
-        Expr::Compound { expressions, span } => {
-            let mut lowered = Vec::new();
-            for expr in expressions {
-                lowered.push(lower_expr_with_exception(builder, expr, exception_name)?);
-            }
-            let tuple_expr = builder
-                .call_node(
-                    "Tuple",
-                    vec![
-                        PyList::new_bound(builder.py(), lowered).into_py(builder.py()),
-                        builder.load_ctx().map_err(py_err_to_lower)?,
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)?;
-            let index_expr = builder
-                .call_node(
-                    "UnaryOp",
-                    vec![
-                        lower_unary_op(builder, UnaryOp::Minus)?,
-                        number_expr(builder, "1", span)?,
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)?;
-            subscript_expr(
-                builder,
-                tuple_expr,
-                index_expr,
-                builder.load_ctx().map_err(py_err_to_lower)?,
-                span,
-            )
-        }
         Expr::Regex { pattern, span } => {
             let func = name_expr(
                 builder,
@@ -1538,11 +1505,6 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
                 }
             }
         }
-        Expr::Compound { expressions, .. } => {
-            for expr in expressions {
-                count_placeholders(expr, info);
-            }
-        }
         Expr::Regex { pattern, .. } => count_placeholders_in_regex(pattern, info),
         Expr::RegexMatch { value, pattern, .. } => {
             count_placeholders(value, info);
@@ -1847,13 +1809,6 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                     },
                     _ => stmt.clone(),
                 })
-                .collect(),
-            span: span.clone(),
-        },
-        Expr::Compound { expressions, span } => Expr::Compound {
-            expressions: expressions
-                .iter()
-                .map(|expr| substitute_placeholder(expr, replacement))
                 .collect(),
             span: span.clone(),
         },

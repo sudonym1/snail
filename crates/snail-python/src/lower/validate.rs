@@ -277,11 +277,6 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
             // Anonymous defs are hoisted to defs; allow yield in their bodies.
             check_stmts(body, true)?;
         }
-        Expr::Compound { expressions, .. } => {
-            for expr in expressions {
-                check_expr(expr, in_function)?;
-            }
-        }
         Expr::Regex { pattern, .. } => check_regex_pattern(pattern, in_function)?,
         Expr::RegexMatch { value, pattern, .. } => {
             check_expr(value, in_function)?;

@@ -630,25 +630,6 @@ fn parses_placeholder_identifier() {
 }
 
 #[test]
-fn parses_compound_expression() {
-    let source = "result = (\n  first;\n  second;\n  third\n)";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 1);
-
-    let (targets, value) = expect_assign(&program.stmts[0]);
-    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "result"));
-    match value {
-        Expr::Compound { expressions, .. } => {
-            assert_eq!(expressions.len(), 3);
-            expect_name(&expressions[0], "first");
-            expect_name(&expressions[1], "second");
-            expect_name(&expressions[2], "third");
-        }
-        other => panic!("Expected compound expression, got {other:?}"),
-    }
-}
-
-#[test]
 fn parses_def_expr_no_params() {
     let source = "f = def { 1 }\n";
     let program = parse_ok(source);

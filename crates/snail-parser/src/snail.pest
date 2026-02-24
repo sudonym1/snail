@@ -206,7 +206,6 @@ atom = _{
   | dict_comp
   | dict_literal
   | tuple_literal
-  | compound_expr
   | paren_expr
 }
 
@@ -214,9 +213,6 @@ def_expr = { "def" ~ parameters? ~ block }
 
 // Parenthesized expression (preserved in AST for proper validation)
 paren_expr = { "(" ~ expr ~ ")" }
-
-// Compound expression: multiple semicolon-separated expressions in parens
-compound_expr = { "(" ~ expr ~ (";" ~ expr)+ ~ ";"? ~ ")" }
 
 // Subprocess invocation: $(cmd) captures output, @(cmd) captures exit status
 subprocess = { subprocess_capture | subprocess_status }

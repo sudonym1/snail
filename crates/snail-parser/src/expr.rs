@@ -30,8 +30,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         | Rule::try_fallback
         | Rule::try_fallback_unary
         | Rule::try_fallback_power
-        | Rule::try_fallback_primary
-        | Rule::compound_expr => parse_expr_rule(pair, source),
+        | Rule::try_fallback_primary => parse_expr_rule(pair, source),
         Rule::literal => parse_literal(pair, source),
         Rule::def_expr => parse_def_expr(pair, source),
         Rule::exception_var => Ok(Expr::Name {
@@ -96,7 +95,6 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::try_fallback_unary => parse_unary(pair, source),
         Rule::try_fallback_power => parse_power(pair, source),
         Rule::try_fallback_primary => parse_primary(pair, source),
-        Rule::compound_expr => parse_compound_expr(pair, source),
         Rule::paren_expr => parse_paren_expr(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
         Rule::if_block_expr => parse_if_block_expr(pair, source),
@@ -738,26 +736,6 @@ pub(crate) fn parse_argument(pair: Pair<'_, Rule>, source: &str) -> Result<Argum
     }
 }
 
-fn parse_compound_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut expressions = Vec::new();
-    for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::expr {
-            expressions.push(parse_expr_pair(inner, source)?);
-        }
-    }
-
-    if expressions.is_empty() {
-        return Err(error_with_span(
-            "compound expression requires at least one expression",
-            span,
-            source,
-        ));
-    }
-
-    Ok(Expr::Compound { expressions, span })
-}
-
 fn parse_paren_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let inner = pair.into_inner().next().ok_or_else(|| {
@@ -798,7 +776,6 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         .ok_or_else(|| error_with_span("missing atom", pair_span.clone(), source))?;
     match inner_pair.as_rule() {
         Rule::literal => parse_literal(inner_pair, source),
-        Rule::compound_expr => parse_compound_expr(inner_pair, source),
         Rule::exception_var => Ok(Expr::Name {
             name: inner_pair.as_str().to_string(),
             span: span_from_pair(&inner_pair, source),

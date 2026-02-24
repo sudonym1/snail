@@ -537,22 +537,10 @@ module.exports = grammar({
       $.dict_comp,
       $.dict_literal,
       $.tuple_literal,
-      $.compound_expr,
       $.parenthesized_expr,
     ),
 
     parenthesized_expr: $ => seq('(', $._expr, ')'),
-
-    // Compound expression: multiple semicolon-separated expressions
-    compound_expr: $ => seq(
-      '(',
-      repeat($._newline),
-      $._expr,
-      repeat1(seq(';', repeat($._newline), $._expr)),
-      repeat($._newline),
-      optional(';'),
-      ')',
-    ),
 
     // Subprocess invocation
     subprocess: $ => choice(

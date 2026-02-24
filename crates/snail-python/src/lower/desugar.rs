@@ -597,13 +597,6 @@ impl LambdaHoister {
                     span: span.clone(),
                 }
             }
-            Expr::Compound { expressions, span } => Expr::Compound {
-                expressions: expressions
-                    .iter()
-                    .map(|expr| self.desugar_expr(expr, prelude))
-                    .collect(),
-                span: span.clone(),
-            },
             Expr::Regex { pattern, span } => Expr::Regex {
                 pattern: self.desugar_regex_pattern(pattern, prelude),
                 span: span.clone(),

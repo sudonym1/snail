@@ -631,12 +631,6 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             }
             *span = shift_span(span, offset, source);
         }
-        Expr::Compound { expressions, span } => {
-            for expr in expressions {
-                shift_expr_spans(expr, offset, source);
-            }
-            *span = shift_span(span, offset, source);
-        }
         Expr::Call { func, args, span } => {
             shift_expr_spans(func, offset, source);
             for arg in args {

@@ -281,10 +281,6 @@ pub enum Expr {
         body: Vec<Stmt>,
         span: SourceSpan,
     },
-    Compound {
-        expressions: Vec<Expr>,
-        span: SourceSpan,
-    },
     Regex {
         pattern: RegexPattern,
         span: SourceSpan,
