@@ -345,8 +345,8 @@ def _format_python_runtime() -> str:
     return f"Python {version} ({executable})"
 
 
-def _print_preprocessor_debug(source: str, preprocessed: str) -> None:
-    """Print the source with statement-boundary newlines shown as !\\n."""
+def _print_preprocessor_debug(preprocessed: str) -> None:
+    """Print the source with statement-boundary newlines shown as ❗\\n."""
     print(preprocessed.replace("\x1e", "❗\n"), end="")
 
 
@@ -423,7 +423,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         from . import preprocess
 
         preprocessed = preprocess(source)
-        _print_preprocessor_debug(source, preprocessed)
+        _print_preprocessor_debug(preprocessed)
         return 0
 
     if namespace.debug_snail_ast:
