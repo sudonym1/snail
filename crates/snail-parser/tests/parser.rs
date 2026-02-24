@@ -2102,3 +2102,93 @@ fn parses_segment_break() {
     assert!(matches!(&program.stmts[3], Stmt::SegmentBreak { .. }));
     assert!(matches!(&program.stmts[4], Stmt::Assign { .. }));
 }
+
+#[test]
+fn parses_if_followed_by_stmt_same_line() {
+    let source = "if x { y = 1 } z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(
+        expect_expr_stmt(&program.stmts[0]),
+        Expr::IfBlock { .. }
+    ));
+    expect_name(expect_expr_stmt(&program.stmts[1]), "z");
+}
+
+#[test]
+fn parses_if_followed_by_stmt_no_space() {
+    let source = "if x { y = 1 }z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(
+        expect_expr_stmt(&program.stmts[0]),
+        Expr::IfBlock { .. }
+    ));
+    expect_name(expect_expr_stmt(&program.stmts[1]), "z");
+}
+
+#[test]
+fn parses_if_else_followed_by_stmt() {
+    let source = "if a { x } else { y } z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(
+        expect_expr_stmt(&program.stmts[0]),
+        Expr::IfBlock { .. }
+    ));
+    expect_name(expect_expr_stmt(&program.stmts[1]), "z");
+}
+
+#[test]
+fn parses_nested_if_blocks_without_separators() {
+    let source = "if a { if b { c } d } e";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(
+        expect_expr_stmt(&program.stmts[0]),
+        Expr::IfBlock { .. }
+    ));
+    expect_name(expect_expr_stmt(&program.stmts[1]), "e");
+}
+
+#[test]
+fn parses_consecutive_block_exprs() {
+    let source = "if a { b } if c { d } while e { f }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 3);
+    assert!(matches!(
+        expect_expr_stmt(&program.stmts[0]),
+        Expr::IfBlock { .. }
+    ));
+    assert!(matches!(
+        expect_expr_stmt(&program.stmts[1]),
+        Expr::IfBlock { .. }
+    ));
+    assert!(matches!(&program.stmts[2], Stmt::While { .. }));
+}
+
+#[test]
+fn parses_def_expr_followed_by_stmt() {
+    let source = "def(x) { x + 1 } z";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 2);
+    assert!(matches!(
+        expect_expr_stmt(&program.stmts[0]),
+        Expr::Lambda { .. }
+    ));
+    expect_name(expect_expr_stmt(&program.stmts[1]), "z");
+}
+
+#[test]
+fn parses_mixed_block_and_simple_stmts() {
+    let source = "a = 1; if b { c = 2 } d = 3; e = 4";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 4);
+    assert!(matches!(&program.stmts[0], Stmt::Assign { .. }));
+    assert!(matches!(
+        expect_expr_stmt(&program.stmts[1]),
+        Expr::IfBlock { .. }
+    ));
+    assert!(matches!(&program.stmts[2], Stmt::Assign { .. }));
+    assert!(matches!(&program.stmts[3], Stmt::Assign { .. }));
+}

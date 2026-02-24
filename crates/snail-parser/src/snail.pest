@@ -5,10 +5,13 @@ program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 // Compound statements (ending with }) don't need trailing separators
 // Simple statements need separators unless they're the last statement
 stmt_list = { (stmt_item | segment_break)* ~ final_stmt? }
-stmt_item = _{ compound_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ }
-final_stmt = _{ compound_stmt | simple_stmt }
+stmt_item = _{ compound_stmt ~ stmt_sep* | block_expr_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ }
+final_stmt = _{ compound_stmt | block_expr_stmt | simple_stmt }
 stmt_sep = _{ ";" | "\x1E" }
 segment_break = { "\x1F" ~ stmt_sep* }
+
+block_expr = _{ if_block_expr | def_expr }
+block_expr_stmt = { block_expr }
 
 stmt = _{ compound_stmt | simple_stmt }
 

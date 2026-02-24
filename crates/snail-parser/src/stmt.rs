@@ -51,6 +51,7 @@ pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError
         Rule::lines_stmt => parse_lines_stmt(pair, source),
         Rule::files_stmt => parse_files_stmt(pair, source),
         Rule::assign_stmt => parse_assign(pair, source),
+        Rule::block_expr_stmt => parse_block_expr_stmt(pair, source),
         Rule::expr_stmt => parse_expr_stmt(pair, source),
         _ => Err(error_with_span(
             format!("unsupported statement: {:?}", pair.as_rule()),
@@ -836,6 +837,21 @@ pub fn parse_pattern_action(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, 
     Ok(Stmt::PatternAction {
         pattern,
         action,
+        span,
+    })
+}
+
+fn parse_block_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let inner = pair
+        .into_inner()
+        .next()
+        .ok_or_else(|| error_with_span("missing block expression", span.clone(), source))?;
+    let value = parse_expr_pair(inner, source)?;
+    let semicolon_terminated = check_trailing_semicolon(source, span.end.offset);
+    Ok(Stmt::Expr {
+        value,
+        semicolon_terminated,
         span,
     })
 }
