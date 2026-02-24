@@ -212,12 +212,12 @@ assert glob_empty == []
 glob_multi = path("*.toml", "*.lock")
 assert len(glob_multi) >= 1
 
-# ---- Operators, ternary, and precedence ----
+# ---- Operators, if-expressions, and precedence ----
 missing = None
 flag = not False and True or False
 is_none = missing is None
 has_two = 2 in data
-fallback = "yes" if flag else "no"
+fallback = if flag { "yes" } else { "no" }
 power = -2 ** 3
 mix = (1 + 2) * 3 - 4 / 2 + 5 % 2 + 7 // 2
 

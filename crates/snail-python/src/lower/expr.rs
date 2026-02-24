@@ -4,12 +4,16 @@ use snail_ast::*;
 use snail_error::LowerError;
 
 use super::constants::*;
-use super::helpers::{byte_string_expr, name_expr, number_expr, regex_pattern_expr, string_expr};
+use super::helpers::{
+    assign_name, build_destructure_try, build_let_guard_test, byte_string_expr, name_expr,
+    number_expr, regex_pattern_expr, string_expr,
+};
 use super::operators::{
     aug_op_to_string, lower_aug_assign_op, lower_binary_op, lower_bool_op, lower_compare_op,
     lower_unary_op,
 };
 use super::py_ast::{AstBuilder, py_err_to_lower};
+use super::stmt::{TailBehavior, lower_block, lower_block_with_tail};
 
 pub(crate) fn lower_expr(builder: &AstBuilder<'_>, expr: &Expr) -> Result<PyObject, LowerError> {
     lower_expr_with_exception(builder, expr, None)
@@ -701,19 +705,9 @@ pub(crate) fn lower_expr_with_exception(
                 lower_compare_chain(builder, left, ops, comparators, span, exception_name)
             }
         }
-        Expr::IfExpr {
-            test,
-            body,
-            orelse,
-            span,
-        } => {
-            let test = lower_expr_with_exception(builder, test, exception_name)?;
-            let body = lower_expr_with_exception(builder, body, exception_name)?;
-            let orelse = lower_expr_with_exception(builder, orelse, exception_name)?;
-            builder
-                .call_node("IfExp", vec![test, body, orelse], span)
-                .map_err(py_err_to_lower)
-        }
+        Expr::IfBlock { .. } => Err(LowerError::new(
+            "Expr::IfBlock should have been desugared before lowering",
+        )),
         Expr::TryExpr {
             expr,
             fallback,
@@ -1501,12 +1495,22 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
                 count_placeholders(expr, info);
             }
         }
-        Expr::IfExpr {
-            test, body, orelse, ..
+        Expr::IfBlock {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
         } => {
-            count_placeholders(test, info);
-            count_placeholders(body, info);
-            count_placeholders(orelse, info);
+            count_placeholders_in_condition(cond, info);
+            count_placeholders_in_body_stmts(body, info);
+            for (elif_cond, elif_body) in elifs {
+                count_placeholders_in_condition(elif_cond, info);
+                count_placeholders_in_body_stmts(elif_body, info);
+            }
+            if let Some(else_body) = else_body {
+                count_placeholders_in_body_stmts(else_body, info);
+            }
         }
         Expr::TryExpr { expr, fallback, .. } => {
             count_placeholders(expr, info);
@@ -1628,6 +1632,26 @@ fn count_placeholders_in_assign_target(target: &AssignTarget, info: &mut Placeho
     }
 }
 
+fn count_placeholders_in_condition(cond: &Condition, info: &mut PlaceholderInfo) {
+    match cond {
+        Condition::Expr(expr) => count_placeholders(expr, info),
+        Condition::Let { value, guard, .. } => {
+            count_placeholders(value, info);
+            if let Some(guard) = guard {
+                count_placeholders(guard, info);
+            }
+        }
+    }
+}
+
+fn count_placeholders_in_body_stmts(stmts: &[Stmt], info: &mut PlaceholderInfo) {
+    for stmt in stmts {
+        if let Stmt::Expr { value, .. } = stmt {
+            count_placeholders(value, info);
+        }
+    }
+}
+
 fn count_placeholders_in_regex(pattern: &RegexPattern, info: &mut PlaceholderInfo) {
     if let RegexPattern::Interpolated(parts) = pattern {
         for part in parts {
@@ -1740,15 +1764,27 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                 .collect(),
             span: span.clone(),
         },
-        Expr::IfExpr {
-            test,
+        Expr::IfBlock {
+            cond,
             body,
-            orelse,
+            elifs,
+            else_body,
             span,
-        } => Expr::IfExpr {
-            test: Box::new(substitute_placeholder(test, replacement)),
-            body: Box::new(substitute_placeholder(body, replacement)),
-            orelse: Box::new(substitute_placeholder(orelse, replacement)),
+        } => Expr::IfBlock {
+            cond: substitute_placeholder_in_condition(cond, replacement),
+            body: substitute_placeholder_in_stmts(body, replacement),
+            elifs: elifs
+                .iter()
+                .map(|(c, b)| {
+                    (
+                        substitute_placeholder_in_condition(c, replacement),
+                        substitute_placeholder_in_stmts(b, replacement),
+                    )
+                })
+                .collect(),
+            else_body: else_body
+                .as_ref()
+                .map(|b| substitute_placeholder_in_stmts(b, replacement)),
             span: span.clone(),
         },
         Expr::TryExpr {
@@ -1980,6 +2016,45 @@ fn substitute_placeholder_in_assign_target(
     }
 }
 
+fn substitute_placeholder_in_condition(cond: &Condition, replacement: &Expr) -> Condition {
+    match cond {
+        Condition::Expr(expr) => {
+            Condition::Expr(Box::new(substitute_placeholder(expr, replacement)))
+        }
+        Condition::Let {
+            target,
+            value,
+            guard,
+            span,
+        } => Condition::Let {
+            target: Box::new(substitute_placeholder_in_assign_target(target, replacement)),
+            value: Box::new(substitute_placeholder(value, replacement)),
+            guard: guard
+                .as_ref()
+                .map(|e| Box::new(substitute_placeholder(e, replacement))),
+            span: span.clone(),
+        },
+    }
+}
+
+fn substitute_placeholder_in_stmts(stmts: &[Stmt], replacement: &Expr) -> Vec<Stmt> {
+    stmts
+        .iter()
+        .map(|stmt| match stmt {
+            Stmt::Expr {
+                value,
+                semicolon_terminated,
+                span,
+            } => Stmt::Expr {
+                value: substitute_placeholder(value, replacement),
+                semicolon_terminated: *semicolon_terminated,
+                span: span.clone(),
+            },
+            _ => stmt.clone(),
+        })
+        .collect()
+}
+
 fn substitute_placeholder_in_regex(pattern: &RegexPattern, replacement: &Expr) -> RegexPattern {
     match pattern {
         RegexPattern::Literal(text) => RegexPattern::Literal(text.clone()),
@@ -2064,4 +2139,450 @@ fn dummy_span() -> SourceSpan {
             column: 0,
         },
     }
+}
+
+fn lower_if_expr(
+    builder: &AstBuilder<'_>,
+    cond: &Expr,
+    body: &[Stmt],
+    elifs: &[(Condition, Vec<Stmt>)],
+    else_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let test = lower_expr(builder, cond)?;
+    let body = lower_block(builder, body, span)?;
+    let orelse = if let Some((elif_cond, elif_body)) = elifs.first() {
+        lower_if_chain(builder, elif_cond, elif_body, &elifs[1..], else_body, span)?
+    } else if let Some(else_body) = else_body {
+        lower_block(builder, else_body, span)?
+    } else {
+        Vec::new()
+    };
+    builder
+        .call_node(
+            "If",
+            vec![
+                test,
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)
+}
+
+pub(crate) fn lower_if_chain(
+    builder: &AstBuilder<'_>,
+    cond: &Condition,
+    body: &[Stmt],
+    elifs: &[(Condition, Vec<Stmt>)],
+    else_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    match cond {
+        Condition::Expr(cond) => Ok(vec![lower_if_expr(
+            builder,
+            cond.as_ref(),
+            body,
+            elifs,
+            else_body,
+            span,
+        )?]),
+        Condition::Let {
+            target,
+            value,
+            guard,
+            span: cond_span,
+        } => lower_if_let(
+            builder,
+            target.as_ref(),
+            value.as_ref(),
+            guard.as_ref().map(|expr| expr.as_ref()),
+            body,
+            elifs,
+            else_body,
+            cond_span,
+        ),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn lower_if_let(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+    value: &Expr,
+    guard: Option<&Expr>,
+    body: &[Stmt],
+    elifs: &[(Condition, Vec<Stmt>)],
+    else_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let mut stmts = Vec::new();
+    let value_expr = lower_expr(builder, value)?;
+    stmts.push(assign_name(builder, SNAIL_LET_VALUE, value_expr, span)?);
+
+    let try_node = build_destructure_try(builder, target, span)?;
+    stmts.push(try_node);
+
+    let test = build_let_guard_test(builder, guard, span)?;
+    let body = lower_block(builder, body, span)?;
+    let orelse = if let Some((elif_cond, elif_body)) = elifs.first() {
+        lower_if_chain(builder, elif_cond, elif_body, &elifs[1..], else_body, span)?
+    } else if let Some(else_body) = else_body {
+        lower_block(builder, else_body, span)?
+    } else {
+        Vec::new()
+    };
+    let if_node = builder
+        .call_node(
+            "If",
+            vec![
+                test,
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    stmts.push(if_node);
+    Ok(stmts)
+}
+
+pub(crate) fn lower_if_block_with_tail(
+    builder: &AstBuilder<'_>,
+    cond: &Condition,
+    body: &[Stmt],
+    elifs: &[(Condition, Vec<Stmt>)],
+    else_body: &Option<Vec<Stmt>>,
+    tail: TailBehavior,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    match cond {
+        Condition::Expr(cond_expr) => {
+            let test = lower_expr(builder, cond_expr)?;
+            let body = lower_block_with_tail(builder, body, tail, span)?;
+            let orelse = if let Some((elif_cond, elif_body)) = elifs.first() {
+                lower_if_block_with_tail(
+                    builder,
+                    elif_cond,
+                    elif_body,
+                    &elifs[1..],
+                    else_body,
+                    tail,
+                    span,
+                )?
+            } else if let Some(else_body) = else_body {
+                lower_block_with_tail(builder, else_body, tail, span)?
+            } else {
+                Vec::new()
+            };
+            let if_node = builder
+                .call_node(
+                    "If",
+                    vec![
+                        test,
+                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                        PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            Ok(vec![if_node])
+        }
+        Condition::Let {
+            target,
+            value,
+            guard,
+            span: cond_span,
+        } => {
+            let mut stmts = Vec::new();
+            let value_expr = lower_expr(builder, value)?;
+            stmts.push(assign_name(
+                builder,
+                SNAIL_LET_VALUE,
+                value_expr,
+                cond_span,
+            )?);
+            let try_node = build_destructure_try(builder, target, cond_span)?;
+            stmts.push(try_node);
+            let test =
+                build_let_guard_test(builder, guard.as_ref().map(|expr| expr.as_ref()), cond_span)?;
+            let body = lower_block_with_tail(builder, body, tail, span)?;
+            let orelse = if let Some((elif_cond, elif_body)) = elifs.first() {
+                lower_if_block_with_tail(
+                    builder,
+                    elif_cond,
+                    elif_body,
+                    &elifs[1..],
+                    else_body,
+                    tail,
+                    span,
+                )?
+            } else if let Some(else_body) = else_body {
+                lower_block_with_tail(builder, else_body, tail, span)?
+            } else {
+                Vec::new()
+            };
+            let if_node = builder
+                .call_node(
+                    "If",
+                    vec![
+                        test,
+                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                        PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+                    ],
+                    cond_span,
+                )
+                .map_err(py_err_to_lower)?;
+            stmts.push(if_node);
+            Ok(stmts)
+        }
+    }
+}
+
+/// Lower an expression used as a statement. Returns multiple Python statements
+/// because some expressions (like IfBlock) lower to Python statement nodes.
+pub(crate) fn lower_expr_as_stmt(
+    builder: &AstBuilder<'_>,
+    expr: &Expr,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    match expr {
+        Expr::IfBlock {
+            cond,
+            body,
+            elifs,
+            else_body,
+            span: if_span,
+        } => lower_if_chain(builder, cond, body, elifs, else_body, if_span),
+        _ => {
+            let value = lower_expr(builder, expr)?;
+            Ok(vec![
+                builder
+                    .call_node("Expr", vec![value], span)
+                    .map_err(py_err_to_lower)?,
+            ])
+        }
+    }
+}
+
+/// Lower an expression at tail position with the given tail behavior.
+/// Handles tail propagation into IfBlock branches and generic tail wrapping
+/// (auto-print, capture, implicit return) for other expressions.
+pub(crate) fn lower_tail_expr(
+    builder: &AstBuilder<'_>,
+    expr: &Expr,
+    tail: TailBehavior,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    match expr {
+        Expr::IfBlock {
+            cond,
+            body,
+            elifs,
+            else_body,
+            span: if_span,
+        } => lower_if_block_with_tail(builder, cond, body, elifs, else_body, tail, if_span),
+        _ => {
+            let value = lower_expr(builder, expr)?;
+            match tail {
+                TailBehavior::AutoPrint => build_auto_print_block(builder, value, span),
+                TailBehavior::CaptureOnly => Ok(vec![assign_name(
+                    builder,
+                    "__snail_last_result",
+                    value,
+                    span,
+                )?]),
+                TailBehavior::ImplicitReturn => {
+                    let return_stmt = builder
+                        .call_node("Return", vec![value], span)
+                        .map_err(py_err_to_lower)?;
+                    Ok(vec![return_stmt])
+                }
+                TailBehavior::None => Ok(vec![
+                    builder
+                        .call_node("Expr", vec![value], span)
+                        .map_err(py_err_to_lower)?,
+                ]),
+            }
+        }
+    }
+}
+
+fn build_auto_print_block(
+    builder: &AstBuilder<'_>,
+    expr: PyObject,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let mut stmts = Vec::new();
+
+    let assign = assign_name(builder, "__snail_last_result", expr, span)?;
+    stmts.push(assign);
+
+    let last_result = name_expr(
+        builder,
+        "__snail_last_result",
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+
+    let is_string = builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    "isinstance",
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        last_result.clone_ref(builder.py()),
+                        name_expr(
+                            builder,
+                            "str",
+                            span,
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        )?,
+                    ],
+                )
+                .into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let print_call = builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    "print",
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(builder.py(), vec![last_result.clone_ref(builder.py())])
+                    .into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    let print_stmt = builder
+        .call_node("Expr", vec![print_call], span)
+        .map_err(py_err_to_lower)?;
+
+    let is_not_none = builder
+        .call_node(
+            "Compare",
+            vec![
+                last_result.clone_ref(builder.py()),
+                PyList::new_bound(
+                    builder.py(),
+                    vec![lower_compare_op(builder, CompareOp::IsNot)?],
+                )
+                .into_py(builder.py()),
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        builder
+                            .call_node(
+                                "Constant",
+                                vec![builder.py().None().into_py(builder.py())],
+                                span,
+                            )
+                            .map_err(py_err_to_lower)?,
+                    ],
+                )
+                .into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let import_pprint = builder
+        .call_node(
+            "Import",
+            vec![
+                PyList::new_bound(
+                    builder.py(),
+                    vec![
+                        builder
+                            .call_node_no_loc(
+                                "alias",
+                                vec![
+                                    "pprint".to_string().into_py(builder.py()),
+                                    builder.py().None().into_py(builder.py()),
+                                ],
+                            )
+                            .map_err(py_err_to_lower)?,
+                    ],
+                )
+                .into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let pprint_call = builder
+        .call_node(
+            "Call",
+            vec![
+                builder
+                    .call_node(
+                        "Attribute",
+                        vec![
+                            name_expr(
+                                builder,
+                                "pprint",
+                                span,
+                                builder.load_ctx().map_err(py_err_to_lower)?,
+                            )?,
+                            "pprint".to_string().into_py(builder.py()),
+                            builder.load_ctx().map_err(py_err_to_lower)?,
+                        ],
+                        span,
+                    )
+                    .map_err(py_err_to_lower)?,
+                PyList::new_bound(builder.py(), vec![last_result]).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    let pprint_stmt = builder
+        .call_node("Expr", vec![pprint_call], span)
+        .map_err(py_err_to_lower)?;
+
+    let pprint_if = builder
+        .call_node(
+            "If",
+            vec![
+                is_not_none,
+                PyList::new_bound(builder.py(), vec![import_pprint, pprint_stmt])
+                    .into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    let top_if = builder
+        .call_node(
+            "If",
+            vec![
+                is_string,
+                PyList::new_bound(builder.py(), vec![print_stmt]).into_py(builder.py()),
+                PyList::new_bound(builder.py(), vec![pprint_if]).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+
+    stmts.push(top_if);
+    Ok(stmts)
 }

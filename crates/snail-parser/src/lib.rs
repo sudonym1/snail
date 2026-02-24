@@ -68,23 +68,6 @@ fn validate_program(
 
 fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result<(), ParseError> {
     match stmt {
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
-            ..
-        } => {
-            validate_condition_mode(cond, source, mode)?;
-            validate_block_mode(body, source, mode)?;
-            for (elif_cond, elif_body) in elifs {
-                validate_condition_mode(elif_cond, source, mode)?;
-                validate_block_mode(elif_body, source, mode)?;
-            }
-            if let Some(body) = else_body {
-                validate_block_mode(body, source, mode)?;
-            }
-        }
         Stmt::While {
             cond,
             body,
@@ -432,12 +415,22 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_expr_mode(left, source, mode)?;
             validate_exprs_mode(comparators, source, mode)?;
         }
-        Expr::IfExpr {
-            test, body, orelse, ..
+        Expr::IfBlock {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
         } => {
-            validate_expr_mode(test, source, mode)?;
-            validate_expr_mode(body, source, mode)?;
-            validate_expr_mode(orelse, source, mode)?;
+            validate_condition_mode(cond, source, mode)?;
+            validate_block_mode(body, source, mode)?;
+            for (elif_cond, elif_body) in elifs {
+                validate_condition_mode(elif_cond, source, mode)?;
+                validate_block_mode(elif_body, source, mode)?;
+            }
+            if let Some(else_body) = else_body {
+                validate_block_mode(else_body, source, mode)?;
+            }
         }
         Expr::TryExpr { expr, fallback, .. } => {
             validate_expr_mode(expr, source, mode)?;

@@ -577,15 +577,28 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             }
             *span = shift_span(span, offset, source);
         }
-        Expr::IfExpr {
-            test,
+        Expr::IfBlock {
+            cond,
             body,
-            orelse,
+            elifs,
+            else_body,
             span,
         } => {
-            shift_expr_spans(test, offset, source);
-            shift_expr_spans(body, offset, source);
-            shift_expr_spans(orelse, offset, source);
+            shift_condition_spans(cond, offset, source);
+            for stmt in body {
+                shift_stmt_spans(stmt, offset, source);
+            }
+            for (elif_cond, elif_body) in elifs {
+                shift_condition_spans(elif_cond, offset, source);
+                for stmt in elif_body {
+                    shift_stmt_spans(stmt, offset, source);
+                }
+            }
+            if let Some(else_body) = else_body {
+                for stmt in else_body {
+                    shift_stmt_spans(stmt, offset, source);
+                }
+            }
             *span = shift_span(span, offset, source);
         }
         Expr::TryExpr {
@@ -696,24 +709,6 @@ fn shift_block_spans(block: &mut [Stmt], offset: usize, source: &str) {
 
 fn shift_stmt_spans(stmt: &mut Stmt, offset: usize, source: &str) {
     match stmt {
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
-            span,
-        } => {
-            shift_condition_spans(cond, offset, source);
-            shift_block_spans(body, offset, source);
-            for (cond, block) in elifs {
-                shift_condition_spans(cond, offset, source);
-                shift_block_spans(block, offset, source);
-            }
-            if let Some(block) = else_body {
-                shift_block_spans(block, offset, source);
-            }
-            *span = shift_span(span, offset, source);
-        }
         Stmt::While {
             cond,
             body,

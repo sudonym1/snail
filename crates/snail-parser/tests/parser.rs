@@ -23,12 +23,15 @@ fn parses_basic_program() {
     }
 
     match &program.stmts[1] {
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
-            span,
+        Stmt::Expr {
+            value:
+                Expr::IfBlock {
+                    cond,
+                    body,
+                    elifs,
+                    else_body,
+                    span,
+                },
             ..
         } => {
             expect_condition_name(cond, "x");
@@ -78,11 +81,15 @@ fn parses_if_elif_else_chain() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
+        Stmt::Expr {
+            value:
+                Expr::IfBlock {
+                    cond,
+                    body,
+                    elifs,
+                    else_body,
+                    ..
+                },
             ..
         } => {
             expect_condition_name(cond, "x");
@@ -116,7 +123,10 @@ fn parses_if_let_with_guard() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::If { cond, body, .. } => match cond {
+        Stmt::Expr {
+            value: Expr::IfBlock { cond, body, .. },
+            ..
+        } => match cond {
             Condition::Let {
                 target,
                 value,
@@ -153,7 +163,10 @@ fn parses_if_let_with_starred_target() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::If { cond, .. } => match cond {
+        Stmt::Expr {
+            value: Expr::IfBlock { cond, .. },
+            ..
+        } => match cond {
             Condition::Let { target, value, .. } => {
                 match target.as_ref() {
                     AssignTarget::List { elements, .. } => {
@@ -241,7 +254,10 @@ fn parses_multiline_if_while_with_headers() {
     assert_eq!(program.stmts.len(), 3);
 
     match &program.stmts[0] {
-        Stmt::If { cond, body, .. } => {
+        Stmt::Expr {
+            value: Expr::IfBlock { cond, body, .. },
+            ..
+        } => {
             expect_condition_expr(cond);
             assert_eq!(body.len(), 1);
             assert!(matches!(&body[0], Stmt::Pass { .. }));
@@ -1556,28 +1572,28 @@ fn parses_empty_structured_accessor() {
 }
 
 #[test]
-fn parses_ternary_with_not_in_operator() {
-    let source = "result = x if x not in y else z";
+fn parses_if_block_with_not_in_operator() {
+    let source = "result = if x not in y { x } else { z }";
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
         Stmt::Assign { value, .. } => {
-            assert!(matches!(value, Expr::IfExpr { .. }));
+            assert!(matches!(value, Expr::IfBlock { .. }));
         }
         other => panic!("Expected assignment, got {:?}", other),
     }
 }
 
 #[test]
-fn parses_ternary_with_is_not_operator() {
-    let source = "result = x if x is not None else y";
+fn parses_if_block_with_is_not_operator() {
+    let source = "result = if x is not None { x } else { y }";
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
         Stmt::Assign { value, .. } => {
-            assert!(matches!(value, Expr::IfExpr { .. }));
+            assert!(matches!(value, Expr::IfBlock { .. }));
         }
         other => panic!("Expected assignment, got {:?}", other),
     }
@@ -1591,7 +1607,13 @@ fn parses_if_followed_by_stmt_without_separator() {
     let source = "if x { y = 1 } z";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
+    assert!(matches!(
+        &program.stmts[0],
+        Stmt::Expr {
+            value: Expr::IfBlock { .. },
+            ..
+        }
+    ));
     assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
 }
 
@@ -1655,7 +1677,13 @@ fn parses_nested_compound_stmts_without_separators() {
     let source = "if a { if b { c } d } e";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
+    assert!(matches!(
+        &program.stmts[0],
+        Stmt::Expr {
+            value: Expr::IfBlock { .. },
+            ..
+        }
+    ));
     assert!(matches!(&program.stmts[1], Stmt::Expr { .. }));
 }
 
@@ -1665,7 +1693,13 @@ fn parses_mixed_compound_and_simple_stmts() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 4);
     assert!(matches!(&program.stmts[0], Stmt::Assign { .. }));
-    assert!(matches!(&program.stmts[1], Stmt::If { .. }));
+    assert!(matches!(
+        &program.stmts[1],
+        Stmt::Expr {
+            value: Expr::IfBlock { .. },
+            ..
+        }
+    ));
     assert!(matches!(&program.stmts[2], Stmt::Assign { .. }));
     assert!(matches!(&program.stmts[3], Stmt::Assign { .. }));
 }
@@ -1675,8 +1709,20 @@ fn parses_consecutive_compound_stmts_without_separators() {
     let source = "if a { b } if c { d } while e { f }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 3);
-    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
-    assert!(matches!(&program.stmts[1], Stmt::If { .. }));
+    assert!(matches!(
+        &program.stmts[0],
+        Stmt::Expr {
+            value: Expr::IfBlock { .. },
+            ..
+        }
+    ));
+    assert!(matches!(
+        &program.stmts[1],
+        Stmt::Expr {
+            value: Expr::IfBlock { .. },
+            ..
+        }
+    ));
     assert!(matches!(&program.stmts[2], Stmt::While { .. }));
 }
 

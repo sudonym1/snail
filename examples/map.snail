@@ -5,5 +5,5 @@
 # $src is the input path; $text is the full file contents.
 print("File:", $src)
 print("Size:", len($text), "bytes")
-print("First line:", $text.split('\n')[0] if $text else "(empty)")
+print("First line:", if $text { $text.split('\n')[0] } else { "(empty)" })
 print("---")

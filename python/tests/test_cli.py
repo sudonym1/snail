@@ -484,9 +484,11 @@ def test_lambda_semicolon_disables_implicit_return(
     assert captured.out.splitlines() == ["None", "None"]
 
 
-def test_implicit_return_if_else_requires_return(
+def test_implicit_return_if_else_at_tail(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    # With unified if-expressions, if/else at tail position of a function
+    # propagates implicit return to each branch.
     script = "\n".join(
         [
             "def pick(flag) {",
@@ -497,7 +499,7 @@ def test_implicit_return_if_else_requires_return(
     )
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
-    assert captured.out.strip() == "None"
+    assert captured.out.strip() == "1"
 
 
 def test_auto_print_uses_returned_value(capsys: pytest.CaptureFixture[str]) -> None:

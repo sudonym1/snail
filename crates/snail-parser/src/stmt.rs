@@ -27,7 +27,6 @@ pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, 
 
 pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     match pair.as_rule() {
-        Rule::if_stmt => parse_if(pair, source),
         Rule::while_stmt => parse_while(pair, source),
         Rule::for_stmt => parse_for(pair, source),
         Rule::def_stmt => parse_def(pair, source),
@@ -70,7 +69,7 @@ pub fn parse_block(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, Pars
     Ok(Vec::new())
 }
 
-fn parse_condition(pair: Pair<'_, Rule>, source: &str) -> Result<Condition, ParseError> {
+pub(crate) fn parse_condition(pair: Pair<'_, Rule>, source: &str) -> Result<Condition, ParseError> {
     let span = span_from_pair(&pair, source);
     match pair.as_rule() {
         Rule::if_cond | Rule::while_cond => {
@@ -115,50 +114,6 @@ fn parse_let_condition(pair: Pair<'_, Rule>, source: &str) -> Result<Condition, 
         target: Box::new(target),
         value: Box::new(value),
         guard: guard.map(Box::new),
-        span,
-    })
-}
-
-fn parse_if(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let cond = parse_condition(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing if condition", span.clone(), source))?,
-        source,
-    )?;
-    let body = parse_block(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing if block", span.clone(), source))?,
-        source,
-    )?;
-    let mut elifs = Vec::new();
-    let mut else_body = None;
-    while let Some(next) = inner.next() {
-        match next.as_rule() {
-            Rule::if_cond => {
-                let elif_cond = parse_condition(next, source)?;
-                let elif_block = parse_block(
-                    inner.next().ok_or_else(|| {
-                        error_with_span("missing elif block", span.clone(), source)
-                    })?,
-                    source,
-                )?;
-                elifs.push((elif_cond, elif_block));
-            }
-            Rule::block => {
-                else_body = Some(parse_block(next, source)?);
-            }
-            _ => {}
-        }
-    }
-    Ok(Stmt::If {
-        cond,
-        body,
-        elifs,
-        else_body,
         span,
     })
 }

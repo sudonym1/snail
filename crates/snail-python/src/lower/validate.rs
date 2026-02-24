@@ -14,23 +14,6 @@ fn check_stmts(stmts: &[Stmt], in_function: bool) -> Result<(), LowerError> {
 
 fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
     match stmt {
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
-            ..
-        } => {
-            check_condition(cond, in_function)?;
-            check_stmts(body, in_function)?;
-            for (elif_cond, elif_body) in elifs {
-                check_condition(elif_cond, in_function)?;
-                check_stmts(elif_body, in_function)?;
-            }
-            if let Some(else_body) = else_body {
-                check_stmts(else_body, in_function)?;
-            }
-        }
         Stmt::While {
             cond,
             body,
@@ -264,12 +247,22 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
                 check_expr(expr, in_function)?;
             }
         }
-        Expr::IfExpr {
-            test, body, orelse, ..
+        Expr::IfBlock {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
         } => {
-            check_expr(test, in_function)?;
-            check_expr(body, in_function)?;
-            check_expr(orelse, in_function)?;
+            check_condition(cond, in_function)?;
+            check_stmts(body, in_function)?;
+            for (elif_cond, elif_body) in elifs {
+                check_condition(elif_cond, in_function)?;
+                check_stmts(elif_body, in_function)?;
+            }
+            if let Some(else_body) = else_body {
+                check_stmts(else_body, in_function)?;
+            }
         }
         Expr::TryExpr { expr, fallback, .. } => {
             check_expr(expr, in_function)?;

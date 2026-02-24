@@ -173,6 +173,24 @@ pub fn preprocess(source: &str) -> Result<String, ParseError> {
                 at_stmt_start = false;
                 prev_non_ws_byte = Some(b);
                 i += 1;
+                // After `}` at statement level, inject a separator before the
+                // next token on the same line so that `} if ...` and similar
+                // same-line continuations parse as separate statements.
+                if at_stmt_level(&bracket_stack) {
+                    let mut j = i;
+                    while j < len && (out[j] == b' ' || out[j] == b'\t') {
+                        j += 1;
+                    }
+                    // Inject if there's a space gap and the next byte isn't a
+                    // newline, closing bracket, EOF, semicolon, or record sep.
+                    if j > i
+                        && j < len
+                        && !matches!(out[j], b'\n' | b'\r' | b'}' | b')' | b']' | b';' | RS)
+                    {
+                        out[i] = RS;
+                        at_stmt_start = true;
+                    }
+                }
                 continue;
             }
             _ => {}
@@ -212,8 +230,13 @@ pub fn preprocess(source: &str) -> Result<String, ParseError> {
             let (token_kind, triggers_header) = classify_keyword(word);
             last_token = token_kind;
 
-            if triggers_header && at_stmt_level(&bracket_stack) && at_stmt_start {
-                in_header = true;
+            if triggers_header && at_stmt_level(&bracket_stack) {
+                // if/elif/else always trigger header mode (even in expression position)
+                // Other compound keywords only trigger at statement start
+                let always_header = word == b"if" || word == b"elif" || word == b"else";
+                if always_header || at_stmt_start {
+                    in_header = true;
+                }
             }
 
             at_stmt_start = false;

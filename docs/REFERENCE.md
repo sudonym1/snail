@@ -298,7 +298,9 @@ Explicit semicolons always separate statements regardless of these rules.
   `x, *xs = values`.
 - Boolean operators, comparisons, membership checks, and arithmetic follow
   Python's precedence and short-circuiting rules.
-- Conditional expressions are supported: `fallback = "yes" if flag else "no"`.
+- If-expressions produce values: `fallback = if flag { "yes" } else { "no" }`.
+  Branches can contain multiple statements; the last expression's value is used.
+  Elif chains are supported: `x = if a { 1 } elif b { 2 } else { 3 }`.
 - Compound expressions `(expr1; expr2; expr3)` evaluate each expression from
   left to right and return the final value. Newlines after the opening `(` and
   between expressions are allowed, making them convenient for bundling setup
@@ -358,8 +360,9 @@ def tick { print("tick") }
 tick()
 ```
 Functions implicitly return the final non-semicolon expression statement.
-Use `return` for early exits and for `if`/`else` branches, or add a trailing
-semicolon to suppress the implicit return.
+When an `if`-expression is at tail position, each branch propagates implicit
+return. Use `return` for early exits, or add a trailing semicolon to suppress
+the implicit return.
 Default values, variadic `*args`, and `**kwargs` work as in Python. Calls accept
 positional and keyword arguments interchangeably.
 

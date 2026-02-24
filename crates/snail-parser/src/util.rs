@@ -150,7 +150,7 @@ pub fn expr_span(expr: &snail_ast::Expr) -> &SourceSpan {
         | snail_ast::Expr::PrefixIncr { span, .. }
         | snail_ast::Expr::PostfixIncr { span, .. }
         | snail_ast::Expr::Compare { span, .. }
-        | snail_ast::Expr::IfExpr { span, .. }
+        | snail_ast::Expr::IfBlock { span, .. }
         | snail_ast::Expr::TryExpr { span, .. }
         | snail_ast::Expr::Yield { span, .. }
         | snail_ast::Expr::YieldFrom { span, .. }

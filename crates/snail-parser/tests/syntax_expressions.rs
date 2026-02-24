@@ -2,25 +2,40 @@ mod common;
 
 use common::*;
 use snail_ast::{
-    BinaryOp, CompareOp, Expr, FStringPart, RegexPattern, Stmt, SubprocessKind, UnaryOp,
+    BinaryOp, CompareOp, Condition, Expr, FStringPart, RegexPattern, Stmt, SubprocessKind, UnaryOp,
 };
 
 #[test]
-fn parses_if_expression() {
-    let source = "value = 1 if flag else 2";
+fn parses_if_block_expression() {
+    let source = "value = if flag { 1 } else { 2 }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     let (_, value) = expect_assign(&program.stmts[0]);
     match value {
-        Expr::IfExpr {
-            test, body, orelse, ..
+        Expr::IfBlock {
+            cond,
+            body,
+            else_body,
+            ..
         } => {
-            expect_name(test.as_ref(), "flag");
-            expect_number(body.as_ref(), "1");
-            expect_number(orelse.as_ref(), "2");
+            match cond {
+                Condition::Expr(expr) => expect_name(expr.as_ref(), "flag"),
+                other => panic!("Expected expr condition, got {other:?}"),
+            }
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::Expr { value, .. } => expect_number(value, "1"),
+                other => panic!("Expected expr stmt, got {other:?}"),
+            }
+            let else_body = else_body.as_ref().expect("expected else body");
+            assert_eq!(else_body.len(), 1);
+            match &else_body[0] {
+                Stmt::Expr { value, .. } => expect_number(value, "2"),
+                other => panic!("Expected expr stmt, got {other:?}"),
+            }
         }
-        other => panic!("Expected if expression, got {other:?}"),
+        other => panic!("Expected if block expression, got {other:?}"),
     }
 }
 
@@ -315,34 +330,40 @@ fn parses_empty_structured_accessor() {
 }
 
 #[test]
-fn parses_ternary_with_not_in_operator() {
-    let source = "result = x if x not in y else z";
+fn parses_if_block_with_not_in_operator() {
+    let source = "result = if x not in y { x } else { z }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     let (_, value) = expect_assign(&program.stmts[0]);
     match value {
-        Expr::IfExpr { test, .. } => match test.as_ref() {
-            Expr::Compare { ops, .. } => assert_eq!(ops, &[CompareOp::NotIn]),
-            other => panic!("Expected comparison, got {other:?}"),
+        Expr::IfBlock { cond, .. } => match cond {
+            Condition::Expr(expr) => match expr.as_ref() {
+                Expr::Compare { ops, .. } => assert_eq!(ops, &[CompareOp::NotIn]),
+                other => panic!("Expected comparison, got {other:?}"),
+            },
+            other => panic!("Expected expr condition, got {other:?}"),
         },
-        other => panic!("Expected if expression, got {other:?}"),
+        other => panic!("Expected if block expression, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_ternary_with_is_not_operator() {
-    let source = "result = x if x is not None else y";
+fn parses_if_block_with_is_not_operator() {
+    let source = "result = if x is not None { x } else { y }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     let (_, value) = expect_assign(&program.stmts[0]);
     match value {
-        Expr::IfExpr { test, .. } => match test.as_ref() {
-            Expr::Compare { ops, .. } => assert_eq!(ops, &[CompareOp::IsNot]),
-            other => panic!("Expected comparison, got {other:?}"),
+        Expr::IfBlock { cond, .. } => match cond {
+            Condition::Expr(expr) => match expr.as_ref() {
+                Expr::Compare { ops, .. } => assert_eq!(ops, &[CompareOp::IsNot]),
+                other => panic!("Expected comparison, got {other:?}"),
+            },
+            other => panic!("Expected expr condition, got {other:?}"),
         },
-        other => panic!("Expected if expression, got {other:?}"),
+        other => panic!("Expected if block expression, got {other:?}"),
     }
 }
 

@@ -19,13 +19,6 @@ pub struct Program {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    If {
-        cond: Condition,
-        body: Vec<Stmt>,
-        elifs: Vec<(Condition, Vec<Stmt>)>,
-        else_body: Option<Vec<Stmt>>,
-        span: SourceSpan,
-    },
     While {
         cond: Condition,
         body: Vec<Stmt>,
@@ -263,10 +256,11 @@ pub enum Expr {
         comparators: Vec<Expr>,
         span: SourceSpan,
     },
-    IfExpr {
-        test: Box<Expr>,
-        body: Box<Expr>,
-        orelse: Box<Expr>,
+    IfBlock {
+        cond: Condition,
+        body: Vec<Stmt>,
+        elifs: Vec<(Condition, Vec<Stmt>)>,
+        else_body: Option<Vec<Stmt>>,
         span: SourceSpan,
     },
     TryExpr {

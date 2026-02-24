@@ -32,35 +32,13 @@ impl LambdaHoister {
         format!("__snail_lambda_{}", self.counter)
     }
 
+    fn next_if_name(&mut self) -> String {
+        self.counter += 1;
+        format!("__snail_if_{}", self.counter)
+    }
+
     fn desugar_stmt(&mut self, stmt: &Stmt, prelude: &mut Vec<Stmt>) -> Stmt {
         match stmt {
-            Stmt::If {
-                cond,
-                body,
-                elifs,
-                else_body,
-                span,
-            } => {
-                let cond = self.desugar_condition(cond, prelude);
-                let body = self.desugar_block(body);
-                let elifs = elifs
-                    .iter()
-                    .map(|(elif_cond, elif_body)| {
-                        (
-                            self.desugar_condition(elif_cond, prelude),
-                            self.desugar_block(elif_body),
-                        )
-                    })
-                    .collect();
-                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
-                Stmt::If {
-                    cond,
-                    body,
-                    elifs,
-                    else_body,
-                    span: span.clone(),
-                }
-            }
             Stmt::While {
                 cond,
                 body,
@@ -521,17 +499,68 @@ impl LambdaHoister {
                     .collect(),
                 span: span.clone(),
             },
-            Expr::IfExpr {
-                test,
+            Expr::IfBlock {
+                cond,
                 body,
-                orelse,
+                elifs,
+                else_body,
                 span,
-            } => Expr::IfExpr {
-                test: Box::new(self.desugar_expr(test, prelude)),
-                body: Box::new(self.desugar_expr(body, prelude)),
-                orelse: Box::new(self.desugar_expr(orelse, prelude)),
-                span: span.clone(),
-            },
+            } => {
+                // Always hoist to temp variable. The desugarer converts every
+                // Expr::IfBlock into a Stmt::If that assigns each branch's
+                // tail value to a temp, then returns the temp as Expr::Name.
+                let cond = self.desugar_condition(cond, prelude);
+                let body = self.desugar_block(body);
+                let elifs: Vec<_> = elifs
+                    .iter()
+                    .map(|(elif_cond, elif_body)| {
+                        (
+                            self.desugar_condition(elif_cond, prelude),
+                            self.desugar_block(elif_body),
+                        )
+                    })
+                    .collect();
+                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
+
+                let temp = self.next_if_name();
+                let temp_span = span.clone();
+
+                // Initialize temp to None before the if.
+                prelude.push(Stmt::Assign {
+                    targets: vec![AssignTarget::Name {
+                        name: temp.clone(),
+                        span: temp_span.clone(),
+                    }],
+                    value: Expr::None {
+                        span: temp_span.clone(),
+                    },
+                    span: temp_span.clone(),
+                });
+
+                let body = assign_tail_to_temp(&temp, body, &temp_span);
+                let elifs = elifs
+                    .into_iter()
+                    .map(|(c, b)| (c, assign_tail_to_temp(&temp, b, &temp_span)))
+                    .collect();
+                let else_body = else_body.map(|b| assign_tail_to_temp(&temp, b, &temp_span));
+
+                prelude.push(Stmt::Expr {
+                    value: Expr::IfBlock {
+                        cond,
+                        body,
+                        elifs,
+                        else_body,
+                        span: span.clone(),
+                    },
+                    semicolon_terminated: true,
+                    span: span.clone(),
+                });
+
+                Expr::Name {
+                    name: temp,
+                    span: span.clone(),
+                }
+            }
             Expr::TryExpr {
                 expr,
                 fallback,
@@ -704,4 +733,29 @@ impl LambdaHoister {
             },
         }
     }
+}
+
+/// Rewrites the last statement of a branch to assign its value to a temp variable.
+/// If the last statement is a non-semicolon `Stmt::Expr`, it becomes
+/// `Stmt::Assign { target: temp, value: expr }`. Otherwise the branch is left
+/// unchanged (the temp keeps its pre-initialised `None` value).
+fn assign_tail_to_temp(temp: &str, mut body: Vec<Stmt>, span: &SourceSpan) -> Vec<Stmt> {
+    if let Some(Stmt::Expr {
+        value,
+        semicolon_terminated: false,
+        span: stmt_span,
+    }) = body.last()
+    {
+        let assign = Stmt::Assign {
+            targets: vec![AssignTarget::Name {
+                name: temp.to_string(),
+                span: span.clone(),
+            }],
+            value: value.clone(),
+            span: stmt_span.clone(),
+        };
+        let len = body.len();
+        body[len - 1] = assign;
+    }
+    body
 }

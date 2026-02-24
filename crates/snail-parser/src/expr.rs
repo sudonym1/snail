@@ -8,7 +8,7 @@ use crate::literal::{
     parse_regex_literal, parse_set_literal, parse_slice, parse_structured_accessor,
     parse_subprocess, parse_tuple_literal,
 };
-use crate::stmt::{parse_assign_target_ref_expr, parse_block, parse_parameters};
+use crate::stmt::{parse_assign_target_ref_expr, parse_block, parse_condition, parse_parameters};
 use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
 
 pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -16,7 +16,6 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::expr
         | Rule::aug_assign_expr
         | Rule::yield_expr
-        | Rule::if_expr
         | Rule::or_expr
         | Rule::and_expr
         | Rule::not_expr
@@ -68,6 +67,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::subprocess => parse_subprocess(pair, source),
         Rule::structured_accessor => parse_structured_accessor(pair, source),
         Rule::paren_expr => parse_paren_expr(pair, source),
+        Rule::if_block_expr => parse_if_block_expr(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -81,7 +81,6 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::expr => parse_expr_rule(pair.into_inner().next().unwrap(), source),
         Rule::aug_assign_expr => parse_aug_assign_expr(pair, source),
         Rule::yield_expr => parse_yield_expr(pair, source),
-        Rule::if_expr => parse_if_expr(pair, source),
         Rule::or_expr => fold_left_binary(pair, source, BinaryOp::Or),
         Rule::and_expr => fold_left_binary(pair, source, BinaryOp::And),
         Rule::not_expr => parse_not_expr(pair, source),
@@ -100,6 +99,7 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::compound_expr => parse_compound_expr(pair, source),
         Rule::paren_expr => parse_paren_expr(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
+        Rule::if_block_expr => parse_if_block_expr(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -175,26 +175,44 @@ fn parse_aug_assign_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Par
     })
 }
 
-fn parse_if_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
-    let pair_span = span_from_pair(&pair, source);
+fn parse_if_block_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
-    let body_pair = inner
+    let cond_pair = inner
         .next()
-        .ok_or_else(|| error_with_span("missing if-expression body", pair_span.clone(), source))?;
-    let body = parse_expr_pair(body_pair, source)?;
-    let Some(test_pair) = inner.next() else {
-        return Ok(body);
-    };
-    let test = parse_expr_pair(test_pair, source)?;
-    let orelse_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing if-expression else", pair_span.clone(), source))?;
-    let orelse = parse_expr_pair(orelse_pair, source)?;
-    let span = merge_span(expr_span(&body), expr_span(&orelse));
-    Ok(Expr::IfExpr {
-        test: Box::new(test),
-        body: Box::new(body),
-        orelse: Box::new(orelse),
+        .ok_or_else(|| error_with_span("missing if-block condition", span.clone(), source))?;
+    let cond = parse_condition(cond_pair, source)?;
+    let body = parse_block(
+        inner
+            .next()
+            .ok_or_else(|| error_with_span("missing if-block body", span.clone(), source))?,
+        source,
+    )?;
+    let mut elifs = Vec::new();
+    let mut else_body = None;
+    while let Some(next) = inner.next() {
+        match next.as_rule() {
+            Rule::if_cond => {
+                let elif_cond = parse_condition(next, source)?;
+                let elif_block = parse_block(
+                    inner.next().ok_or_else(|| {
+                        error_with_span("missing elif block", span.clone(), source)
+                    })?,
+                    source,
+                )?;
+                elifs.push((elif_cond, elif_block));
+            }
+            Rule::block => {
+                else_body = Some(parse_block(next, source)?);
+            }
+            _ => {}
+        }
+    }
+    Ok(Expr::IfBlock {
+        cond,
+        body,
+        elifs,
+        else_body,
         span,
     })
 }
