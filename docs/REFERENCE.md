@@ -521,6 +521,10 @@ Snail can delegate `in` checks to user-defined hooks:
 - When `__snail_contains__` is absent, Snail falls back to Python `in` and
   `not in` semantics.
 
+The reason we have these hooks is that the `in` keyword in snail returns a
+truthy value rather than a bool. For example, `x in /regex/` returns a match
+object.
+
 ## Subprocess expressions
 Snail provides succinct subprocess helpers that work seamlessly with the pipeline
 operator:
