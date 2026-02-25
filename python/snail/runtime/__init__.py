@@ -14,8 +14,12 @@ AUTO_IMPORT_NAMES: dict[str, tuple[str, Optional[str]]] = {
     # Whole module imports: import X
     "sys": ("sys", None),
     "os": ("os", None),
+
     # Attribute imports: from X import Y
     "Path": ("pathlib", "Path"),
+    "sleep": ("time", "sleep"),
+    "pprint": ("pprint", "pprint"),
+    "defaultdict": ("collections", "defaultdict"),
 }
 
 
