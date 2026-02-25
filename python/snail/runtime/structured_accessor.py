@@ -145,6 +145,9 @@ def js(input_data=None):
             raise ValueError('Missing input (see "snail --help")')
         input_data = _sys.stdin
 
+    if isinstance(input_data, _os.PathLike):
+        input_data = _os.fspath(input_data)
+
     if input_data == "-":
 
         input_data = _sys.stdin

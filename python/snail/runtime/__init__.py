@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+import os
 import re
 import sys
 from typing import Any, Callable, Optional
@@ -203,11 +204,11 @@ def __snail_lines_iter(source):
     """Iterate lines from a source for 'lines(expr) { }' blocks.
 
     Handles:
-    - str: opens as file path, iterates lines
+    - str/Path: opens as file path, iterates lines
     - file-like (has readline): iterates lines directly
     - other iterable: iterates directly
     """
-    if isinstance(source, str):
+    if isinstance(source, (str, os.PathLike)):
         with open(source) as f:
             yield from f
     elif hasattr(source, "readline"):
@@ -220,10 +221,12 @@ def __snail_lines_iter(source):
 def __snail_open_lines_source(source):
     """Context manager: open a lines() source item for reading.
 
-    - str: open as file path (or stdin for "-")
+    - str/Path: open as file path (or stdin for "-")
     - file-like (has readline): use directly, don't close
     - other: TypeError
     """
+    if isinstance(source, os.PathLike):
+        source = os.fspath(source)
     if isinstance(source, str):
         if source == "-":
             yield sys.stdin, "-"
@@ -251,7 +254,7 @@ def __snail_normalize_sources(*sources):
     if len(sources) != 1:
         return list(sources)
     source = sources[0]
-    if isinstance(source, str) or hasattr(source, "readline"):
+    if isinstance(source, (str, os.PathLike)) or hasattr(source, "readline"):
         return [source]
     return list(source)
 

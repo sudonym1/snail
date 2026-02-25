@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 from .lazy_proxy import LazyProxy
@@ -13,7 +14,7 @@ class LazyFile(LazyProxy):
     __slots__ = ("_path", "_mode", "_kwargs", "_fd", "_closed", "_owns_fd")
 
     def __init__(self, path, mode="r", **kwargs):
-        self._path = path
+        self._path = os.fspath(path) if isinstance(path, os.PathLike) else path
         self._mode = mode
         self._kwargs = kwargs
         self._fd = None
