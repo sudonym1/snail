@@ -534,6 +534,44 @@ os.unlink(temp4.name)
 
 os.unlink(temp.name)
 
+# ---- Timestamps ----
+# ts() creates timestamps from strings, epoch numbers, or current time
+t1 = ts("2024-01-05 10:00:00")
+t2 = ts("2024-01-05 14:00:00")
+assert str(t1) == "2024-01-05 10:00:00"
+
+# Arithmetic: difference returns float seconds
+elapsed = t2 - t1
+assert elapsed == 14400.0
+print("ts elapsed", elapsed)
+
+# Add/subtract seconds to get a new timestamp
+later = t1 + 3600
+assert str(later) == "2024-01-05 11:00:00"
+earlier = t2 - 1800
+assert str(earlier) == "2024-01-05 13:30:00"
+print("ts later", later)
+
+# Comparisons
+assert t2 > t1
+assert t1 < t2
+assert t1 == ts("2024-01-05 10:00:00")
+
+# Attribute access
+assert t1.year == 2024
+assert t1.month == 1
+assert t1.day == 5
+assert t1.hour == 10
+print("ts attrs", t1.year, t1.month, t1.day)
+
+# Format
+assert t1.format("%Y/%m/%d") == "2024/01/05"
+
+# From epoch
+epoch_ts = ts(0)
+assert epoch_ts.year == 1969 or epoch_ts.year == 1970  # timezone-dependent
+print("ts epoch", epoch_ts)
+
 # The implicit return of the last non-semicolon expression is pretty printed
 # to stdout, unless -P is specified
 "automatically printed"

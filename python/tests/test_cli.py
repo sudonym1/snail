@@ -1896,6 +1896,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_env",
         "js",
         "path",
+        "ts",
         "__SnailLazyText",
         "__SnailLazyFile",
     }
@@ -2992,7 +2993,7 @@ def test_lines_expression_source_list(
     f2.write_text("bbb\n")
     script = (
         f'paths = ["{f1.as_posix()}", "{f2.as_posix()}"]\n'
-        f'lines(paths) {{ print($0) }}'
+        f"lines(paths) {{ print($0) }}"
     )
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
@@ -3025,9 +3026,7 @@ def test_files_text_access(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     assert captured.out.strip() == "12"
 
 
-def test_files_multi_source(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_files_multi_source(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Test files() with multiple comma-separated source paths."""
     f1 = tmp_path / "a.txt"
     f2 = tmp_path / "b.txt"
@@ -3175,3 +3174,92 @@ def test_map_mode_auto_prints_tail_expression(
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == ["1", "2", "3"]
+
+
+# --- Tests for ts() timestamp helper ---
+
+
+def test_ts_no_args(capsys: pytest.CaptureFixture[str]) -> None:
+    """ts() with no args returns current time without error."""
+    result, captured = run_cli(capsys, ["-P", "print(type(ts()).__name__)"])
+    assert result == 0
+    assert captured.out.strip() == "SnailTimestamp"
+
+
+def test_ts_parse_string(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["-P", 'print(ts("2024-01-05"))'])
+    assert result == 0
+    assert captured.out.strip() == "2024-01-05 00:00:00"
+
+
+def test_ts_parse_iso_string(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["-P", 'print(ts("2024-01-05T14:30:00"))'])
+    assert result == 0
+    assert captured.out.strip() == "2024-01-05 14:30:00"
+
+
+def test_ts_from_epoch(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["-P", "print(ts(0).year)"])
+    assert result == 0
+    # epoch 0 is 1970 UTC, but local time may be 1969
+    assert captured.out.strip() in ("1969", "1970")
+
+
+def test_ts_subtraction_returns_seconds(capsys: pytest.CaptureFixture[str]) -> None:
+    script = (
+        'a = ts("2024-01-05 10:00:00")\n'
+        'b = ts("2024-01-05 14:00:00")\n'
+        "print(b - a)"
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "14400.0"
+
+
+def test_ts_addition_returns_timestamp(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'a = ts("2024-01-05 10:00:00")\n' "print(a + 3600)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "2024-01-05 11:00:00"
+
+
+def test_ts_radd(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'a = ts("2024-01-05 10:00:00")\n' "print(3600 + a)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "2024-01-05 11:00:00"
+
+
+def test_ts_comparison(capsys: pytest.CaptureFixture[str]) -> None:
+    script = (
+        'a = ts("2024-01-05 10:00:00")\n'
+        'b = ts("2024-01-05 14:00:00")\n'
+        "print(b > a, a < b, a == a)"
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "True True True"
+
+
+def test_ts_format(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'print(ts("2024-01-05 10:30:00").format("%Y/%m/%d"))'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "2024/01/05"
+
+
+def test_ts_attributes(capsys: pytest.CaptureFixture[str]) -> None:
+    script = (
+        't = ts("2024-03-15 09:45:30")\n'
+        "print(t.year, t.month, t.day, t.hour, t.minute, t.second)"
+    )
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "2024 3 15 9 45 30"
+
+
+def test_ts_repr(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'print(repr(ts("2024-01-05 10:00:00")))'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == 'ts("2024-01-05 10:00:00")'

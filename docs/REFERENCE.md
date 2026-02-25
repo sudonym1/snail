@@ -583,6 +583,48 @@ missing = path("*.nonexistent")?
 `path()` raises `GlobError` when no files match any of the given patterns. Use
 the `?` compact-try operator to get an empty list as a fallback.
 
+## Timestamps
+
+The built-in `ts()` function creates timestamp objects that support natural
+arithmetic and comparisons.
+
+```snail
+# Current time
+now = ts()
+
+# Parse a date string (format is auto-guessed via python-dateutil)
+start = ts("Jan 5, 2024 10:30:00")
+end = ts("2024-01-05T14:45:00")
+
+# From epoch seconds
+t = ts(1706140800)
+
+# Arithmetic — subtracting two timestamps returns float seconds
+elapsed = end - start               # 15300.0
+
+# Add/subtract seconds to get a new timestamp
+later = start + 3600                # 1 hour later
+earlier = start - 60                # 1 minute earlier
+
+# Comparisons
+if end > start { print("end is after start") }
+
+# String representation
+print(start)                        # "2024-01-05 10:30:00"
+```
+
+`ts()` accepts:
+- No arguments: current time (`datetime.now()`)
+- A string: parsed with `dateutil.parser.parse()` (auto-guesses format)
+- An int or float: interpreted as epoch seconds (`datetime.fromtimestamp()`)
+- A `datetime` object: wrapped directly
+
+Timestamp objects expose these attributes and methods:
+- `.year`, `.month`, `.day`, `.hour`, `.minute`, `.second` — date/time components
+- `.timestamp()` — POSIX epoch seconds as a float
+- `.format(fmt)` — format using strftime syntax
+- `.dt` — the underlying `datetime.datetime` object
+
 ## JSON queries
 Snail provides first-class JSON support through JMESPath queries using the
 `js()` function and `$[query]` structured pipeline accessor syntax.

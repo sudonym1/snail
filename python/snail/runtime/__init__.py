@@ -14,7 +14,6 @@ AUTO_IMPORT_NAMES: dict[str, tuple[str, Optional[str]]] = {
     # Whole module imports: import X
     "sys": ("sys", None),
     "os": ("os", None),
-
     # Attribute imports: from X import Y
     "Path": ("pathlib", "Path"),
     "sleep": ("time", "sleep"),
@@ -63,6 +62,7 @@ _GETTER_REGISTRY: dict[str, tuple[str, str, bool]] = {
     "_get_aug_attr": (".augmented", "__snail_aug_attr", False),
     "_get_aug_index": (".augmented", "__snail_aug_index", False),
     "_get_path": (".path_helper", "path", False),
+    "_get_ts": (".timestamp", "ts", False),
 }
 
 _LAZY_WRAPPER_REGISTRY: dict[str, str] = {
@@ -78,6 +78,7 @@ _LAZY_WRAPPER_REGISTRY: dict[str, str] = {
     "_lazy_aug_attr": "_get_aug_attr",
     "_lazy_aug_index": "_get_aug_index",
     "_lazy_path": "_get_path",
+    "_lazy_ts": "_get_ts",
 }
 
 _INSTALL_LAZY_HELPER_REGISTRY: dict[str, str] = {
@@ -93,6 +94,7 @@ _INSTALL_LAZY_HELPER_REGISTRY: dict[str, str] = {
     "__snail_aug_index": "_lazy_aug_index",
     "js": "_lazy_js",
     "path": "_lazy_path",
+    "ts": "_lazy_ts",
 }
 
 _INSTALL_EAGER_HELPER_REGISTRY: dict[str, str] = {

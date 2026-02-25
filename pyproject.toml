@@ -12,6 +12,7 @@ license = { file = "LICENSE" }
 dependencies = [
     "astunparse>=1.6.3; python_version < '3.9'",
     "jmespath>=1.0.1",
+    "python-dateutil>=2.8.0",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +23,7 @@ dev = [
     "mypy",
     "pytest",
     "ruff",
+    "types-python-dateutil",
 ]
 
 [project.scripts]
