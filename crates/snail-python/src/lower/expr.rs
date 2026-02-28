@@ -13,7 +13,10 @@ use super::operators::{
     lower_unary_op,
 };
 use super::py_ast::{AstBuilder, py_err_to_lower};
-use super::stmt::{TailBehavior, lower_block, lower_block_with_tail, lower_parameters};
+use super::stmt::{
+    TailBehavior, lower_block, lower_block_with_implicit_return, lower_block_with_tail,
+    lower_except_handler, lower_parameters, lower_while_stmt, lower_with_item,
+};
 
 pub(crate) fn lower_expr(builder: &AstBuilder<'_>, expr: &Expr) -> Result<PyObject, LowerError> {
     lower_expr_with_exception(builder, expr, None)
@@ -1071,6 +1074,18 @@ pub(crate) fn lower_expr_with_exception(
                 .call_node("Lambda", vec![args, body_expr], span)
                 .map_err(py_err_to_lower)
         }
+        Expr::Block { .. }
+        | Expr::If { .. }
+        | Expr::While { .. }
+        | Expr::For { .. }
+        | Expr::Def { .. }
+        | Expr::Class { .. }
+        | Expr::Try { .. }
+        | Expr::With { .. }
+        | Expr::Lines { .. }
+        | Expr::Files { .. } => Err(LowerError::new(
+            "compound expressions cannot be used in expression context yet",
+        )),
     }
 }
 
@@ -1547,6 +1562,17 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
         Expr::Lambda { body, .. } => {
             count_placeholders(body, info);
         }
+        // Compound expressions: placeholders are not expected inside these
+        Expr::Block { .. }
+        | Expr::If { .. }
+        | Expr::While { .. }
+        | Expr::For { .. }
+        | Expr::Def { .. }
+        | Expr::Class { .. }
+        | Expr::Try { .. }
+        | Expr::With { .. }
+        | Expr::Lines { .. }
+        | Expr::Files { .. } => {}
     }
 }
 
@@ -1821,6 +1847,105 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             body: Box::new(substitute_placeholder(body, replacement)),
             span: span.clone(),
         },
+        // Compound expressions: placeholders are not expected inside these,
+        // but we clone them through for completeness.
+        Expr::Block { stmts, span } => Expr::Block {
+            stmts: stmts.clone(),
+            span: span.clone(),
+        },
+        Expr::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            span,
+        } => Expr::If {
+            cond: cond.clone(),
+            body: body.clone(),
+            elifs: elifs.clone(),
+            else_body: else_body.clone(),
+            span: span.clone(),
+        },
+        Expr::While {
+            cond,
+            body,
+            else_body,
+            span,
+        } => Expr::While {
+            cond: cond.clone(),
+            body: body.clone(),
+            else_body: else_body.clone(),
+            span: span.clone(),
+        },
+        Expr::For {
+            target,
+            iter,
+            body,
+            else_body,
+            span,
+        } => Expr::For {
+            target: target.clone(),
+            iter: iter.clone(),
+            body: body.clone(),
+            else_body: else_body.clone(),
+            span: span.clone(),
+        },
+        Expr::Def {
+            name,
+            params,
+            body,
+            span,
+        } => Expr::Def {
+            name: name.clone(),
+            params: params.clone(),
+            body: body.clone(),
+            span: span.clone(),
+        },
+        Expr::Class {
+            name, body, span, ..
+        } => Expr::Class {
+            name: name.clone(),
+            body: body.clone(),
+            span: span.clone(),
+        },
+        Expr::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            span,
+        } => Expr::Try {
+            body: body.clone(),
+            handlers: handlers.clone(),
+            else_body: else_body.clone(),
+            finally_body: finally_body.clone(),
+            span: span.clone(),
+        },
+        Expr::With {
+            items, body, span, ..
+        } => Expr::With {
+            items: items.clone(),
+            body: body.clone(),
+            span: span.clone(),
+        },
+        Expr::Lines {
+            sources,
+            body,
+            span,
+        } => Expr::Lines {
+            sources: sources.clone(),
+            body: body.clone(),
+            span: span.clone(),
+        },
+        Expr::Files {
+            sources,
+            body,
+            span,
+        } => Expr::Files {
+            sources: sources.clone(),
+            body: body.clone(),
+            span: span.clone(),
+        },
     }
 }
 
@@ -1948,6 +2073,148 @@ fn dummy_span() -> SourceSpan {
             column: 0,
         },
     }
+}
+
+fn lower_for_stmt(
+    builder: &AstBuilder<'_>,
+    target: &AssignTarget,
+    iter: &Expr,
+    body: &[Stmt],
+    else_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let target = lower_assign_target(builder, target)?;
+    let iter_expr = lower_expr(builder, iter)?;
+    let body = lower_block(builder, body, span)?;
+    let orelse = else_body
+        .as_ref()
+        .map(|items| lower_block(builder, items, span))
+        .transpose()?
+        .unwrap_or_default();
+    let for_node = builder
+        .call_node(
+            "For",
+            vec![
+                target,
+                iter_expr,
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    Ok(vec![for_node])
+}
+
+fn lower_def_stmt(
+    builder: &AstBuilder<'_>,
+    name: &str,
+    params: &[Parameter],
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let args = lower_parameters(builder, params, None)?;
+    let body = lower_block_with_implicit_return(builder, body, span)?;
+    let decorator_list = PyList::empty_bound(builder.py()).into_py(builder.py());
+    let func_node = builder
+        .call_node(
+            "FunctionDef",
+            vec![
+                name.to_string().into_py(builder.py()),
+                args,
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                decorator_list,
+                builder.py().None().into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    Ok(vec![func_node])
+}
+
+fn lower_class_stmt(
+    builder: &AstBuilder<'_>,
+    name: &str,
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let body = lower_block(builder, body, span)?;
+    let class_node = builder
+        .call_node(
+            "ClassDef",
+            vec![
+                name.to_string().into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    Ok(vec![class_node])
+}
+
+fn lower_try_stmt(
+    builder: &AstBuilder<'_>,
+    body: &[Stmt],
+    handlers: &[ExceptHandler],
+    else_body: &Option<Vec<Stmt>>,
+    finally_body: &Option<Vec<Stmt>>,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let body = lower_block(builder, body, span)?;
+    let handlers = handlers
+        .iter()
+        .map(|handler| lower_except_handler(builder, handler))
+        .collect::<Result<Vec<_>, _>>()?;
+    let orelse = else_body
+        .as_ref()
+        .map(|items| lower_block(builder, items, span))
+        .transpose()?
+        .unwrap_or_default();
+    let finalbody = finally_body
+        .as_ref()
+        .map(|items| lower_block(builder, items, span))
+        .transpose()?
+        .unwrap_or_default();
+    let try_node = builder
+        .call_node(
+            "Try",
+            vec![
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+                PyList::new_bound(builder.py(), handlers).into_py(builder.py()),
+                PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
+                PyList::new_bound(builder.py(), finalbody).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    Ok(vec![try_node])
+}
+
+fn lower_with_stmt(
+    builder: &AstBuilder<'_>,
+    items: &[WithItem],
+    body: &[Stmt],
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let items = items
+        .iter()
+        .map(|item| lower_with_item(builder, item))
+        .collect::<Result<Vec<_>, _>>()?;
+    let body = lower_block(builder, body, span)?;
+    let with_node = builder
+        .call_node(
+            "With",
+            vec![
+                PyList::new_bound(builder.py(), items).into_py(builder.py()),
+                PyList::new_bound(builder.py(), body).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    Ok(vec![with_node])
 }
 
 fn lower_if_expr(
@@ -2150,29 +2417,154 @@ pub(crate) fn lower_if_block_with_tail(
 }
 
 /// Lower an expression used as a statement. Returns multiple Python statements
-/// because some expressions (like IfBlock) lower to Python statement nodes.
+/// because some expressions (like If, While, For, etc.) lower to Python statement nodes.
 pub(crate) fn lower_expr_as_stmt(
     builder: &AstBuilder<'_>,
     expr: &Expr,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    let value = lower_expr(builder, expr)?;
-    Ok(vec![
-        builder
-            .call_node("Expr", vec![value], span)
-            .map_err(py_err_to_lower)?,
-    ])
+    match expr {
+        Expr::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            span,
+        } => lower_if_chain(builder, cond, body, elifs, else_body, span),
+        Expr::While {
+            cond,
+            body,
+            else_body,
+            span,
+        } => lower_while_stmt(builder, cond, body, else_body, span),
+        Expr::For {
+            target,
+            iter,
+            body,
+            else_body,
+            span,
+        } => lower_for_stmt(builder, target, iter, body, else_body, span),
+        Expr::Def {
+            name,
+            params,
+            body,
+            span,
+        } => lower_def_stmt(builder, name, params, body, span),
+        Expr::Class {
+            name, body, span, ..
+        } => lower_class_stmt(builder, name, body, span),
+        Expr::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            span,
+        } => lower_try_stmt(builder, body, handlers, else_body, finally_body, span),
+        Expr::With {
+            items, body, span, ..
+        } => lower_with_stmt(builder, items, body, span),
+        Expr::Lines {
+            sources,
+            body,
+            span,
+            ..
+        } => super::awk::lower_lines_stmt(builder, sources, body, span, false, false),
+        Expr::Files {
+            sources,
+            body,
+            span,
+            ..
+        } => super::map::lower_files_stmt(builder, sources, body, span, false, false),
+        Expr::Block { stmts, span } => lower_block(builder, stmts, span),
+        _ => {
+            let value = lower_expr(builder, expr)?;
+            Ok(vec![
+                builder
+                    .call_node("Expr", vec![value], span)
+                    .map_err(py_err_to_lower)?,
+            ])
+        }
+    }
 }
 
 /// Lower an expression at tail position with the given tail behavior.
-/// Handles tail propagation into IfBlock branches and generic tail wrapping
-/// (auto-print, capture, implicit return) for other expressions.
+/// Handles tail propagation into compound expression branches (if, lines, files)
+/// and generic tail wrapping (auto-print, capture, implicit return) for other expressions.
 pub(crate) fn lower_tail_expr(
     builder: &AstBuilder<'_>,
     expr: &Expr,
     tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
+    // Propagate tail behavior into if branches
+    if let Expr::If {
+        cond,
+        body,
+        elifs,
+        else_body,
+        span,
+    } = expr
+    {
+        return lower_if_block_with_tail(builder, cond, body, elifs, else_body, tail, span);
+    }
+    // Propagate tail behavior into block expressions
+    if let Expr::Block {
+        stmts,
+        span: block_span,
+    } = expr
+    {
+        return lower_block_with_tail(builder, stmts, tail, block_span);
+    }
+    // Propagate tail behavior into lines/files blocks
+    if matches!(tail, TailBehavior::AutoPrint | TailBehavior::CaptureOnly) {
+        match expr {
+            Expr::Lines {
+                sources,
+                body,
+                span,
+                ..
+            } => {
+                return super::awk::lower_lines_stmt(
+                    builder,
+                    sources,
+                    body,
+                    span,
+                    tail == TailBehavior::AutoPrint,
+                    tail == TailBehavior::CaptureOnly,
+                );
+            }
+            Expr::Files {
+                sources,
+                body,
+                span,
+                ..
+            } => {
+                return super::map::lower_files_stmt(
+                    builder,
+                    sources,
+                    body,
+                    span,
+                    tail == TailBehavior::AutoPrint,
+                    tail == TailBehavior::CaptureOnly,
+                );
+            }
+            _ => {}
+        }
+    }
+    // Compound expressions that don't propagate tail behavior are lowered as statements
+    if matches!(
+        expr,
+        Expr::While { .. }
+            | Expr::For { .. }
+            | Expr::Def { .. }
+            | Expr::Class { .. }
+            | Expr::Try { .. }
+            | Expr::With { .. }
+            | Expr::Lines { .. }
+            | Expr::Files { .. }
+    ) {
+        return lower_expr_as_stmt(builder, expr, span);
+    }
     let value = lower_expr(builder, expr)?;
     match tail {
         TailBehavior::AutoPrint => build_auto_print_block(builder, value, span),

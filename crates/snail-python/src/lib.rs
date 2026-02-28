@@ -14,7 +14,7 @@ use pyo3::Bound;
 use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyModule};
-use snail_ast::Stmt;
+use snail_ast::{Expr, Stmt};
 use snail_error::{ParseError, format_snail_error};
 use snail_parser::preprocess;
 use std::time::Instant;
@@ -125,19 +125,39 @@ fn prepare_globals<'py>(
 fn has_tail_expression(source: &str) -> bool {
     snail_parser::parse(source)
         .map(|program| {
-            matches!(
-                program
-                    .stmts
-                    .iter()
-                    .rev()
-                    .find(|s| !matches!(s, Stmt::SegmentBreak { .. })),
+            let last = program
+                .stmts
+                .iter()
+                .rev()
+                .find(|s| !matches!(s, Stmt::SegmentBreak { .. }));
+            match last {
                 Some(Stmt::Expr {
+                    value,
                     semicolon_terminated: false,
                     ..
-                })
-            )
+                }) => !is_compound_statement_expr(value),
+                _ => false,
+            }
         })
         .unwrap_or(false)
+}
+
+/// Returns true for compound expressions that act as statements and don't
+/// produce a meaningful expression value (for, while, def, class, try, with,
+/// lines, files, block).
+fn is_compound_statement_expr(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Block { .. }
+            | Expr::While { .. }
+            | Expr::For { .. }
+            | Expr::Def { .. }
+            | Expr::Class { .. }
+            | Expr::Try { .. }
+            | Expr::With { .. }
+            | Expr::Lines { .. }
+            | Expr::Files { .. }
+    )
 }
 
 #[pyfunction(name = "compile")]

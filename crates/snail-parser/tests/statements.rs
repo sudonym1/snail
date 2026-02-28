@@ -9,8 +9,8 @@ fn parses_try_except_finally_and_raise() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
-    match &program.stmts[0] {
-        Stmt::Try {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Try {
             body,
             handlers,
             else_body,
@@ -72,8 +72,8 @@ fn parses_raise_from_and_try_finally() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
 
-    match &program.stmts[0] {
-        Stmt::Try {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Try {
             handlers,
             finally_body,
             ..
@@ -111,8 +111,8 @@ fn parses_return_and_raise_with_newline_continuations() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
 
-    match &program.stmts[0] {
-        Stmt::Def { name, body, .. } => {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { name, body, .. } => {
             assert_eq!(name, "ret");
             assert_eq!(body.len(), 1);
             match &body[0] {
@@ -126,8 +126,8 @@ fn parses_return_and_raise_with_newline_continuations() {
         other => panic!("Expected function def, got {other:?}"),
     }
 
-    match &program.stmts[1] {
-        Stmt::Def { name, body, .. } => {
+    match unwrap_expr(&program.stmts[1]) {
+        Expr::Def { name, body, .. } => {
             assert_eq!(name, "boom");
             assert_eq!(body.len(), 1);
             match &body[0] {
@@ -154,8 +154,8 @@ fn parses_with_statement() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
-    match &program.stmts[0] {
-        Stmt::With { items, body, .. } => {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::With { items, body, .. } => {
             assert_eq!(items.len(), 1);
             let item = &items[0];
             match &item.context {
@@ -304,8 +304,8 @@ fn parses_defaults_and_star_args() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
 
-    match &program.stmts[0] {
-        Stmt::Def { params, .. } => {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { params, .. } => {
             assert_eq!(params.len(), 4);
             match &params[0] {
                 Parameter::Regular { name, default, .. } => {
@@ -361,8 +361,8 @@ fn parses_loop_else_with_try_break_continue() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
 
-    match &program.stmts[0] {
-        Stmt::For {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::For {
             target,
             iter,
             body,
@@ -373,9 +373,9 @@ fn parses_loop_else_with_try_break_continue() {
                 AssignTarget::Name { name, .. } => assert_eq!(name, "n"),
                 other => panic!("Expected name target, got {other:?}"),
             }
-            expect_name(iter, "nums");
-            match &body[0] {
-                Stmt::Try { finally_body, .. } => {
+            expect_name(iter.as_ref(), "nums");
+            match unwrap_expr(&body[0]) {
+                Expr::Try { finally_body, .. } => {
                     let finally_body = finally_body.as_ref().expect("expected finally body");
                     match &finally_body[0] {
                         Stmt::Expr { value, .. } => match value {
@@ -398,16 +398,16 @@ fn parses_loop_else_with_try_break_continue() {
         other => panic!("Expected for loop, got {other:?}"),
     }
 
-    match &program.stmts[1] {
-        Stmt::While {
+    match unwrap_expr(&program.stmts[1]) {
+        Expr::While {
             cond,
             body,
             else_body,
             ..
         } => {
             expect_condition_name(cond, "flag");
-            match &body[0] {
-                Stmt::Try { finally_body, .. } => {
+            match unwrap_expr(&body[0]) {
+                Expr::Try { finally_body, .. } => {
                     let finally_body = finally_body.as_ref().expect("expected finally body");
                     match &finally_body[0] {
                         Stmt::Expr { value, .. } => match value {
@@ -435,8 +435,8 @@ fn parses_loop_else_with_try_break_continue() {
 fn parses_empty_function_body() {
     let program = parse_ok("def foo() { }");
     assert_eq!(program.stmts.len(), 1);
-    match &program.stmts[0] {
-        Stmt::Def { body, .. } => assert!(body.is_empty()),
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { body, .. } => assert!(body.is_empty()),
         other => panic!("Expected function def, got {other:?}"),
     }
 }
@@ -445,8 +445,8 @@ fn parses_empty_function_body() {
 fn parses_empty_function_body_without_params() {
     let program = parse_ok("def foo { }");
     assert_eq!(program.stmts.len(), 1);
-    match &program.stmts[0] {
-        Stmt::Def { params, body, .. } => {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { params, body, .. } => {
             assert!(params.is_empty());
             assert!(body.is_empty());
         }

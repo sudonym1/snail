@@ -20,11 +20,13 @@ fn assert_files_mode_error(source: &str, token: &str, mode_hint: &str) {
 
 #[test]
 fn reports_parse_error_with_location() {
+    // With blocks as expressions, `if { }` parses `{ }` as the condition
+    // (a block expression), then fails because the required body block is missing.
+    // The error position is after `}` (column 7), not at `{` (column 4).
     let err = parse_err("if { }");
     let message = err.to_string();
     assert!(message.contains("-->"));
-    assert!(message.contains("if"));
-    expect_err_span(&err, 1, 4);
+    expect_err_span(&err, 1, 7);
 }
 
 #[test]
@@ -100,9 +102,11 @@ fn parser_reports_error_on_missing_colon_in_dict() {
 }
 
 #[test]
-fn parser_rejects_braced_expression() {
-    let err = parse_err("d = {}");
-    assert!(err.span.is_some());
+fn braced_expression_now_parses_as_block() {
+    // With compound constructs as expressions, {} is a valid empty block expression.
+    // Previously this was rejected; now it parses as Assign { value: Block { stmts: [] } }.
+    let program = parse_ok("d = {}");
+    assert_eq!(program.stmts.len(), 1);
 }
 
 #[test]

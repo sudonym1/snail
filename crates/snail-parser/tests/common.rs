@@ -26,6 +26,16 @@ pub fn expect_expr_stmt(stmt: &Stmt) -> &Expr {
     }
 }
 
+/// Unwrap a Stmt::Expr to get the inner Expr.
+/// All compound constructs (if, while, for, def, class, try, with, lines, files)
+/// are now Expr variants wrapped in Stmt::Expr at statement level.
+pub fn unwrap_expr(stmt: &Stmt) -> &Expr {
+    match stmt {
+        Stmt::Expr { value, .. } => value,
+        other => panic!("Expected Stmt::Expr wrapper, got {other:?}"),
+    }
+}
+
 pub fn expect_name(expr: &Expr, expected: &str) {
     match expr {
         Expr::Name { name, .. } => assert_eq!(name, expected),

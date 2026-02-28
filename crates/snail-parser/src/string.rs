@@ -651,6 +651,18 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             shift_expr_spans(body, offset, source);
             *span = shift_span(span, offset, source);
         }
+        Expr::Block { span, .. }
+        | Expr::If { span, .. }
+        | Expr::While { span, .. }
+        | Expr::For { span, .. }
+        | Expr::Def { span, .. }
+        | Expr::Class { span, .. }
+        | Expr::Try { span, .. }
+        | Expr::With { span, .. }
+        | Expr::Lines { span, .. }
+        | Expr::Files { span, .. } => {
+            *span = shift_span(span, offset, source);
+        }
     }
 }
 

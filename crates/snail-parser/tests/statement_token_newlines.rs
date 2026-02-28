@@ -27,13 +27,6 @@ enum StmtKind {
 
 fn stmt_kind(stmt: &Stmt) -> StmtKind {
     match stmt {
-        Stmt::If { .. } => StmtKind::If,
-        Stmt::While { .. } => StmtKind::While,
-        Stmt::For { .. } => StmtKind::For,
-        Stmt::Def { .. } => StmtKind::Def,
-        Stmt::Class { .. } => StmtKind::Class,
-        Stmt::Try { .. } => StmtKind::Try,
-        Stmt::With { .. } => StmtKind::With,
         Stmt::Return { .. } => StmtKind::Return,
         Stmt::Break { .. } => StmtKind::Break,
         Stmt::Continue { .. } => StmtKind::Continue,
@@ -44,8 +37,17 @@ fn stmt_kind(stmt: &Stmt) -> StmtKind {
         Stmt::Import { .. } => StmtKind::Import,
         Stmt::ImportFrom { .. } => StmtKind::ImportFrom,
         Stmt::Assign { .. } => StmtKind::Assign,
-        Stmt::Expr { .. } => StmtKind::Expr,
-        Stmt::Lines { .. } | Stmt::Files { .. } | Stmt::PatternAction { .. } => StmtKind::Expr,
+        Stmt::Expr { value, .. } => match value {
+            Expr::If { .. } => StmtKind::If,
+            Expr::While { .. } => StmtKind::While,
+            Expr::For { .. } => StmtKind::For,
+            Expr::Def { .. } => StmtKind::Def,
+            Expr::Class { .. } => StmtKind::Class,
+            Expr::Try { .. } => StmtKind::Try,
+            Expr::With { .. } => StmtKind::With,
+            _ => StmtKind::Expr,
+        },
+        Stmt::PatternAction { .. } => StmtKind::Expr,
         Stmt::SegmentBreak { .. } => StmtKind::Expr,
     }
 }

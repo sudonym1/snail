@@ -11,8 +11,8 @@ fn parses_if_statement() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
-    match &program.stmts[0] {
-        Stmt::If {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::If {
             cond,
             body,
             else_body,
@@ -44,8 +44,8 @@ fn parses_yield_expressions() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
-    match &program.stmts[0] {
-        Stmt::Def { body, .. } => {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { body, .. } => {
             assert_eq!(body.len(), 3);
             match &body[0] {
                 Stmt::Expr { value, .. } => match value {
@@ -334,8 +334,8 @@ fn parses_if_stmt_with_not_in_operator() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
-    match &program.stmts[0] {
-        Stmt::If { cond, .. } => match cond {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::If { cond, .. } => match cond {
             Condition::Expr(expr) => match expr.as_ref() {
                 Expr::Compare { ops, .. } => assert_eq!(ops, &[CompareOp::NotIn]),
                 other => panic!("Expected comparison, got {other:?}"),
@@ -352,8 +352,8 @@ fn parses_if_stmt_with_is_not_operator() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
-    match &program.stmts[0] {
-        Stmt::If { cond, .. } => match cond {
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::If { cond, .. } => match cond {
             Condition::Expr(expr) => match expr.as_ref() {
                 Expr::Compare { ops, .. } => assert_eq!(ops, &[CompareOp::IsNot]),
                 other => panic!("Expected comparison, got {other:?}"),

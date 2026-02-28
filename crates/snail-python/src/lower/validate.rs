@@ -14,88 +14,6 @@ fn check_stmts(stmts: &[Stmt], in_function: bool) -> Result<(), LowerError> {
 
 fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
     match stmt {
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
-            ..
-        } => {
-            check_condition(cond, in_function)?;
-            check_stmts(body, in_function)?;
-            for (elif_cond, elif_body) in elifs {
-                check_condition(elif_cond, in_function)?;
-                check_stmts(elif_body, in_function)?;
-            }
-            if let Some(else_body) = else_body {
-                check_stmts(else_body, in_function)?;
-            }
-        }
-        Stmt::While {
-            cond,
-            body,
-            else_body,
-            ..
-        } => {
-            check_condition(cond, in_function)?;
-            check_stmts(body, in_function)?;
-            if let Some(else_body) = else_body {
-                check_stmts(else_body, in_function)?;
-            }
-        }
-        Stmt::For {
-            target,
-            iter,
-            body,
-            else_body,
-            ..
-        } => {
-            check_assign_target(target, in_function)?;
-            check_expr(iter, in_function)?;
-            check_stmts(body, in_function)?;
-            if let Some(else_body) = else_body {
-                check_stmts(else_body, in_function)?;
-            }
-        }
-        Stmt::Def { params, body, .. } => {
-            for param in params {
-                check_param(param)?;
-            }
-            check_stmts(body, true)?;
-        }
-        Stmt::Class { body, .. } => {
-            check_stmts(body, false)?;
-        }
-        Stmt::Try {
-            body,
-            handlers,
-            else_body,
-            finally_body,
-            ..
-        } => {
-            check_stmts(body, in_function)?;
-            for handler in handlers {
-                if let Some(type_name) = &handler.type_name {
-                    check_expr(type_name, in_function)?;
-                }
-                check_stmts(&handler.body, in_function)?;
-            }
-            if let Some(else_body) = else_body {
-                check_stmts(else_body, in_function)?;
-            }
-            if let Some(finally_body) = finally_body {
-                check_stmts(finally_body, in_function)?;
-            }
-        }
-        Stmt::With { items, body, .. } => {
-            for item in items {
-                check_expr(&item.context, in_function)?;
-                if let Some(target) = &item.target {
-                    check_assign_target(target, in_function)?;
-                }
-            }
-            check_stmts(body, in_function)?;
-        }
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
                 check_expr(value, in_function)?;
@@ -135,28 +53,6 @@ fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
         | Stmt::Import { .. }
         | Stmt::ImportFrom { .. }
         | Stmt::SegmentBreak { .. } => {}
-        Stmt::Lines { sources, body, .. } => {
-            for source in sources {
-                match source {
-                    Argument::Positional { value, .. }
-                    | Argument::Keyword { value, .. }
-                    | Argument::Star { value, .. }
-                    | Argument::KwStar { value, .. } => check_expr(value, in_function)?,
-                }
-            }
-            check_stmts(body, in_function)?;
-        }
-        Stmt::Files { sources, body, .. } => {
-            for source in sources {
-                match source {
-                    Argument::Positional { value, .. }
-                    | Argument::Keyword { value, .. }
-                    | Argument::Star { value, .. }
-                    | Argument::KwStar { value, .. } => check_expr(value, in_function)?,
-                }
-            }
-            check_stmts(body, in_function)?;
-        }
         Stmt::PatternAction {
             pattern, action, ..
         } => {
@@ -340,6 +236,102 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
         Expr::Lambda { body, .. } => {
             // Lambda body is inside a function context
             check_expr(body, true)?;
+        }
+        Expr::Block { stmts, .. } => {
+            check_stmts(stmts, in_function)?;
+        }
+        Expr::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
+        } => {
+            check_condition(cond, in_function)?;
+            check_stmts(body, in_function)?;
+            for (elif_cond, elif_body) in elifs {
+                check_condition(elif_cond, in_function)?;
+                check_stmts(elif_body, in_function)?;
+            }
+            if let Some(else_body) = else_body {
+                check_stmts(else_body, in_function)?;
+            }
+        }
+        Expr::While {
+            cond,
+            body,
+            else_body,
+            ..
+        } => {
+            check_condition(cond, in_function)?;
+            check_stmts(body, in_function)?;
+            if let Some(else_body) = else_body {
+                check_stmts(else_body, in_function)?;
+            }
+        }
+        Expr::For {
+            target,
+            iter,
+            body,
+            else_body,
+            ..
+        } => {
+            check_assign_target(target, in_function)?;
+            check_expr(iter, in_function)?;
+            check_stmts(body, in_function)?;
+            if let Some(else_body) = else_body {
+                check_stmts(else_body, in_function)?;
+            }
+        }
+        Expr::Def { params, body, .. } => {
+            for param in params {
+                check_param(param)?;
+            }
+            check_stmts(body, true)?;
+        }
+        Expr::Class { body, .. } => {
+            check_stmts(body, false)?;
+        }
+        Expr::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            ..
+        } => {
+            check_stmts(body, in_function)?;
+            for handler in handlers {
+                if let Some(type_name) = &handler.type_name {
+                    check_expr(type_name, in_function)?;
+                }
+                check_stmts(&handler.body, in_function)?;
+            }
+            if let Some(else_body) = else_body {
+                check_stmts(else_body, in_function)?;
+            }
+            if let Some(finally_body) = finally_body {
+                check_stmts(finally_body, in_function)?;
+            }
+        }
+        Expr::With { items, body, .. } => {
+            for item in items {
+                check_expr(&item.context, in_function)?;
+                if let Some(target) = &item.target {
+                    check_assign_target(target, in_function)?;
+                }
+            }
+            check_stmts(body, in_function)?;
+        }
+        Expr::Lines { sources, body, .. } | Expr::Files { sources, body, .. } => {
+            for source in sources {
+                match source {
+                    Argument::Positional { value, .. }
+                    | Argument::Keyword { value, .. }
+                    | Argument::Star { value, .. }
+                    | Argument::KwStar { value, .. } => check_expr(value, in_function)?,
+                }
+            }
+            check_stmts(body, in_function)?;
         }
     }
     Ok(())

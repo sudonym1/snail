@@ -1,10 +1,53 @@
 use snail_ast::*;
 
-pub(super) struct LambdaHoister;
+pub(super) struct LambdaHoister {
+    block_counter: usize,
+}
 
 impl LambdaHoister {
     pub(super) fn new() -> Self {
-        Self
+        Self { block_counter: 0 }
+    }
+
+    fn next_block_name(&mut self) -> String {
+        let name = format!("__snail_block_{}", self.block_counter);
+        self.block_counter += 1;
+        name
+    }
+
+    fn hoist_compound_expr(
+        &mut self,
+        expr: Expr,
+        prelude: &mut Vec<Stmt>,
+        span: &SourceSpan,
+    ) -> Expr {
+        let name = self.next_block_name();
+        let body = match expr {
+            Expr::Block { stmts, .. } => stmts,
+            other => vec![Stmt::Expr {
+                value: other,
+                semicolon_terminated: false,
+                span: span.clone(),
+            }],
+        };
+        prelude.push(Stmt::Expr {
+            value: Expr::Def {
+                name: name.clone(),
+                params: vec![],
+                body,
+                span: span.clone(),
+            },
+            semicolon_terminated: false,
+            span: span.clone(),
+        });
+        Expr::Call {
+            func: Box::new(Expr::Name {
+                name,
+                span: span.clone(),
+            }),
+            args: vec![],
+            span: span.clone(),
+        }
     }
 
     pub(super) fn desugar_program(&mut self, program: &Program) -> Program {
@@ -27,128 +70,6 @@ impl LambdaHoister {
 
     fn desugar_stmt(&mut self, stmt: &Stmt, prelude: &mut Vec<Stmt>) -> Stmt {
         match stmt {
-            Stmt::If {
-                cond,
-                body,
-                elifs,
-                else_body,
-                span,
-            } => {
-                let cond = self.desugar_condition(cond, prelude);
-                let body = self.desugar_block(body);
-                let elifs: Vec<_> = elifs
-                    .iter()
-                    .map(|(elif_cond, elif_body)| {
-                        // elif conditions can have their own preludes which need to be
-                        // handled within the elif body, but for simplicity we desugar
-                        // inline since elif conditions don't contain lambdas/if-exprs
-                        let mut elif_prelude = Vec::new();
-                        let c = self.desugar_condition(elif_cond, &mut elif_prelude);
-                        let b = self.desugar_block(elif_body);
-                        (c, b)
-                    })
-                    .collect();
-                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
-                Stmt::If {
-                    cond,
-                    body,
-                    elifs,
-                    else_body,
-                    span: span.clone(),
-                }
-            }
-            Stmt::While {
-                cond,
-                body,
-                else_body,
-                span,
-            } => {
-                let cond = self.desugar_condition(cond, prelude);
-                let body = self.desugar_block(body);
-                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
-                Stmt::While {
-                    cond,
-                    body,
-                    else_body,
-                    span: span.clone(),
-                }
-            }
-            Stmt::For {
-                target,
-                iter,
-                body,
-                else_body,
-                span,
-            } => {
-                let target = self.desugar_assign_target(target, prelude);
-                let iter = self.desugar_expr(iter, prelude);
-                let body = self.desugar_block(body);
-                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
-                Stmt::For {
-                    target,
-                    iter,
-                    body,
-                    else_body,
-                    span: span.clone(),
-                }
-            }
-            Stmt::Def {
-                name,
-                params,
-                body,
-                span,
-            } => {
-                let params = self.desugar_params(params, prelude);
-                let body = self.desugar_block(body);
-                Stmt::Def {
-                    name: name.clone(),
-                    params,
-                    body,
-                    span: span.clone(),
-                }
-            }
-            Stmt::Class { name, body, span } => {
-                let body = self.desugar_block(body);
-                Stmt::Class {
-                    name: name.clone(),
-                    body,
-                    span: span.clone(),
-                }
-            }
-            Stmt::Try {
-                body,
-                handlers,
-                else_body,
-                finally_body,
-                span,
-            } => {
-                let body = self.desugar_block(body);
-                let handlers = handlers
-                    .iter()
-                    .map(|handler| self.desugar_except_handler(handler, prelude))
-                    .collect();
-                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
-                let finally_body = finally_body.as_ref().map(|body| self.desugar_block(body));
-                Stmt::Try {
-                    body,
-                    handlers,
-                    else_body,
-                    finally_body,
-                    span: span.clone(),
-                }
-            }
-            Stmt::With { items, body, span } => {
-                let items = items
-                    .iter()
-                    .map(|item| self.desugar_with_item(item, prelude))
-                    .collect();
-                let body = self.desugar_block(body);
-                Stmt::With {
-                    items,
-                    body,
-                    span: span.clone(),
-                }
-            }
             Stmt::Return { value, span } => Stmt::Return {
                 value: value
                     .as_ref()
@@ -215,32 +136,8 @@ impl LambdaHoister {
                 semicolon_terminated,
                 span,
             } => Stmt::Expr {
-                value: self.desugar_expr(value, prelude),
+                value: self.desugar_expr_no_hoist(value, prelude),
                 semicolon_terminated: *semicolon_terminated,
-                span: span.clone(),
-            },
-            Stmt::Lines {
-                sources,
-                body,
-                span,
-            } => Stmt::Lines {
-                sources: sources
-                    .iter()
-                    .map(|src| self.desugar_argument(src, prelude))
-                    .collect(),
-                body: self.desugar_block(body),
-                span: span.clone(),
-            },
-            Stmt::Files {
-                sources,
-                body,
-                span,
-            } => Stmt::Files {
-                sources: sources
-                    .iter()
-                    .map(|src| self.desugar_argument(src, prelude))
-                    .collect(),
-                body: self.desugar_block(body),
                 span: span.clone(),
             },
             Stmt::PatternAction {
@@ -429,7 +326,41 @@ impl LambdaHoister {
         }
     }
 
+    fn is_hoistable_compound(expr: &Expr) -> bool {
+        matches!(
+            expr,
+            Expr::Block { .. }
+                | Expr::If { .. }
+                | Expr::While { .. }
+                | Expr::For { .. }
+                | Expr::Try { .. }
+                | Expr::With { .. }
+        )
+    }
+
     fn desugar_expr(&mut self, expr: &Expr, prelude: &mut Vec<Stmt>) -> Expr {
+        let result = self.desugar_expr_no_hoist(expr, prelude);
+        if Self::is_hoistable_compound(&result) {
+            let span = Self::expr_span(&result);
+            self.hoist_compound_expr(result, prelude, &span)
+        } else {
+            result
+        }
+    }
+
+    fn expr_span(expr: &Expr) -> SourceSpan {
+        match expr {
+            Expr::Block { span, .. }
+            | Expr::If { span, .. }
+            | Expr::While { span, .. }
+            | Expr::For { span, .. }
+            | Expr::Try { span, .. }
+            | Expr::With { span, .. } => span.clone(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn desugar_expr_no_hoist(&mut self, expr: &Expr, prelude: &mut Vec<Stmt>) -> Expr {
         match expr {
             Expr::Name { name, span } => Expr::Name {
                 name: name.clone(),
@@ -665,9 +596,190 @@ impl LambdaHoister {
                     .collect(),
                 span: span.clone(),
             },
-            Expr::Lambda { params, body, span } => Expr::Lambda {
-                params: self.desugar_params(params, prelude),
-                body: Box::new(self.desugar_expr(body, prelude)),
+            Expr::Lambda { params, body, span } => {
+                let params = self.desugar_params(params, prelude);
+                let body_desugared = self.desugar_expr_no_hoist(body, prelude);
+                if Self::is_hoistable_compound(&body_desugared) {
+                    // Convert lambda-with-compound-body into a hoisted def
+                    let name = self.next_block_name();
+                    let def_body = match body_desugared {
+                        Expr::Block { stmts, .. } => stmts,
+                        other => {
+                            let other_span = span.clone();
+                            vec![Stmt::Expr {
+                                value: other,
+                                semicolon_terminated: false,
+                                span: other_span,
+                            }]
+                        }
+                    };
+                    prelude.push(Stmt::Expr {
+                        value: Expr::Def {
+                            name: name.clone(),
+                            params,
+                            body: def_body,
+                            span: span.clone(),
+                        },
+                        semicolon_terminated: false,
+                        span: span.clone(),
+                    });
+                    Expr::Name {
+                        name,
+                        span: span.clone(),
+                    }
+                } else {
+                    Expr::Lambda {
+                        params,
+                        body: Box::new(body_desugared),
+                        span: span.clone(),
+                    }
+                }
+            }
+            Expr::Block { stmts, span } => Expr::Block {
+                stmts: self.desugar_block(stmts),
+                span: span.clone(),
+            },
+            Expr::If {
+                cond,
+                body,
+                elifs,
+                else_body,
+                span,
+            } => {
+                let cond = self.desugar_condition(cond, prelude);
+                let body = self.desugar_block(body);
+                let elifs: Vec<_> = elifs
+                    .iter()
+                    .map(|(elif_cond, elif_body)| {
+                        let mut elif_prelude = Vec::new();
+                        let c = self.desugar_condition(elif_cond, &mut elif_prelude);
+                        let b = self.desugar_block(elif_body);
+                        (c, b)
+                    })
+                    .collect();
+                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
+                Expr::If {
+                    cond,
+                    body,
+                    elifs,
+                    else_body,
+                    span: span.clone(),
+                }
+            }
+            Expr::While {
+                cond,
+                body,
+                else_body,
+                span,
+            } => {
+                let cond = self.desugar_condition(cond, prelude);
+                let body = self.desugar_block(body);
+                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
+                Expr::While {
+                    cond,
+                    body,
+                    else_body,
+                    span: span.clone(),
+                }
+            }
+            Expr::For {
+                target,
+                iter,
+                body,
+                else_body,
+                span,
+            } => {
+                let target = self.desugar_assign_target(target, prelude);
+                let iter = Box::new(self.desugar_expr(iter, prelude));
+                let body = self.desugar_block(body);
+                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
+                Expr::For {
+                    target,
+                    iter,
+                    body,
+                    else_body,
+                    span: span.clone(),
+                }
+            }
+            Expr::Def {
+                name,
+                params,
+                body,
+                span,
+            } => {
+                let params = self.desugar_params(params, prelude);
+                let body = self.desugar_block(body);
+                Expr::Def {
+                    name: name.clone(),
+                    params,
+                    body,
+                    span: span.clone(),
+                }
+            }
+            Expr::Class { name, body, span } => {
+                let body = self.desugar_block(body);
+                Expr::Class {
+                    name: name.clone(),
+                    body,
+                    span: span.clone(),
+                }
+            }
+            Expr::Try {
+                body,
+                handlers,
+                else_body,
+                finally_body,
+                span,
+            } => {
+                let body = self.desugar_block(body);
+                let handlers = handlers
+                    .iter()
+                    .map(|handler| self.desugar_except_handler(handler, prelude))
+                    .collect();
+                let else_body = else_body.as_ref().map(|body| self.desugar_block(body));
+                let finally_body = finally_body.as_ref().map(|body| self.desugar_block(body));
+                Expr::Try {
+                    body,
+                    handlers,
+                    else_body,
+                    finally_body,
+                    span: span.clone(),
+                }
+            }
+            Expr::With { items, body, span } => {
+                let items = items
+                    .iter()
+                    .map(|item| self.desugar_with_item(item, prelude))
+                    .collect();
+                let body = self.desugar_block(body);
+                Expr::With {
+                    items,
+                    body,
+                    span: span.clone(),
+                }
+            }
+            Expr::Lines {
+                sources,
+                body,
+                span,
+            } => Expr::Lines {
+                sources: sources
+                    .iter()
+                    .map(|src| self.desugar_argument(src, prelude))
+                    .collect(),
+                body: self.desugar_block(body),
+                span: span.clone(),
+            },
+            Expr::Files {
+                sources,
+                body,
+                span,
+            } => Expr::Files {
+                sources: sources
+                    .iter()
+                    .map(|src| self.desugar_argument(src, prelude))
+                    .collect(),
+                body: self.desugar_block(body),
                 span: span.clone(),
             },
         }

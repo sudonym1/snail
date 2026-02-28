@@ -3276,3 +3276,63 @@ def test_lambda_varargs(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
     assert captured.out.strip() == "6"
+
+
+# === Compound expression in expression context tests ===
+
+
+def test_if_expr_true(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = if True { 1 } else { 2 }\nprint(x)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "1"
+
+
+def test_if_expr_false(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = if False { 1 } else { 2 }\nprint(x)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "2"
+
+
+def test_block_expr(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = { a = 10; a + 5 }\nprint(x)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "15"
+
+
+def test_block_expr_trailing_semicolon(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = { a = 10; a + 5; }\nprint(x)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "None"
+
+
+def test_lambda_block_body(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "f = lambda x: { y = x * 2; y + 1 }\nprint(f(5))"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "11"
+
+
+def test_if_stmt_level_no_error(capsys: pytest.CaptureFixture[str]) -> None:
+    """If expression at statement level should not be hoisted and should work fine."""
+    script = "if True { print('ok') }"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "ok"
+
+
+def test_if_expr_no_else_true(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = if True { 1 }\nprint(x)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "1"
+
+
+def test_if_expr_no_else_false(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = if False { 1 }\nprint(x)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "None"

@@ -571,6 +571,33 @@ epoch_ts = ts(0)
 assert epoch_ts.year == 1969 or epoch_ts.year == 1970  # timezone-dependent
 print("ts epoch", epoch_ts)
 
+# ---- Compound expressions in expression context ----
+
+# If-expression assignment
+if_result = if True { 1 } else { 2 }
+assert if_result == 1
+if_result2 = if False { 1 } else { 2 }
+assert if_result2 == 2
+print("if expr", if_result, if_result2)
+
+# Block expression assignment
+block_result = { a = 10; a + 5 }
+assert block_result == 15
+print("block expr", block_result)
+
+# Block with trailing semicolon returns None
+block_none = { a = 10; a + 5; }
+assert block_none is None
+
+# Lambda with block body
+multi_lambda = lambda x: { y = x * 2; y + 1 }
+assert multi_lambda(5) == 11
+print("lambda block", multi_lambda(5))
+
+# If-expression without else (returns None when condition is false)
+if_no_else = if False { 42 }
+assert if_no_else is None
+
 # The implicit return of the last non-semicolon expression is pretty printed
 # to stdout, unless -P is specified
 "automatically printed"

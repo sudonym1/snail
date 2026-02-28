@@ -2,17 +2,23 @@
 program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 
 // Statements: separated by semicolons or injected record separators
-// Compound statements (ending with }) don't need trailing separators
-// Simple statements need separators unless they're the last statement
+// Expression statements containing compound expressions (ending with })
+// don't need trailing separators. Simple statements need separators
+// unless they're the last statement.
 stmt_list = { (stmt_item | segment_break)* ~ final_stmt? }
-stmt_item = _{ compound_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ }
-final_stmt = _{ compound_stmt | simple_stmt }
+stmt_item = _{ compound_expr_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ | expr_stmt ~ stmt_sep+ }
+final_stmt = _{ simple_stmt | expr_stmt }
 stmt_sep = _{ ";" | "\x1E" }
 segment_break = { "\x1F" ~ stmt_sep* }
 
-stmt = _{ compound_stmt | simple_stmt }
+stmt = _{ simple_stmt | expr_stmt }
 
-compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt | try_stmt | with_stmt | lines_stmt | files_stmt }
+// Compound expression statement: wraps expr_stmt for expressions that start
+// with compound keywords (if/while/for/def/class/try/with/lines/files) or
+// bare blocks. These don't require trailing separators.
+compound_expr_stmt = { compound_expr }
+compound_expr = _{ if_expr | while_expr | for_expr | def_expr | class_expr | try_expr | with_expr | lines_expr | files_expr | block }
+
 simple_stmt = _{
   return_stmt
   | break_stmt
@@ -23,35 +29,35 @@ simple_stmt = _{
   | del_stmt
   | import_stmt
   | assign_stmt
-  | expr_stmt
 }
 
 // Braced block of statements
 block = { "{" ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ "}" }
 
-// Control flow: if/elif/else, while/else, for/else
-if_stmt = { "if" ~ if_cond ~ block ~ (stmt_sep* ~ "elif" ~ if_cond ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
-while_stmt = { "while" ~ while_cond ~ block ~ (stmt_sep* ~ "else" ~ block)? }
-for_stmt = { "for" ~ assign_target_list ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
+// Control flow (now expressions): if/elif/else, while/else, for/else
+if_expr = { "if" ~ if_cond ~ block ~ (stmt_sep* ~ "elif" ~ if_cond ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
+while_expr = { "while" ~ while_cond ~ block ~ (stmt_sep* ~ "else" ~ block)? }
+for_expr = { "for" ~ assign_target_list ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
 if_cond = { let_cond | expr }
 while_cond = { let_cond | expr }
 let_cond = { "let" ~ assign_target_list ~ "=" ~ expr ~ let_guard? }
 let_guard = { ";" ~ expr }
 
-// Function and class definitions
-def_stmt = { "def" ~ identifier ~ parameters? ~ block }
-class_stmt = { "class" ~ identifier ~ block }
+// Function and class definitions (now expressions)
+def_expr = { "def" ~ identifier ~ parameters? ~ block }
+class_expr = { "class" ~ identifier ~ block }
 
-// Exception handling: try/except/else/finally
-try_stmt = { "try" ~ block ~ (try_except_tail | try_finally_tail) }
+// Exception handling (now expression): try/except/else/finally
+try_expr = { "try" ~ block ~ (try_except_tail | try_finally_tail) }
 try_except_tail = _{ (stmt_sep* ~ except_clause)+ ~ (stmt_sep* ~ else_clause)? ~ (stmt_sep* ~ finally_clause)? }
 try_finally_tail = _{ stmt_sep* ~ finally_clause }
-except_clause = { "except" ~ (expr ~ ("as" ~ identifier)?)? ~ block }
+except_clause = { "except" ~ (except_type ~ ("as" ~ identifier)?)? ~ block }
+except_type = { identifier ~ ("." ~ identifier)* }
 else_clause = { "else" ~ block }
 finally_clause = { "finally" ~ block }
 
-// Lines block: iterate lines from a source
-lines_stmt = { "lines" ~ lines_source? ~ "{" ~ stmt_sep* ~ lines_body? ~ stmt_sep* ~ "}" }
+// Lines block (now expression): iterate lines from a source
+lines_expr = { "lines" ~ lines_source? ~ "{" ~ stmt_sep* ~ lines_body? ~ stmt_sep* ~ "}" }
 lines_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
 lines_body = { lines_entry ~ (stmt_sep+ ~ lines_entry)* ~ stmt_sep* }
 lines_entry = _{ pattern_action | stmt }
@@ -60,12 +66,12 @@ lines_entry = _{ pattern_action | stmt }
 pattern_action = { block | pattern_action_pattern ~ block? }
 pattern_action_pattern = { expr }
 
-// Files block: iterate files from a source
-files_stmt = { "files" ~ files_source? ~ block }
+// Files block (now expression): iterate files from a source
+files_expr = { "files" ~ files_source? ~ block }
 files_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
 
-// Context managers
-with_stmt = { "with" ~ with_items ~ block }
+// Context managers (now expression)
+with_expr = { "with" ~ with_items ~ block }
 with_items = { with_item ~ ("," ~ with_item)* }
 with_item = { expr ~ ("as" ~ assign_target)? }
 
@@ -204,6 +210,16 @@ atom = _{
   | dict_literal
   | tuple_literal
   | paren_expr
+  | block
+  | if_expr
+  | while_expr
+  | for_expr
+  | def_expr
+  | class_expr
+  | try_expr
+  | with_expr
+  | lines_expr
+  | files_expr
 }
 
 // Parenthesized expression (preserved in AST for proper validation)

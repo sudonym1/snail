@@ -68,82 +68,6 @@ fn validate_program(
 
 fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result<(), ParseError> {
     match stmt {
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
-            ..
-        } => {
-            validate_condition_mode(cond, source, mode)?;
-            validate_block_mode(body, source, mode)?;
-            for (elif_cond, elif_body) in elifs {
-                validate_condition_mode(elif_cond, source, mode)?;
-                validate_block_mode(elif_body, source, mode)?;
-            }
-            if let Some(body) = else_body {
-                validate_block_mode(body, source, mode)?;
-            }
-        }
-        Stmt::While {
-            cond,
-            body,
-            else_body,
-            ..
-        } => {
-            validate_condition_mode(cond, source, mode)?;
-            validate_block_mode(body, source, mode)?;
-            if let Some(body) = else_body {
-                validate_block_mode(body, source, mode)?;
-            }
-        }
-        Stmt::For {
-            target,
-            iter,
-            body,
-            else_body,
-            ..
-        } => {
-            validate_assign_target_mode(target, source, mode)?;
-            validate_expr_mode(iter, source, mode)?;
-            validate_block_mode(body, source, mode)?;
-            if let Some(body) = else_body {
-                validate_block_mode(body, source, mode)?;
-            }
-        }
-        Stmt::Def { params, body, .. } => {
-            for param in params {
-                validate_param_mode(param, source, mode)?;
-            }
-            validate_block_mode(body, source, mode)?;
-        }
-        Stmt::Class { body, .. } => {
-            validate_block_mode(body, source, mode)?;
-        }
-        Stmt::Try {
-            body,
-            handlers,
-            else_body,
-            finally_body,
-            ..
-        } => {
-            validate_block_mode(body, source, mode)?;
-            for handler in handlers {
-                validate_except_handler_mode(handler, source, mode)?;
-            }
-            if let Some(body) = else_body {
-                validate_block_mode(body, source, mode)?;
-            }
-            if let Some(body) = finally_body {
-                validate_block_mode(body, source, mode)?;
-            }
-        }
-        Stmt::With { items, body, .. } => {
-            for item in items {
-                validate_with_item_mode(item, source, mode)?;
-            }
-            validate_block_mode(body, source, mode)?;
-        }
         Stmt::Return { value, .. } => {
             if let Some(value) = value {
                 validate_expr_mode(value, source, mode)?;
@@ -182,18 +106,6 @@ fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result
         }
         Stmt::Expr { value, .. } => {
             validate_expr_mode(value, source, mode)?;
-        }
-        Stmt::Lines { sources, body, .. } => {
-            for src in sources {
-                validate_argument_mode(src, source, mode)?;
-            }
-            validate_block_mode(body, source, ValidationMode::Lines)?;
-        }
-        Stmt::Files { sources, body, .. } => {
-            for src in sources {
-                validate_argument_mode(src, source, mode)?;
-            }
-            validate_block_mode(body, source, ValidationMode::Files)?;
         }
         Stmt::PatternAction {
             pattern,
@@ -501,6 +413,97 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
         }
         Expr::Lambda { body, .. } => {
             validate_expr_mode(body, source, mode)?;
+        }
+        Expr::Block { stmts, .. } => {
+            validate_block_mode(stmts, source, mode)?;
+        }
+        Expr::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
+        } => {
+            validate_condition_mode(cond, source, mode)?;
+            validate_block_mode(body, source, mode)?;
+            for (elif_cond, elif_body) in elifs {
+                validate_condition_mode(elif_cond, source, mode)?;
+                validate_block_mode(elif_body, source, mode)?;
+            }
+            if let Some(body) = else_body {
+                validate_block_mode(body, source, mode)?;
+            }
+        }
+        Expr::While {
+            cond,
+            body,
+            else_body,
+            ..
+        } => {
+            validate_condition_mode(cond, source, mode)?;
+            validate_block_mode(body, source, mode)?;
+            if let Some(body) = else_body {
+                validate_block_mode(body, source, mode)?;
+            }
+        }
+        Expr::For {
+            target,
+            iter,
+            body,
+            else_body,
+            ..
+        } => {
+            validate_assign_target_mode(target, source, mode)?;
+            validate_expr_mode(iter, source, mode)?;
+            validate_block_mode(body, source, mode)?;
+            if let Some(body) = else_body {
+                validate_block_mode(body, source, mode)?;
+            }
+        }
+        Expr::Def { params, body, .. } => {
+            for param in params {
+                validate_param_mode(param, source, mode)?;
+            }
+            validate_block_mode(body, source, mode)?;
+        }
+        Expr::Class { body, .. } => {
+            validate_block_mode(body, source, mode)?;
+        }
+        Expr::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            ..
+        } => {
+            validate_block_mode(body, source, mode)?;
+            for handler in handlers {
+                validate_except_handler_mode(handler, source, mode)?;
+            }
+            if let Some(body) = else_body {
+                validate_block_mode(body, source, mode)?;
+            }
+            if let Some(body) = finally_body {
+                validate_block_mode(body, source, mode)?;
+            }
+        }
+        Expr::With { items, body, .. } => {
+            for item in items {
+                validate_with_item_mode(item, source, mode)?;
+            }
+            validate_block_mode(body, source, mode)?;
+        }
+        Expr::Lines { sources, body, .. } => {
+            for src in sources {
+                validate_argument_mode(src, source, mode)?;
+            }
+            validate_block_mode(body, source, ValidationMode::Lines)?;
+        }
+        Expr::Files { sources, body, .. } => {
+            for src in sources {
+                validate_argument_mode(src, source, mode)?;
+            }
+            validate_block_mode(body, source, ValidationMode::Files)?;
         }
     }
     Ok(())

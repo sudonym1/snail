@@ -1,14 +1,12 @@
 use pest::iterators::Pair;
 use snail_ast::{
-    AssignTarget, Condition, ExceptHandler, Expr, ImportFromItems, ImportItem, Parameter, Stmt,
-    WithItem,
+    AssignTarget, Condition, ExceptHandler, Expr, ImportFromItems, ImportItem, Parameter,
+    SourceSpan, Stmt, WithItem,
 };
 use snail_error::ParseError;
 
 use crate::Rule;
-use crate::expr::{
-    apply_attr_index_suffix, assign_target_from_expr, parse_argument, parse_expr_pair,
-};
+use crate::expr::{apply_attr_index_suffix, assign_target_from_expr, parse_expr_pair};
 use crate::util::{error_with_span, span_from_pair};
 
 pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {
@@ -27,13 +25,6 @@ pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, 
 
 pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     match pair.as_rule() {
-        Rule::if_stmt => parse_if_stmt(pair, source),
-        Rule::while_stmt => parse_while(pair, source),
-        Rule::for_stmt => parse_for(pair, source),
-        Rule::def_stmt => parse_def(pair, source),
-        Rule::class_stmt => parse_class(pair, source),
-        Rule::try_stmt => parse_try(pair, source),
-        Rule::with_stmt => parse_with(pair, source),
         Rule::return_stmt => parse_return(pair, source),
         Rule::raise_stmt => parse_raise(pair, source),
         Rule::assert_stmt => parse_assert(pair, source),
@@ -49,9 +40,8 @@ pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError
         }),
         Rule::import_from => parse_import_from(pair, source),
         Rule::import_names => parse_import_names(pair, source),
-        Rule::lines_stmt => parse_lines_stmt(pair, source),
-        Rule::files_stmt => parse_files_stmt(pair, source),
         Rule::assign_stmt => parse_assign(pair, source),
+        Rule::compound_expr_stmt => parse_expr_stmt(pair, source),
         Rule::expr_stmt => parse_expr_stmt(pair, source),
         _ => Err(error_with_span(
             format!("unsupported statement: {:?}", pair.as_rule()),
@@ -119,154 +109,6 @@ fn parse_let_condition(pair: Pair<'_, Rule>, source: &str) -> Result<Condition, 
     })
 }
 
-fn parse_if_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let cond_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing if condition", span.clone(), source))?;
-    let cond = parse_condition(cond_pair, source)?;
-    let body = parse_block(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing if body", span.clone(), source))?,
-        source,
-    )?;
-    let mut elifs = Vec::new();
-    let mut else_body = None;
-    while let Some(next) = inner.next() {
-        match next.as_rule() {
-            Rule::if_cond => {
-                let elif_cond = parse_condition(next, source)?;
-                let elif_block = parse_block(
-                    inner.next().ok_or_else(|| {
-                        error_with_span("missing elif block", span.clone(), source)
-                    })?,
-                    source,
-                )?;
-                elifs.push((elif_cond, elif_block));
-            }
-            Rule::block => {
-                else_body = Some(parse_block(next, source)?);
-            }
-            _ => {}
-        }
-    }
-    Ok(Stmt::If {
-        cond,
-        body,
-        elifs,
-        else_body,
-        span,
-    })
-}
-
-fn parse_while(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let cond = parse_condition(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing while condition", span.clone(), source))?,
-        source,
-    )?;
-    let body = parse_block(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing while block", span.clone(), source))?,
-        source,
-    )?;
-    let else_body = inner
-        .next()
-        .map(|pair| parse_block(pair, source))
-        .transpose()?;
-    Ok(Stmt::While {
-        cond,
-        body,
-        else_body,
-        span,
-    })
-}
-
-fn parse_for(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let target_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing for target", span.clone(), source))?;
-    let target = parse_assign_target_list(target_pair, source)?;
-    let iter = parse_expr_pair(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing for iterator", span.clone(), source))?,
-        source,
-    )?;
-    let body = parse_block(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing for block", span.clone(), source))?,
-        source,
-    )?;
-    let else_body = inner
-        .next()
-        .map(|pair| parse_block(pair, source))
-        .transpose()?;
-    Ok(Stmt::For {
-        target,
-        iter,
-        body,
-        else_body,
-        span,
-    })
-}
-
-fn parse_def(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let name = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing def name", span.clone(), source))?
-        .as_str()
-        .to_string();
-    let (params, body_pair) = match inner.next() {
-        Some(pair) if pair.as_rule() == Rule::parameters => {
-            let params = parse_parameters(pair, source)?;
-            let body_pair = inner
-                .next()
-                .ok_or_else(|| error_with_span("missing def block", span.clone(), source))?;
-            (params, body_pair)
-        }
-        Some(pair) if pair.as_rule() == Rule::block => (Vec::new(), pair),
-        Some(_) | None => {
-            return Err(error_with_span("missing def block", span.clone(), source));
-        }
-    };
-    let body = parse_block(body_pair, source)?;
-    Ok(Stmt::Def {
-        name,
-        params,
-        body,
-        span,
-    })
-}
-
-fn parse_class(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let name = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing class name", span.clone(), source))?
-        .as_str()
-        .to_string();
-    let body = parse_block(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing class block", span.clone(), source))?,
-        source,
-    )?;
-    Ok(Stmt::Class { name, body, span })
-}
-
 fn parse_return(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
@@ -328,73 +170,10 @@ fn parse_del(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     Ok(Stmt::Delete { targets, span })
 }
 
-fn parse_try(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner().peekable();
-    let body_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing try block", span.clone(), source))?;
-    let body = parse_block(body_pair, source)?;
-    let mut handlers = Vec::new();
-    let mut else_body = None;
-    let mut finally_body = None;
-
-    for next in inner {
-        match next.as_rule() {
-            Rule::except_clause => handlers.push(parse_except_clause(next, source)?),
-            Rule::else_clause => {
-                let block = next
-                    .into_inner()
-                    .next()
-                    .ok_or_else(|| error_with_span("missing else block", span.clone(), source))?;
-                else_body = Some(parse_block(block, source)?);
-            }
-            Rule::finally_clause => {
-                let block = next.into_inner().next().ok_or_else(|| {
-                    error_with_span("missing finally block", span.clone(), source)
-                })?;
-                finally_body = Some(parse_block(block, source)?);
-            }
-            _ => {}
-        }
-    }
-
-    if handlers.is_empty() && finally_body.is_none() {
-        return Err(error_with_span(
-            "try must have at least one except clause or a finally block",
-            span,
-            source,
-        ));
-    }
-
-    Ok(Stmt::Try {
-        body,
-        handlers,
-        else_body,
-        finally_body,
-        span,
-    })
-}
-
-fn parse_with(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut items = Vec::new();
-    let mut body = None;
-    for inner in pair.into_inner() {
-        match inner.as_rule() {
-            Rule::with_items => items.extend(parse_with_items(inner, source)?),
-            Rule::block => body = Some(parse_block(inner, source)?),
-            _ => {}
-        }
-    }
-    let body = body.ok_or_else(|| error_with_span("missing with block", span.clone(), source))?;
-    if items.is_empty() {
-        return Err(error_with_span("missing with items", span, source));
-    }
-    Ok(Stmt::With { items, body, span })
-}
-
-fn parse_with_items(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<WithItem>, ParseError> {
+pub(crate) fn parse_with_items(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<Vec<WithItem>, ParseError> {
     let mut items = Vec::new();
     for inner in pair.into_inner() {
         if inner.as_rule() == Rule::with_item {
@@ -404,7 +183,7 @@ fn parse_with_items(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<WithItem>,
     Ok(items)
 }
 
-fn parse_with_item(pair: Pair<'_, Rule>, source: &str) -> Result<WithItem, ParseError> {
+pub(crate) fn parse_with_item(pair: Pair<'_, Rule>, source: &str) -> Result<WithItem, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
     let context_pair = inner
@@ -422,7 +201,10 @@ fn parse_with_item(pair: Pair<'_, Rule>, source: &str) -> Result<WithItem, Parse
     })
 }
 
-fn parse_except_clause(pair: Pair<'_, Rule>, source: &str) -> Result<ExceptHandler, ParseError> {
+pub(crate) fn parse_except_clause(
+    pair: Pair<'_, Rule>,
+    source: &str,
+) -> Result<ExceptHandler, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner().peekable();
     let mut type_name = None;
@@ -432,8 +214,26 @@ fn parse_except_clause(pair: Pair<'_, Rule>, source: &str) -> Result<ExceptHandl
     #[allow(clippy::while_let_on_iterator)]
     while let Some(next) = inner.next() {
         match next.as_rule() {
-            Rule::expr => {
-                type_name = Some(parse_expr_pair(next, source)?);
+            Rule::except_type => {
+                let type_span = span_from_pair(&next, source);
+                let mut idents = next.into_inner();
+                let first = idents.next().unwrap();
+                let mut expr = Expr::Name {
+                    name: first.as_str().to_string(),
+                    span: span_from_pair(&first, source),
+                };
+                for attr_ident in idents {
+                    let attr_span = span_from_pair(&attr_ident, source);
+                    expr = Expr::Attribute {
+                        value: Box::new(expr),
+                        attr: attr_ident.as_str().to_string(),
+                        span: SourceSpan {
+                            start: type_span.start.clone(),
+                            end: attr_span.end.clone(),
+                        },
+                    };
+                }
+                type_name = Some(expr);
                 if let Some(candidate) = inner.peek()
                     && candidate.as_rule() == Rule::identifier
                 {
@@ -781,71 +581,6 @@ fn parse_assign_target_star(
     let target = parse_assign_target(inner, source)?;
     Ok(AssignTarget::Starred {
         target: Box::new(target),
-        span,
-    })
-}
-
-fn parse_lines_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut sources = Vec::new();
-    let mut body = Vec::new();
-
-    for inner in pair.into_inner() {
-        match inner.as_rule() {
-            Rule::lines_source => {
-                for arg_pair in inner.into_inner() {
-                    if arg_pair.as_rule() == Rule::argument {
-                        sources.push(parse_argument(arg_pair, source)?);
-                    }
-                }
-            }
-            Rule::lines_body => {
-                for entry in inner.into_inner() {
-                    match entry.as_rule() {
-                        Rule::pattern_action => {
-                            body.push(parse_pattern_action(entry, source)?);
-                        }
-                        _ => {
-                            body.push(parse_stmt(entry, source)?);
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    Ok(Stmt::Lines {
-        sources,
-        body,
-        span,
-    })
-}
-
-fn parse_files_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut sources = Vec::new();
-    let mut body = Vec::new();
-
-    for inner in pair.into_inner() {
-        match inner.as_rule() {
-            Rule::files_source => {
-                for arg_pair in inner.into_inner() {
-                    if arg_pair.as_rule() == Rule::argument {
-                        sources.push(parse_argument(arg_pair, source)?);
-                    }
-                }
-            }
-            Rule::block => {
-                body = parse_block(inner, source)?;
-            }
-            _ => {}
-        }
-    }
-
-    Ok(Stmt::Files {
-        sources,
-        body,
         span,
     })
 }

@@ -6,7 +6,7 @@ use snail_error::LowerError;
 use super::constants::{SNAIL_LET_KEEP, SNAIL_LET_OK, SNAIL_LET_VALUE};
 use super::expr::{
     lower_assign_target, lower_delete_target, lower_expr, lower_expr_as_stmt,
-    lower_expr_with_exception, lower_if_block_with_tail, lower_if_chain, lower_tail_expr,
+    lower_expr_with_exception, lower_tail_expr,
 };
 use super::helpers::{
     assign_name, bool_constant, build_destructure_try, build_let_guard_test, name_expr,
@@ -23,158 +23,6 @@ pub(crate) enum TailBehavior {
 
 pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObject, LowerError> {
     match stmt {
-        Stmt::If { .. } => Err(LowerError::new(
-            "if statement should be lowered via lower_block",
-        )),
-        Stmt::While {
-            cond,
-            body,
-            else_body,
-            span,
-        } => {
-            let Condition::Expr(cond) = cond else {
-                return Err(LowerError::new(
-                    "while let should be lowered via lower_block",
-                ));
-            };
-            let test = lower_expr(builder, cond.as_ref())?;
-            let body = lower_block(builder, body, span)?;
-            let orelse = else_body
-                .as_ref()
-                .map(|items| lower_block(builder, items, span))
-                .transpose()?
-                .unwrap_or_default();
-            builder
-                .call_node(
-                    "While",
-                    vec![
-                        test,
-                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
-                        PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
-        }
-        Stmt::For {
-            target,
-            iter,
-            body,
-            else_body,
-            span,
-        } => {
-            let target = lower_assign_target(builder, target)?;
-            let iter = lower_expr(builder, iter)?;
-            let body = lower_block(builder, body, span)?;
-            let orelse = else_body
-                .as_ref()
-                .map(|items| lower_block(builder, items, span))
-                .transpose()?
-                .unwrap_or_default();
-            builder
-                .call_node(
-                    "For",
-                    vec![
-                        target,
-                        iter,
-                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
-                        PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
-        }
-        Stmt::Def {
-            name,
-            params,
-            body,
-            span,
-        } => {
-            let args = lower_parameters(builder, params, None)?;
-            let body = lower_block_with_implicit_return(builder, body, span)?;
-            builder
-                .call_node(
-                    "FunctionDef",
-                    vec![
-                        name.to_string().into_py(builder.py()),
-                        args,
-                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
-                        PyList::empty_bound(builder.py()).into_py(builder.py()),
-                        builder.py().None().into_py(builder.py()),
-                        builder.py().None().into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
-        }
-        Stmt::Class { name, body, span } => {
-            let body = lower_block(builder, body, span)?;
-            builder
-                .call_node(
-                    "ClassDef",
-                    vec![
-                        name.to_string().into_py(builder.py()),
-                        PyList::empty_bound(builder.py()).into_py(builder.py()),
-                        PyList::empty_bound(builder.py()).into_py(builder.py()),
-                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
-                        PyList::empty_bound(builder.py()).into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
-        }
-        Stmt::Try {
-            body,
-            handlers,
-            else_body,
-            finally_body,
-            span,
-        } => {
-            let body = lower_block(builder, body, span)?;
-            let handlers = handlers
-                .iter()
-                .map(|handler| lower_except_handler(builder, handler))
-                .collect::<Result<Vec<_>, _>>()?;
-            let orelse = else_body
-                .as_ref()
-                .map(|items| lower_block(builder, items, span))
-                .transpose()?
-                .unwrap_or_default();
-            let finalbody = finally_body
-                .as_ref()
-                .map(|items| lower_block(builder, items, span))
-                .transpose()?
-                .unwrap_or_default();
-            builder
-                .call_node(
-                    "Try",
-                    vec![
-                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
-                        PyList::new_bound(builder.py(), handlers).into_py(builder.py()),
-                        PyList::new_bound(builder.py(), orelse).into_py(builder.py()),
-                        PyList::new_bound(builder.py(), finalbody).into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
-        }
-        Stmt::With { items, body, span } => {
-            let items = items
-                .iter()
-                .map(|item| lower_with_item(builder, item))
-                .collect::<Result<Vec<_>, _>>()?;
-            let body = lower_block(builder, body, span)?;
-            builder
-                .call_node(
-                    "With",
-                    vec![
-                        PyList::new_bound(builder.py(), items).into_py(builder.py()),
-                        PyList::new_bound(builder.py(), body).into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
-        }
         Stmt::Return { value, span } => {
             let value = value
                 .as_ref()
@@ -329,12 +177,6 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                 .call_node("Expr", vec![value], span)
                 .map_err(py_err_to_lower)
         }
-        Stmt::Lines { .. } => Err(LowerError::new(
-            "lines statement should be lowered via lower_block",
-        )),
-        Stmt::Files { .. } => Err(LowerError::new(
-            "files statement should be lowered via lower_block",
-        )),
         Stmt::PatternAction { .. } => Err(LowerError::new(
             "pattern/action should be lowered via lower_lines_body",
         )),
@@ -394,60 +236,16 @@ pub(crate) fn lower_block_with_tail(
         let at_tail = (is_last || next_is_break) && tail != TailBehavior::None;
 
         // Tail position: delegate tail behavior to the appropriate module
-        if at_tail {
-            match stmt {
-                Stmt::Expr {
-                    value,
-                    semicolon_terminated,
-                    span,
-                } if !semicolon_terminated => {
-                    stmts.extend(lower_tail_expr(builder, value, tail, span)?);
-                    continue;
-                }
-                Stmt::If {
-                    cond,
-                    body,
-                    elifs,
-                    else_body,
-                    span,
-                } => {
-                    stmts.extend(lower_if_block_with_tail(
-                        builder, cond, body, elifs, else_body, tail, span,
-                    )?);
-                    continue;
-                }
-                Stmt::Lines {
-                    sources,
-                    body,
-                    span,
-                } if matches!(tail, TailBehavior::AutoPrint | TailBehavior::CaptureOnly) => {
-                    stmts.extend(super::awk::lower_lines_stmt(
-                        builder,
-                        sources,
-                        body,
-                        span,
-                        tail == TailBehavior::AutoPrint,
-                        tail == TailBehavior::CaptureOnly,
-                    )?);
-                    continue;
-                }
-                Stmt::Files {
-                    sources,
-                    body,
-                    span,
-                } if matches!(tail, TailBehavior::AutoPrint | TailBehavior::CaptureOnly) => {
-                    stmts.extend(super::map::lower_files_stmt(
-                        builder,
-                        sources,
-                        body,
-                        span,
-                        tail == TailBehavior::AutoPrint,
-                        tail == TailBehavior::CaptureOnly,
-                    )?);
-                    continue;
-                }
-                _ => {} // fall through to general lowering
-            }
+        if at_tail
+            && let Stmt::Expr {
+                value,
+                semicolon_terminated,
+                span,
+            } = stmt
+            && !semicolon_terminated
+        {
+            stmts.extend(lower_tail_expr(builder, value, tail, span)?);
+            continue;
         }
 
         // General lowering
@@ -464,41 +262,16 @@ pub(crate) fn lower_block_with_tail(
 }
 
 /// Lower a statement to one or more Python AST statements. Dispatches to
-/// expression, while, lines, and files lowering which may produce multiple
-/// Python statements from a single Snail statement.
+/// expression lowering which may produce multiple Python statements from a
+/// single Snail statement (compound expressions like if/while/for/etc.).
 fn lower_stmt_to_stmts(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<Vec<PyObject>, LowerError> {
     match stmt {
         Stmt::Expr { value, span, .. } => lower_expr_as_stmt(builder, value, span),
-        Stmt::If {
-            cond,
-            body,
-            elifs,
-            else_body,
-            span,
-        } => lower_if_chain(builder, cond, body, elifs, else_body, span),
-        Stmt::While {
-            cond,
-            body,
-            else_body,
-            span,
-        } => lower_while_stmt(builder, cond, body, else_body, span),
-        Stmt::Lines {
-            sources,
-            body,
-            span,
-            ..
-        } => super::awk::lower_lines_stmt(builder, sources, body, span, false, false),
-        Stmt::Files {
-            sources,
-            body,
-            span,
-            ..
-        } => super::map::lower_files_stmt(builder, sources, body, span, false, false),
         _ => Ok(vec![lower_stmt(builder, stmt)?]),
     }
 }
 
-fn lower_while_stmt(
+pub(crate) fn lower_while_stmt(
     builder: &AstBuilder<'_>,
     cond: &Condition,
     body: &[Stmt],
@@ -699,7 +472,7 @@ pub(crate) fn lower_parameters(
         .map_err(py_err_to_lower)
 }
 
-fn lower_except_handler(
+pub(crate) fn lower_except_handler(
     builder: &AstBuilder<'_>,
     handler: &ExceptHandler,
 ) -> Result<PyObject, LowerError> {
@@ -728,7 +501,10 @@ fn lower_except_handler(
         .map_err(py_err_to_lower)
 }
 
-fn lower_with_item(builder: &AstBuilder<'_>, item: &WithItem) -> Result<PyObject, LowerError> {
+pub(crate) fn lower_with_item(
+    builder: &AstBuilder<'_>,
+    item: &WithItem,
+) -> Result<PyObject, LowerError> {
     let context_expr = lower_expr(builder, &item.context)?;
     let optional_vars = item
         .target

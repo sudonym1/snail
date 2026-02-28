@@ -88,6 +88,10 @@ pub fn preprocess(source: &str) -> Result<String, ParseError> {
         if b == b'\n' {
             if should_inject(&bracket_stack, last_token, in_header, bytes, i) {
                 out[i] = RS;
+            }
+            // After a StmtEnder at stmt level, the next line is a new statement context
+            // (needed for header mode detection even when injection is suppressed)
+            if last_token == LastToken::StmtEnder && at_stmt_level(&bracket_stack) && !in_header {
                 at_stmt_start = true;
             }
             i += 1;
@@ -99,6 +103,9 @@ pub fn preprocess(source: &str) -> Result<String, ParseError> {
             if i + 1 < len && bytes[i + 1] == b'\n' {
                 if should_inject(&bracket_stack, last_token, in_header, bytes, i + 1) {
                     out[i + 1] = RS;
+                }
+                if last_token == LastToken::StmtEnder && at_stmt_level(&bracket_stack) && !in_header
+                {
                     at_stmt_start = true;
                 }
                 i += 2;
@@ -353,6 +360,11 @@ fn should_inject(
     if next == Some(b'}') {
         return false;
     }
+    // Don't inject if next significant token is a continuation keyword
+    // (else, elif, except, finally). This allows multiline if/else, try/except, etc.
+    if next_significant_token_is_continuation_keyword(bytes, newline_pos + 1) {
+        return false;
+    }
     true
 }
 
@@ -378,6 +390,43 @@ fn next_significant_byte(bytes: &[u8], start: usize) -> Option<u8> {
         return Some(b);
     }
     Option::None
+}
+
+/// Check if the next significant token is a continuation keyword: else, elif, except, finally.
+/// Skips whitespace, newlines, and comments (reusing the pattern from next_significant_byte).
+fn next_significant_token_is_continuation_keyword(bytes: &[u8], start: usize) -> bool {
+    let mut i = start;
+    let len = bytes.len();
+    // Skip whitespace, newlines, and comments
+    while i < len {
+        let b = bytes[i];
+        if b == b' ' || b == b'\t' || b == b'\r' || b == b'\n' {
+            i += 1;
+            continue;
+        }
+        // Skip comments
+        if b == b'#' && !(i + 1 < len && bytes[i + 1] == b'{') {
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        break;
+    }
+    if i >= len {
+        return false;
+    }
+    // Check for continuation keywords: else, elif, except, finally
+    for keyword in &[&b"else"[..], &b"elif"[..], &b"except"[..], &b"finally"[..]] {
+        let kw_len = keyword.len();
+        if i + kw_len <= len
+            && &bytes[i..i + kw_len] == *keyword
+            && (i + kw_len >= len || !is_ident_continue(bytes[i + kw_len]))
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn pop_matching(stack: &mut Vec<BracketKind>, expected: BracketKind) {
@@ -830,11 +879,42 @@ mod tests {
 
     #[test]
     fn elif_else_no_inject_before_keyword() {
-        // `}\nelse` — `}` is StmtEnder, `else` is next significant
-        // Since `else` is not `}`, we DO inject \x1e.
-        // But the grammar has `stmt_sep*` before `else`, so this is fine.
+        // `}\nelse` — `}` is StmtEnder, but `else` is a continuation keyword
+        // so we suppress injection to allow multiline if/else expressions.
         let result = pp("if x { y }\nelse { z }");
+        assert!(!has_rs(&result));
+    }
+
+    #[test]
+    fn no_inject_before_elif() {
+        let result = pp("if x { y }\nelif z { w }");
+        assert!(!has_rs(&result));
+    }
+
+    #[test]
+    fn no_inject_before_except() {
+        let result = pp("try { y }\nexcept { z }");
+        assert!(!has_rs(&result));
+    }
+
+    #[test]
+    fn no_inject_before_finally() {
+        let result = pp("try { y }\nfinally { z }");
+        assert!(!has_rs(&result));
+    }
+
+    #[test]
+    fn inject_before_else_func() {
+        // `else_func` is NOT the keyword `else` — must still inject
+        let result = pp("if x { y }\nelse_func()");
         assert!(has_rs(&result));
+    }
+
+    #[test]
+    fn no_inject_before_else_after_comment() {
+        // `} # comment\nelse` suppresses injection (skips comments)
+        let result = pp("if x { y } # comment\nelse { z }");
+        assert!(!has_rs(&result));
     }
 
     #[test]

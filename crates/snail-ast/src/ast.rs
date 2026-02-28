@@ -19,42 +19,6 @@ pub struct Program {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    While {
-        cond: Condition,
-        body: Vec<Stmt>,
-        else_body: Option<Vec<Stmt>>,
-        span: SourceSpan,
-    },
-    For {
-        target: AssignTarget,
-        iter: Expr,
-        body: Vec<Stmt>,
-        else_body: Option<Vec<Stmt>>,
-        span: SourceSpan,
-    },
-    Def {
-        name: String,
-        params: Vec<Parameter>,
-        body: Vec<Stmt>,
-        span: SourceSpan,
-    },
-    Class {
-        name: String,
-        body: Vec<Stmt>,
-        span: SourceSpan,
-    },
-    Try {
-        body: Vec<Stmt>,
-        handlers: Vec<ExceptHandler>,
-        else_body: Option<Vec<Stmt>>,
-        finally_body: Option<Vec<Stmt>>,
-        span: SourceSpan,
-    },
-    With {
-        items: Vec<WithItem>,
-        body: Vec<Stmt>,
-        span: SourceSpan,
-    },
     Return {
         value: Option<Expr>,
         span: SourceSpan,
@@ -102,26 +66,9 @@ pub enum Stmt {
         semicolon_terminated: bool,
         span: SourceSpan,
     },
-    Lines {
-        sources: Vec<Argument>,
-        body: Vec<Stmt>,
-        span: SourceSpan,
-    },
-    Files {
-        sources: Vec<Argument>,
-        body: Vec<Stmt>,
-        span: SourceSpan,
-    },
     PatternAction {
         pattern: Option<Expr>,
         action: Option<Vec<Stmt>>,
-        span: SourceSpan,
-    },
-    If {
-        cond: Condition,
-        body: Vec<Stmt>,
-        elifs: Vec<(Condition, Vec<Stmt>)>,
-        else_body: Option<Vec<Stmt>>,
         span: SourceSpan,
     },
     SegmentBreak {
@@ -356,6 +303,63 @@ pub enum Expr {
     Lambda {
         params: Vec<Parameter>,
         body: Box<Expr>,
+        span: SourceSpan,
+    },
+    Block {
+        stmts: Vec<Stmt>,
+        span: SourceSpan,
+    },
+    If {
+        cond: Condition,
+        body: Vec<Stmt>,
+        elifs: Vec<(Condition, Vec<Stmt>)>,
+        else_body: Option<Vec<Stmt>>,
+        span: SourceSpan,
+    },
+    While {
+        cond: Condition,
+        body: Vec<Stmt>,
+        else_body: Option<Vec<Stmt>>,
+        span: SourceSpan,
+    },
+    For {
+        target: AssignTarget,
+        iter: Box<Expr>,
+        body: Vec<Stmt>,
+        else_body: Option<Vec<Stmt>>,
+        span: SourceSpan,
+    },
+    Def {
+        name: String,
+        params: Vec<Parameter>,
+        body: Vec<Stmt>,
+        span: SourceSpan,
+    },
+    Class {
+        name: String,
+        body: Vec<Stmt>,
+        span: SourceSpan,
+    },
+    Try {
+        body: Vec<Stmt>,
+        handlers: Vec<ExceptHandler>,
+        else_body: Option<Vec<Stmt>>,
+        finally_body: Option<Vec<Stmt>>,
+        span: SourceSpan,
+    },
+    With {
+        items: Vec<WithItem>,
+        body: Vec<Stmt>,
+        span: SourceSpan,
+    },
+    Lines {
+        sources: Vec<Argument>,
+        body: Vec<Stmt>,
+        span: SourceSpan,
+    },
+    Files {
+        sources: Vec<Argument>,
+        body: Vec<Stmt>,
         span: SourceSpan,
     },
 }
