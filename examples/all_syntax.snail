@@ -118,12 +118,6 @@ def chained_count() {
     yield 99
 }
 
-# Function expressions (inline def)
-adder = def(x, y) { x + y }
-scaled = def(value) { doubled = value * 2; doubled + 1 }
-adder_result = adder(2, 3)
-scaled_result = scaled(4)
-
 # ---- Collections, destructuring, and comprehension ----
 nums = [1, 2, 3, 4]
 data = list(range(5))
@@ -217,7 +211,7 @@ missing = None
 flag = not False and True or False
 is_none = missing is None
 has_two = 2 in data
-fallback = if flag { "yes" } else { "no" }
+if flag { fallback = "yes" } else { fallback = "no" }
 power = -2 ** 3
 mix = (1 + 2) * 3 - 4 / 2 + 5 % 2 + 7 // 2
 
@@ -401,8 +395,6 @@ print("lookup", lookup)
 print("with", ctx_msg)
 print("joined", joined)
 print("gen_values", gen_values)
-print("adder_result", adder_result)
-print("scaled_result", scaled_result)
 print("loop_done", loop_done)
 print("for_done", for_done)
 print("pair", pair)

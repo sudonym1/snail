@@ -474,14 +474,12 @@ def test_lambda_semicolon_disables_implicit_return(
     script = "\n".join(
         [
             "def f { 2; }",
-            "g = def { 2; }",
             "print(f())",
-            "print(g())",
         ]
     )
     assert main(["-P", script]) == 0
     captured = capsys.readouterr()
-    assert captured.out.splitlines() == ["None", "None"]
+    assert captured.out.splitlines() == ["None"]
 
 
 def test_implicit_return_if_else_at_tail(
@@ -557,43 +555,6 @@ def test_top_level_yield_rejected() -> None:
     message = str(excinfo.value)
     assert "yield" in message
     assert "function" in message
-
-
-def test_def_expr_basic(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "\n".join(
-        [
-            "adder = def(x, y) { x + y }",
-            "print(adder(2, 3))",
-        ]
-    )
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip() == "5"
-
-
-def test_def_expr_block_body(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "\n".join(
-        [
-            "twice = def(x) { y = x + 1; y * 2 }",
-            "print(twice(3))",
-        ]
-    )
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip() == "8"
-
-
-def test_def_expr_closure(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "\n".join(
-        [
-            "def make_adder(n) { return def(x) { x + n } }",
-            "add_five = make_adder(5)",
-            "print(add_five(7))",
-        ]
-    )
-    assert main(["-P", script]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip() == "12"
 
 
 def test_file_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -2703,12 +2664,12 @@ def test_map_identifiers_require_map_mode_in_regex_interpolation() -> None:
     assert "lines" in str(excinfo.value) or "files" in str(excinfo.value)
 
 
-def test_map_identifiers_require_map_mode_in_lambda_call_arguments() -> None:
+def test_map_identifiers_require_map_mode_in_def_call_arguments() -> None:
     for source in [
-        "f = def() { g($src) }",
-        "f = def() { g(k=$src) }",
-        "f = def() { g(*$src) }",
-        "f = def() { g(**$src) }",
+        "def f() { g($src) }",
+        "def f() { g(k=$src) }",
+        "def f() { g(*$src) }",
+        "def f() { g(**$src) }",
     ]:
         with pytest.raises(SyntaxError) as excinfo:
             main([source])

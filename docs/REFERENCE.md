@@ -298,9 +298,9 @@ Explicit semicolons always separate statements regardless of these rules.
   `x, *xs = values`.
 - Boolean operators, comparisons, membership checks, and arithmetic follow
   Python's precedence and short-circuiting rules.
-- If-expressions produce values: `fallback = if flag { "yes" } else { "no" }`.
-  Branches can contain multiple statements; the last expression's value is used.
-  Elif chains are supported: `x = if a { 1 } elif b { 2 } else { 3 }`.
+- `if` is a compound statement: `if flag { body } elif cond { body } else { body }`.
+  When `if` appears at tail position of a function body, implicit return propagates
+  into each branch.
 - Tuple literals plus slicing use Python syntax: `(1, 2)`,
   `data[1:3]`, `data[:2]`, and `data[2:]`.
 - Collection literals use Python-inspired forms: lists `[1, 2]`, dicts
@@ -360,19 +360,6 @@ return. Use `return` for early exits, or add a trailing semicolon to suppress
 the implicit return.
 Default values, variadic `*args`, and `**kwargs` work as in Python. Calls accept
 positional and keyword arguments interchangeably.
-
-## Anonymous defs
-Anonymous functions use the `def` keyword with the same parameter rules as
-named functions. Parentheses are optional when there are no parameters:
-```snail
-adder = def(x, y=1) { x + y }
-scale = def(value) { doubled = value * 2; doubled + 1 }
-constant = def { 42 }
-print(adder(2, 3), scale(4), constant())
-```
-The body is a Snail block. The value of the anonymous def is the value of the
-last expression in the block (or `None` if the block has no expression). Use
-`return` to exit early when needed.
 
 ## Generators (`yield`)
 Snail supports Python-style generators. `yield` is an expression, so it can be

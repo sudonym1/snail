@@ -27,10 +27,7 @@ enum StmtKind {
 
 fn stmt_kind(stmt: &Stmt) -> StmtKind {
     match stmt {
-        Stmt::Expr {
-            value: Expr::IfBlock { .. },
-            ..
-        } => StmtKind::If,
+        Stmt::If { .. } => StmtKind::If,
         Stmt::While { .. } => StmtKind::While,
         Stmt::For { .. } => StmtKind::For,
         Stmt::Def { .. } => StmtKind::Def,

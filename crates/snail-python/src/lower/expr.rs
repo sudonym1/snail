@@ -705,9 +705,6 @@ pub(crate) fn lower_expr_with_exception(
                 lower_compare_chain(builder, left, ops, comparators, span, exception_name)
             }
         }
-        Expr::IfBlock { .. } => Err(LowerError::new(
-            "Expr::IfBlock should have been desugared before lowering",
-        )),
         Expr::TryExpr {
             expr,
             fallback,
@@ -775,9 +772,6 @@ pub(crate) fn lower_expr_with_exception(
                 .call_node("YieldFrom", vec![value], span)
                 .map_err(py_err_to_lower)
         }
-        Expr::Lambda { .. } => Err(LowerError::new(
-            "def expressions should be desugared before lowering",
-        )),
         Expr::Regex { pattern, span } => {
             let func = name_expr(
                 builder,
@@ -1462,23 +1456,6 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
                 count_placeholders(expr, info);
             }
         }
-        Expr::IfBlock {
-            cond,
-            body,
-            elifs,
-            else_body,
-            ..
-        } => {
-            count_placeholders_in_condition(cond, info);
-            count_placeholders_in_body_stmts(body, info);
-            for (elif_cond, elif_body) in elifs {
-                count_placeholders_in_condition(elif_cond, info);
-                count_placeholders_in_body_stmts(elif_body, info);
-            }
-            if let Some(else_body) = else_body {
-                count_placeholders_in_body_stmts(else_body, info);
-            }
-        }
         Expr::TryExpr { expr, fallback, .. } => {
             count_placeholders(expr, info);
             if let Some(fallback) = fallback {
@@ -1491,20 +1468,6 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
             }
         }
         Expr::YieldFrom { expr, .. } => count_placeholders(expr, info),
-        Expr::Lambda { params, body, .. } => {
-            for param in params {
-                if let Parameter::Regular { default, .. } = param
-                    && let Some(default) = default
-                {
-                    count_placeholders(default, info);
-                }
-            }
-            for stmt in body {
-                if let Stmt::Expr { value, .. } = stmt {
-                    count_placeholders(value, info);
-                }
-            }
-        }
         Expr::Regex { pattern, .. } => count_placeholders_in_regex(pattern, info),
         Expr::RegexMatch { value, pattern, .. } => {
             count_placeholders(value, info);
@@ -1590,26 +1553,6 @@ fn count_placeholders_in_assign_target(target: &AssignTarget, info: &mut Placeho
             for element in elements {
                 count_placeholders_in_assign_target(element, info);
             }
-        }
-    }
-}
-
-fn count_placeholders_in_condition(cond: &Condition, info: &mut PlaceholderInfo) {
-    match cond {
-        Condition::Expr(expr) => count_placeholders(expr, info),
-        Condition::Let { value, guard, .. } => {
-            count_placeholders(value, info);
-            if let Some(guard) = guard {
-                count_placeholders(guard, info);
-            }
-        }
-    }
-}
-
-fn count_placeholders_in_body_stmts(stmts: &[Stmt], info: &mut PlaceholderInfo) {
-    for stmt in stmts {
-        if let Stmt::Expr { value, .. } = stmt {
-            count_placeholders(value, info);
         }
     }
 }
@@ -1726,29 +1669,6 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                 .collect(),
             span: span.clone(),
         },
-        Expr::IfBlock {
-            cond,
-            body,
-            elifs,
-            else_body,
-            span,
-        } => Expr::IfBlock {
-            cond: substitute_placeholder_in_condition(cond, replacement),
-            body: substitute_placeholder_in_stmts(body, replacement),
-            elifs: elifs
-                .iter()
-                .map(|(c, b)| {
-                    (
-                        substitute_placeholder_in_condition(c, replacement),
-                        substitute_placeholder_in_stmts(b, replacement),
-                    )
-                })
-                .collect(),
-            else_body: else_body
-                .as_ref()
-                .map(|b| substitute_placeholder_in_stmts(b, replacement)),
-            span: span.clone(),
-        },
         Expr::TryExpr {
             expr,
             fallback,
@@ -1768,48 +1688,6 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
         },
         Expr::YieldFrom { expr, span } => Expr::YieldFrom {
             expr: Box::new(substitute_placeholder(expr, replacement)),
-            span: span.clone(),
-        },
-        Expr::Lambda { params, body, span } => Expr::Lambda {
-            params: params
-                .iter()
-                .map(|param| match param {
-                    Parameter::Regular {
-                        name,
-                        default,
-                        span,
-                    } => Parameter::Regular {
-                        name: name.clone(),
-                        default: default
-                            .as_ref()
-                            .map(|expr| substitute_placeholder(expr, replacement)),
-                        span: span.clone(),
-                    },
-                    Parameter::VarArgs { name, span } => Parameter::VarArgs {
-                        name: name.clone(),
-                        span: span.clone(),
-                    },
-                    Parameter::KwArgs { name, span } => Parameter::KwArgs {
-                        name: name.clone(),
-                        span: span.clone(),
-                    },
-                })
-                .collect(),
-            body: body
-                .iter()
-                .map(|stmt| match stmt {
-                    Stmt::Expr {
-                        value,
-                        semicolon_terminated,
-                        span,
-                    } => Stmt::Expr {
-                        value: substitute_placeholder(value, replacement),
-                        semicolon_terminated: *semicolon_terminated,
-                        span: span.clone(),
-                    },
-                    _ => stmt.clone(),
-                })
-                .collect(),
             span: span.clone(),
         },
         Expr::Regex { pattern, span } => Expr::Regex {
@@ -1969,45 +1847,6 @@ fn substitute_placeholder_in_assign_target(
             span: span.clone(),
         },
     }
-}
-
-fn substitute_placeholder_in_condition(cond: &Condition, replacement: &Expr) -> Condition {
-    match cond {
-        Condition::Expr(expr) => {
-            Condition::Expr(Box::new(substitute_placeholder(expr, replacement)))
-        }
-        Condition::Let {
-            target,
-            value,
-            guard,
-            span,
-        } => Condition::Let {
-            target: Box::new(substitute_placeholder_in_assign_target(target, replacement)),
-            value: Box::new(substitute_placeholder(value, replacement)),
-            guard: guard
-                .as_ref()
-                .map(|e| Box::new(substitute_placeholder(e, replacement))),
-            span: span.clone(),
-        },
-    }
-}
-
-fn substitute_placeholder_in_stmts(stmts: &[Stmt], replacement: &Expr) -> Vec<Stmt> {
-    stmts
-        .iter()
-        .map(|stmt| match stmt {
-            Stmt::Expr {
-                value,
-                semicolon_terminated,
-                span,
-            } => Stmt::Expr {
-                value: substitute_placeholder(value, replacement),
-                semicolon_terminated: *semicolon_terminated,
-                span: span.clone(),
-            },
-            _ => stmt.clone(),
-        })
-        .collect()
 }
 
 fn substitute_placeholder_in_regex(pattern: &RegexPattern, replacement: &Expr) -> RegexPattern {
@@ -2302,23 +2141,12 @@ pub(crate) fn lower_expr_as_stmt(
     expr: &Expr,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    match expr {
-        Expr::IfBlock {
-            cond,
-            body,
-            elifs,
-            else_body,
-            span: if_span,
-        } => lower_if_chain(builder, cond, body, elifs, else_body, if_span),
-        _ => {
-            let value = lower_expr(builder, expr)?;
-            Ok(vec![
-                builder
-                    .call_node("Expr", vec![value], span)
-                    .map_err(py_err_to_lower)?,
-            ])
-        }
-    }
+    let value = lower_expr(builder, expr)?;
+    Ok(vec![
+        builder
+            .call_node("Expr", vec![value], span)
+            .map_err(py_err_to_lower)?,
+    ])
 }
 
 /// Lower an expression at tail position with the given tail behavior.
@@ -2330,37 +2158,26 @@ pub(crate) fn lower_tail_expr(
     tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    match expr {
-        Expr::IfBlock {
-            cond,
-            body,
-            elifs,
-            else_body,
-            span: if_span,
-        } => lower_if_block_with_tail(builder, cond, body, elifs, else_body, tail, if_span),
-        _ => {
-            let value = lower_expr(builder, expr)?;
-            match tail {
-                TailBehavior::AutoPrint => build_auto_print_block(builder, value, span),
-                TailBehavior::CaptureOnly => Ok(vec![assign_name(
-                    builder,
-                    "__snail_last_result",
-                    value,
-                    span,
-                )?]),
-                TailBehavior::ImplicitReturn => {
-                    let return_stmt = builder
-                        .call_node("Return", vec![value], span)
-                        .map_err(py_err_to_lower)?;
-                    Ok(vec![return_stmt])
-                }
-                TailBehavior::None => Ok(vec![
-                    builder
-                        .call_node("Expr", vec![value], span)
-                        .map_err(py_err_to_lower)?,
-                ]),
-            }
+    let value = lower_expr(builder, expr)?;
+    match tail {
+        TailBehavior::AutoPrint => build_auto_print_block(builder, value, span),
+        TailBehavior::CaptureOnly => Ok(vec![assign_name(
+            builder,
+            "__snail_last_result",
+            value,
+            span,
+        )?]),
+        TailBehavior::ImplicitReturn => {
+            let return_stmt = builder
+                .call_node("Return", vec![value], span)
+                .map_err(py_err_to_lower)?;
+            Ok(vec![return_stmt])
         }
+        TailBehavior::None => Ok(vec![
+            builder
+                .call_node("Expr", vec![value], span)
+                .map_err(py_err_to_lower)?,
+        ]),
     }
 }
 

@@ -68,6 +68,23 @@ fn validate_program(
 
 fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result<(), ParseError> {
     match stmt {
+        Stmt::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
+        } => {
+            validate_condition_mode(cond, source, mode)?;
+            validate_block_mode(body, source, mode)?;
+            for (elif_cond, elif_body) in elifs {
+                validate_condition_mode(elif_cond, source, mode)?;
+                validate_block_mode(elif_body, source, mode)?;
+            }
+            if let Some(body) = else_body {
+                validate_block_mode(body, source, mode)?;
+            }
+        }
         Stmt::While {
             cond,
             body,
@@ -415,23 +432,6 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_expr_mode(left, source, mode)?;
             validate_exprs_mode(comparators, source, mode)?;
         }
-        Expr::IfBlock {
-            cond,
-            body,
-            elifs,
-            else_body,
-            ..
-        } => {
-            validate_condition_mode(cond, source, mode)?;
-            validate_block_mode(body, source, mode)?;
-            for (elif_cond, elif_body) in elifs {
-                validate_condition_mode(elif_cond, source, mode)?;
-                validate_block_mode(elif_body, source, mode)?;
-            }
-            if let Some(else_body) = else_body {
-                validate_block_mode(else_body, source, mode)?;
-            }
-        }
         Expr::TryExpr { expr, fallback, .. } => {
             validate_expr_mode(expr, source, mode)?;
             if let Some(fallback) = fallback {
@@ -442,12 +442,6 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             if let Some(value) = value {
                 validate_expr_mode(value, source, mode)?;
             }
-        }
-        Expr::Lambda { params, body, .. } => {
-            for param in params {
-                validate_param_mode(param, source, mode)?;
-            }
-            validate_block_mode(body, source, mode)?;
         }
         Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
             validate_exprs_mode(elements, source, mode)?

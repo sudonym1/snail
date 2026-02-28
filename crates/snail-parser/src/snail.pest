@@ -5,17 +5,14 @@ program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 // Compound statements (ending with }) don't need trailing separators
 // Simple statements need separators unless they're the last statement
 stmt_list = { (stmt_item | segment_break)* ~ final_stmt? }
-stmt_item = _{ compound_stmt ~ stmt_sep* | block_expr_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ }
-final_stmt = _{ compound_stmt | block_expr_stmt | simple_stmt }
+stmt_item = _{ compound_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ }
+final_stmt = _{ compound_stmt | simple_stmt }
 stmt_sep = _{ ";" | "\x1E" }
 segment_break = { "\x1F" ~ stmt_sep* }
 
-block_expr = _{ if_block_expr | def_expr }
-block_expr_stmt = { block_expr }
-
 stmt = _{ compound_stmt | simple_stmt }
 
-compound_stmt = _{ while_stmt | for_stmt | def_stmt | class_stmt | try_stmt | with_stmt | lines_stmt | files_stmt }
+compound_stmt = _{ if_stmt | while_stmt | for_stmt | def_stmt | class_stmt | try_stmt | with_stmt | lines_stmt | files_stmt }
 simple_stmt = _{
   return_stmt
   | break_stmt
@@ -32,7 +29,8 @@ simple_stmt = _{
 // Braced block of statements
 block = { "{" ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ "}" }
 
-// Control flow: while/else, for/else
+// Control flow: if/elif/else, while/else, for/else
+if_stmt = { "if" ~ if_cond ~ block ~ (stmt_sep* ~ "elif" ~ if_cond ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
 while_stmt = { "while" ~ while_cond ~ block ~ (stmt_sep* ~ "else" ~ block)? }
 for_stmt = { "for" ~ assign_target_list ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
 if_cond = { let_cond | expr }
@@ -117,14 +115,11 @@ assign_tuple = { "(" ~ assign_target_tuple ~ ")" }
 expr_stmt = { expr }
 
 // Expressions: precedence from lowest (aug assignment) to highest (power)
-expr = { aug_assign_expr | yield_expr | if_block_expr | or_expr }
+expr = { aug_assign_expr | yield_expr | or_expr }
 
 yield_expr = { "yield" ~ (yield_from | yield_value)? }
 yield_from = { "from" ~ or_expr }
 yield_value = _{ or_expr }
-
-// If-block expression: if cond { body } elif cond { body } else { body }
-if_block_expr = { "if" ~ if_cond ~ block ~ (stmt_sep* ~ "elif" ~ if_cond ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
 
 aug_assign_expr = { aug_target ~ aug_op ~ expr }
 aug_target = { assign_target_ref }
@@ -191,7 +186,6 @@ slice_end = { expr }
 // Atomic expressions: literals, variables, collections, etc.
 atom = _{
   literal
-  | def_expr
   | regex
   | subprocess
   | structured_accessor
@@ -208,8 +202,6 @@ atom = _{
   | tuple_literal
   | paren_expr
 }
-
-def_expr = { "def" ~ parameters? ~ block }
 
 // Parenthesized expression (preserved in AST for proper validation)
 paren_expr = { "(" ~ expr ~ ")" }

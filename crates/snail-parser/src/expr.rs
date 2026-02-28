@@ -8,7 +8,7 @@ use crate::literal::{
     parse_regex_literal, parse_set_literal, parse_slice, parse_structured_accessor,
     parse_subprocess, parse_tuple_literal,
 };
-use crate::stmt::{parse_assign_target_ref_expr, parse_block, parse_condition, parse_parameters};
+use crate::stmt::parse_assign_target_ref_expr;
 use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
 
 pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -32,7 +32,6 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         | Rule::try_fallback_power
         | Rule::try_fallback_primary => parse_expr_rule(pair, source),
         Rule::literal => parse_literal(pair, source),
-        Rule::def_expr => parse_def_expr(pair, source),
         Rule::exception_var => Ok(Expr::Name {
             name: pair.as_str().to_string(),
             span: span_from_pair(&pair, source),
@@ -66,7 +65,6 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::subprocess => parse_subprocess(pair, source),
         Rule::structured_accessor => parse_structured_accessor(pair, source),
         Rule::paren_expr => parse_paren_expr(pair, source),
-        Rule::if_block_expr => parse_if_block_expr(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -97,7 +95,6 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::try_fallback_primary => parse_primary(pair, source),
         Rule::paren_expr => parse_paren_expr(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
-        Rule::if_block_expr => parse_if_block_expr(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -169,48 +166,6 @@ fn parse_aug_assign_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Par
         target: Box::new(target),
         op,
         value: Box::new(value),
-        span,
-    })
-}
-
-fn parse_if_block_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let cond_pair = inner
-        .next()
-        .ok_or_else(|| error_with_span("missing if-block condition", span.clone(), source))?;
-    let cond = parse_condition(cond_pair, source)?;
-    let body = parse_block(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing if-block body", span.clone(), source))?,
-        source,
-    )?;
-    let mut elifs = Vec::new();
-    let mut else_body = None;
-    while let Some(next) = inner.next() {
-        match next.as_rule() {
-            Rule::if_cond => {
-                let elif_cond = parse_condition(next, source)?;
-                let elif_block = parse_block(
-                    inner.next().ok_or_else(|| {
-                        error_with_span("missing elif block", span.clone(), source)
-                    })?,
-                    source,
-                )?;
-                elifs.push((elif_cond, elif_block));
-            }
-            Rule::block => {
-                else_body = Some(parse_block(next, source)?);
-            }
-            _ => {}
-        }
-    }
-    Ok(Expr::IfBlock {
-        cond,
-        body,
-        elifs,
-        else_body,
         span,
     })
 }
@@ -748,26 +703,6 @@ fn parse_paren_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
     })
 }
 
-fn parse_def_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let (params, body_pair) = match inner.next() {
-        Some(pair) if pair.as_rule() == Rule::parameters => {
-            let params = parse_parameters(pair, source)?;
-            let body_pair = inner
-                .next()
-                .ok_or_else(|| error_with_span("missing def body", span.clone(), source))?;
-            (params, body_pair)
-        }
-        Some(pair) if pair.as_rule() == Rule::block => (Vec::new(), pair),
-        Some(_) | None => {
-            return Err(error_with_span("missing def body", span.clone(), source));
-        }
-    };
-    let body = parse_block(body_pair, source)?;
-    Ok(Expr::Lambda { params, body, span })
-}
-
 fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
@@ -807,7 +742,6 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         Rule::dict_comp => parse_dict_comp(inner_pair, source),
         Rule::regex => parse_regex_literal(inner_pair, source),
         Rule::subprocess => parse_subprocess(inner_pair, source),
-        Rule::def_expr => parse_def_expr(inner_pair, source),
         Rule::paren_expr => parse_paren_expr(inner_pair, source),
         _ => Err(error_with_span(
             format!("unsupported atom: {:?}", inner_pair.as_rule()),

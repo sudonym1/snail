@@ -14,6 +14,23 @@ fn check_stmts(stmts: &[Stmt], in_function: bool) -> Result<(), LowerError> {
 
 fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
     match stmt {
+        Stmt::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            ..
+        } => {
+            check_condition(cond, in_function)?;
+            check_stmts(body, in_function)?;
+            for (elif_cond, elif_body) in elifs {
+                check_condition(elif_cond, in_function)?;
+                check_stmts(elif_body, in_function)?;
+            }
+            if let Some(else_body) = else_body {
+                check_stmts(else_body, in_function)?;
+            }
+        }
         Stmt::While {
             cond,
             body,
@@ -247,35 +264,11 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
                 check_expr(expr, in_function)?;
             }
         }
-        Expr::IfBlock {
-            cond,
-            body,
-            elifs,
-            else_body,
-            ..
-        } => {
-            check_condition(cond, in_function)?;
-            check_stmts(body, in_function)?;
-            for (elif_cond, elif_body) in elifs {
-                check_condition(elif_cond, in_function)?;
-                check_stmts(elif_body, in_function)?;
-            }
-            if let Some(else_body) = else_body {
-                check_stmts(else_body, in_function)?;
-            }
-        }
         Expr::TryExpr { expr, fallback, .. } => {
             check_expr(expr, in_function)?;
             if let Some(fallback) = fallback {
                 check_expr(fallback, in_function)?;
             }
-        }
-        Expr::Lambda { params, body, .. } => {
-            for param in params {
-                check_param(param)?;
-            }
-            // Anonymous defs are hoisted to defs; allow yield in their bodies.
-            check_stmts(body, true)?;
         }
         Expr::Regex { pattern, .. } => check_regex_pattern(pattern, in_function)?,
         Expr::RegexMatch { value, pattern, .. } => {

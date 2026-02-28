@@ -6,7 +6,7 @@ use snail_error::LowerError;
 use super::constants::{SNAIL_LET_KEEP, SNAIL_LET_OK, SNAIL_LET_VALUE};
 use super::expr::{
     lower_assign_target, lower_delete_target, lower_expr, lower_expr_as_stmt,
-    lower_expr_with_exception, lower_tail_expr,
+    lower_expr_with_exception, lower_if_block_with_tail, lower_if_chain, lower_tail_expr,
 };
 use super::helpers::{
     assign_name, bool_constant, build_destructure_try, build_let_guard_test, name_expr,
@@ -23,6 +23,9 @@ pub(crate) enum TailBehavior {
 
 pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObject, LowerError> {
     match stmt {
+        Stmt::If { .. } => Err(LowerError::new(
+            "if statement should be lowered via lower_block",
+        )),
         Stmt::While {
             cond,
             body,
@@ -401,6 +404,18 @@ pub(crate) fn lower_block_with_tail(
                     stmts.extend(lower_tail_expr(builder, value, tail, span)?);
                     continue;
                 }
+                Stmt::If {
+                    cond,
+                    body,
+                    elifs,
+                    else_body,
+                    span,
+                } => {
+                    stmts.extend(lower_if_block_with_tail(
+                        builder, cond, body, elifs, else_body, tail, span,
+                    )?);
+                    continue;
+                }
                 Stmt::Lines {
                     sources,
                     body,
@@ -454,6 +469,13 @@ pub(crate) fn lower_block_with_tail(
 fn lower_stmt_to_stmts(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<Vec<PyObject>, LowerError> {
     match stmt {
         Stmt::Expr { value, span, .. } => lower_expr_as_stmt(builder, value, span),
+        Stmt::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            span,
+        } => lower_if_chain(builder, cond, body, elifs, else_body, span),
         Stmt::While {
             cond,
             body,

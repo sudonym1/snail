@@ -27,6 +27,7 @@ pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, 
 
 pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     match pair.as_rule() {
+        Rule::if_stmt => parse_if_stmt(pair, source),
         Rule::while_stmt => parse_while(pair, source),
         Rule::for_stmt => parse_for(pair, source),
         Rule::def_stmt => parse_def(pair, source),
@@ -51,7 +52,6 @@ pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError
         Rule::lines_stmt => parse_lines_stmt(pair, source),
         Rule::files_stmt => parse_files_stmt(pair, source),
         Rule::assign_stmt => parse_assign(pair, source),
-        Rule::block_expr_stmt => parse_block_expr_stmt(pair, source),
         Rule::expr_stmt => parse_expr_stmt(pair, source),
         _ => Err(error_with_span(
             format!("unsupported statement: {:?}", pair.as_rule()),
@@ -115,6 +115,48 @@ fn parse_let_condition(pair: Pair<'_, Rule>, source: &str) -> Result<Condition, 
         target: Box::new(target),
         value: Box::new(value),
         guard: guard.map(Box::new),
+        span,
+    })
+}
+
+fn parse_if_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let cond_pair = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing if condition", span.clone(), source))?;
+    let cond = parse_condition(cond_pair, source)?;
+    let body = parse_block(
+        inner
+            .next()
+            .ok_or_else(|| error_with_span("missing if body", span.clone(), source))?,
+        source,
+    )?;
+    let mut elifs = Vec::new();
+    let mut else_body = None;
+    while let Some(next) = inner.next() {
+        match next.as_rule() {
+            Rule::if_cond => {
+                let elif_cond = parse_condition(next, source)?;
+                let elif_block = parse_block(
+                    inner.next().ok_or_else(|| {
+                        error_with_span("missing elif block", span.clone(), source)
+                    })?,
+                    source,
+                )?;
+                elifs.push((elif_cond, elif_block));
+            }
+            Rule::block => {
+                else_body = Some(parse_block(next, source)?);
+            }
+            _ => {}
+        }
+    }
+    Ok(Stmt::If {
+        cond,
+        body,
+        elifs,
+        else_body,
         span,
     })
 }
@@ -837,21 +879,6 @@ pub fn parse_pattern_action(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, 
     Ok(Stmt::PatternAction {
         pattern,
         action,
-        span,
-    })
-}
-
-fn parse_block_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let inner = pair
-        .into_inner()
-        .next()
-        .ok_or_else(|| error_with_span("missing block expression", span.clone(), source))?;
-    let value = parse_expr_pair(inner, source)?;
-    let semicolon_terminated = check_trailing_semicolon(source, span.end.offset);
-    Ok(Stmt::Expr {
-        value,
-        semicolon_terminated,
         span,
     })
 }

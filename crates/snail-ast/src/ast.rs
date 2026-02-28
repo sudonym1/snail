@@ -117,6 +117,13 @@ pub enum Stmt {
         action: Option<Vec<Stmt>>,
         span: SourceSpan,
     },
+    If {
+        cond: Condition,
+        body: Vec<Stmt>,
+        elifs: Vec<(Condition, Vec<Stmt>)>,
+        else_body: Option<Vec<Stmt>>,
+        span: SourceSpan,
+    },
     SegmentBreak {
         span: SourceSpan,
     },
@@ -256,13 +263,6 @@ pub enum Expr {
         comparators: Vec<Expr>,
         span: SourceSpan,
     },
-    IfBlock {
-        cond: Condition,
-        body: Vec<Stmt>,
-        elifs: Vec<(Condition, Vec<Stmt>)>,
-        else_body: Option<Vec<Stmt>>,
-        span: SourceSpan,
-    },
     TryExpr {
         expr: Box<Expr>,
         fallback: Option<Box<Expr>>,
@@ -274,11 +274,6 @@ pub enum Expr {
     },
     YieldFrom {
         expr: Box<Expr>,
-        span: SourceSpan,
-    },
-    Lambda {
-        params: Vec<Parameter>,
-        body: Vec<Stmt>,
         span: SourceSpan,
     },
     Regex {

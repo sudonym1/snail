@@ -2,8 +2,8 @@ mod common;
 
 use common::*;
 use snail_ast::{
-    Argument, AssignTarget, AugAssignOp, BinaryOp, Condition, Expr, ImportFromItems, IncrOp,
-    Parameter, Stmt, StringDelimiter,
+    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, Expr, ImportFromItems,
+    IncrOp, Parameter, Stmt, StringDelimiter,
 };
 use snail_parser::parse as parse_program;
 
@@ -23,16 +23,12 @@ fn parses_basic_program() {
     }
 
     match &program.stmts[1] {
-        Stmt::Expr {
-            value:
-                Expr::IfBlock {
-                    cond,
-                    body,
-                    elifs,
-                    else_body,
-                    span,
-                },
-            ..
+        Stmt::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            span,
         } => {
             expect_condition_name(cond, "x");
             assert_eq!(body.len(), 1);
@@ -81,15 +77,11 @@ fn parses_if_elif_else_chain() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Expr {
-            value:
-                Expr::IfBlock {
-                    cond,
-                    body,
-                    elifs,
-                    else_body,
-                    ..
-                },
+        Stmt::If {
+            cond,
+            body,
+            elifs,
+            else_body,
             ..
         } => {
             expect_condition_name(cond, "x");
@@ -123,10 +115,7 @@ fn parses_if_let_with_guard() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Expr {
-            value: Expr::IfBlock { cond, body, .. },
-            ..
-        } => match cond {
+        Stmt::If { cond, body, .. } => match cond {
             Condition::Let {
                 target,
                 value,
@@ -163,10 +152,7 @@ fn parses_if_let_with_starred_target() {
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Expr {
-            value: Expr::IfBlock { cond, .. },
-            ..
-        } => match cond {
+        Stmt::If { cond, .. } => match cond {
             Condition::Let { target, value, .. } => {
                 match target.as_ref() {
                     AssignTarget::List { elements, .. } => {
@@ -254,10 +240,7 @@ fn parses_multiline_if_while_with_headers() {
     assert_eq!(program.stmts.len(), 3);
 
     match &program.stmts[0] {
-        Stmt::Expr {
-            value: Expr::IfBlock { cond, body, .. },
-            ..
-        } => {
+        Stmt::If { cond, body, .. } => {
             expect_condition_expr(cond);
             assert_eq!(body.len(), 1);
             assert!(matches!(&body[0], Stmt::Pass { .. }));
@@ -629,114 +612,7 @@ fn parses_placeholder_identifier() {
     expect_name(value, "_tmp");
 }
 
-#[test]
-fn parses_def_expr_no_params() {
-    let source = "f = def { 1 }\n";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 1);
-
-    let (targets, value) = expect_assign(&program.stmts[0]);
-    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "f"));
-    match value {
-        Expr::Lambda { params, body, .. } => {
-            assert!(params.is_empty());
-            assert_eq!(body.len(), 1);
-            match &body[0] {
-                Stmt::Expr { value, .. } => expect_number(value, "1"),
-                other => panic!("Expected expression statement, got {other:?}"),
-            }
-        }
-        other => panic!("Expected def expression, got {other:?}"),
-    }
-}
-
-#[test]
-fn parses_bare_def_expr_with_newline_before_block() {
-    let source = "def\n{}\n";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 1);
-
-    match expect_expr_stmt(&program.stmts[0]) {
-        Expr::Lambda { params, body, .. } => {
-            assert!(params.is_empty());
-            assert!(body.is_empty());
-        }
-        other => panic!("Expected bare def expression, got {other:?}"),
-    }
-}
-
-#[test]
-fn parses_def_expr_with_params_and_defaults() {
-    let source = "f = def(x, y=2, *rest, **kw) { x }\n";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 1);
-
-    let (targets, value) = expect_assign(&program.stmts[0]);
-    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "f"));
-    match value {
-        Expr::Lambda { params, body, .. } => {
-            assert_eq!(params.len(), 4);
-            match &params[0] {
-                Parameter::Regular { name, default, .. } => {
-                    assert_eq!(name, "x");
-                    assert!(default.is_none());
-                }
-                other => panic!("Expected regular param, got {other:?}"),
-            }
-            match &params[1] {
-                Parameter::Regular { name, default, .. } => {
-                    assert_eq!(name, "y");
-                    let default = default.as_ref().expect("expected default");
-                    expect_number(default, "2");
-                }
-                other => panic!("Expected regular param with default, got {other:?}"),
-            }
-            match &params[2] {
-                Parameter::VarArgs { name, .. } => assert_eq!(name, "rest"),
-                other => panic!("Expected *args param, got {other:?}"),
-            }
-            match &params[3] {
-                Parameter::KwArgs { name, .. } => assert_eq!(name, "kw"),
-                other => panic!("Expected **kwargs param, got {other:?}"),
-            }
-            assert_eq!(body.len(), 1);
-        }
-        other => panic!("Expected def expression, got {other:?}"),
-    }
-}
-
-#[test]
-fn parses_def_expr_nested_and_called() {
-    let source = "outer = def(x) { def(y) { x + y } }\nvalue = def(x) { x + 1 }(2)\n";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 2);
-
-    let (targets, value) = expect_assign(&program.stmts[0]);
-    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "outer"));
-    match value {
-        Expr::Lambda { body, .. } => match &body[0] {
-            Stmt::Expr { value, .. } => match value {
-                Expr::Lambda { .. } => {}
-                other => panic!("Expected nested def expression, got {other:?}"),
-            },
-            other => panic!("Expected expression statement, got {other:?}"),
-        },
-        other => panic!("Expected def expression, got {other:?}"),
-    }
-
-    let (targets, value) = expect_assign(&program.stmts[1]);
-    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "value"));
-    match value {
-        Expr::Call { func, args, .. } => {
-            assert_eq!(args.len(), 1);
-            match func.as_ref() {
-                Expr::Lambda { .. } => {}
-                other => panic!("Expected def expression callee, got {other:?}"),
-            }
-        }
-        other => panic!("Expected call expression, got {other:?}"),
-    }
-}
+// Lambda (def expr) tests removed — anonymous def expressions no longer exist
 
 #[test]
 fn parses_imports() {
@@ -1553,30 +1429,38 @@ fn parses_empty_structured_accessor() {
 }
 
 #[test]
-fn parses_if_block_with_not_in_operator() {
-    let source = "result = if x not in y { x } else { z }";
+fn parses_if_stmt_with_not_in_operator() {
+    let source = "if x not in y { pass } else { pass }";
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Assign { value, .. } => {
-            assert!(matches!(value, Expr::IfBlock { .. }));
-        }
-        other => panic!("Expected assignment, got {:?}", other),
+        Stmt::If { cond, .. } => match cond {
+            Condition::Expr(expr) => match expr.as_ref() {
+                Expr::Compare { ops, .. } => assert_eq!(ops, &[CompareOp::NotIn]),
+                other => panic!("Expected comparison, got {:?}", other),
+            },
+            other => panic!("Expected expr condition, got {:?}", other),
+        },
+        other => panic!("Expected if statement, got {:?}", other),
     }
 }
 
 #[test]
-fn parses_if_block_with_is_not_operator() {
-    let source = "result = if x is not None { x } else { y }";
+fn parses_if_stmt_with_is_not_operator() {
+    let source = "if x is not None { pass } else { pass }";
     let program = parse_program(source).expect("program should parse");
     assert_eq!(program.stmts.len(), 1);
 
     match &program.stmts[0] {
-        Stmt::Assign { value, .. } => {
-            assert!(matches!(value, Expr::IfBlock { .. }));
-        }
-        other => panic!("Expected assignment, got {:?}", other),
+        Stmt::If { cond, .. } => match cond {
+            Condition::Expr(expr) => match expr.as_ref() {
+                Expr::Compare { ops, .. } => assert_eq!(ops, &[CompareOp::IsNot]),
+                other => panic!("Expected comparison, got {:?}", other),
+            },
+            other => panic!("Expected expr condition, got {:?}", other),
+        },
+        other => panic!("Expected if statement, got {:?}", other),
     }
 }
 
@@ -2089,10 +1973,7 @@ fn parses_if_followed_by_stmt_same_line() {
     let source = "if x { y = 1 } z";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(
-        expect_expr_stmt(&program.stmts[0]),
-        Expr::IfBlock { .. }
-    ));
+    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
     expect_name(expect_expr_stmt(&program.stmts[1]), "z");
 }
 
@@ -2101,10 +1982,7 @@ fn parses_if_followed_by_stmt_no_space() {
     let source = "if x { y = 1 }z";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(
-        expect_expr_stmt(&program.stmts[0]),
-        Expr::IfBlock { .. }
-    ));
+    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
     expect_name(expect_expr_stmt(&program.stmts[1]), "z");
 }
 
@@ -2113,10 +1991,7 @@ fn parses_if_else_followed_by_stmt() {
     let source = "if a { x } else { y } z";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(
-        expect_expr_stmt(&program.stmts[0]),
-        Expr::IfBlock { .. }
-    ));
+    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
     expect_name(expect_expr_stmt(&program.stmts[1]), "z");
 }
 
@@ -2125,39 +2000,18 @@ fn parses_nested_if_blocks_without_separators() {
     let source = "if a { if b { c } d } e";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(
-        expect_expr_stmt(&program.stmts[0]),
-        Expr::IfBlock { .. }
-    ));
+    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
     expect_name(expect_expr_stmt(&program.stmts[1]), "e");
 }
 
 #[test]
-fn parses_consecutive_block_exprs() {
+fn parses_consecutive_block_stmts() {
     let source = "if a { b } if c { d } while e { f }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 3);
-    assert!(matches!(
-        expect_expr_stmt(&program.stmts[0]),
-        Expr::IfBlock { .. }
-    ));
-    assert!(matches!(
-        expect_expr_stmt(&program.stmts[1]),
-        Expr::IfBlock { .. }
-    ));
+    assert!(matches!(&program.stmts[0], Stmt::If { .. }));
+    assert!(matches!(&program.stmts[1], Stmt::If { .. }));
     assert!(matches!(&program.stmts[2], Stmt::While { .. }));
-}
-
-#[test]
-fn parses_def_expr_followed_by_stmt() {
-    let source = "def(x) { x + 1 } z";
-    let program = parse_ok(source);
-    assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(
-        expect_expr_stmt(&program.stmts[0]),
-        Expr::Lambda { .. }
-    ));
-    expect_name(expect_expr_stmt(&program.stmts[1]), "z");
 }
 
 #[test]
@@ -2166,10 +2020,7 @@ fn parses_mixed_block_and_simple_stmts() {
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 4);
     assert!(matches!(&program.stmts[0], Stmt::Assign { .. }));
-    assert!(matches!(
-        expect_expr_stmt(&program.stmts[1]),
-        Expr::IfBlock { .. }
-    ));
+    assert!(matches!(&program.stmts[1], Stmt::If { .. }));
     assert!(matches!(&program.stmts[2], Stmt::Assign { .. }));
     assert!(matches!(&program.stmts[3], Stmt::Assign { .. }));
 }
