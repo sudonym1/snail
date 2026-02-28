@@ -353,6 +353,11 @@ pub enum Expr {
         ifs: Vec<Expr>,
         span: SourceSpan,
     },
+    Lambda {
+        params: Vec<Parameter>,
+        body: Box<Expr>,
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

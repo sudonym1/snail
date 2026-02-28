@@ -118,6 +118,13 @@ def chained_count() {
     yield 99
 }
 
+# Lambda expressions
+double = lambda x: x * 2
+noop = lambda: None
+add = lambda x, y: x + y
+with_default = lambda x, y=10: x + y
+sorted_words = sorted(["bb", "a", "ccc"], key=lambda s: len(s))
+
 # ---- Collections, destructuring, and comprehension ----
 nums = [1, 2, 3, 4]
 data = list(range(5))

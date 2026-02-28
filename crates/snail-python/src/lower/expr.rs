@@ -13,7 +13,7 @@ use super::operators::{
     lower_unary_op,
 };
 use super::py_ast::{AstBuilder, py_err_to_lower};
-use super::stmt::{TailBehavior, lower_block, lower_block_with_tail};
+use super::stmt::{TailBehavior, lower_block, lower_block_with_tail, lower_parameters};
 
 pub(crate) fn lower_expr(builder: &AstBuilder<'_>, expr: &Expr) -> Result<PyObject, LowerError> {
     lower_expr_with_exception(builder, expr, None)
@@ -1064,6 +1064,13 @@ pub(crate) fn lower_expr_with_exception(
                 )
                 .map_err(py_err_to_lower)
         }
+        Expr::Lambda { params, body, span } => {
+            let args = lower_parameters(builder, params, exception_name)?;
+            let body_expr = lower_expr_with_exception(builder, body, exception_name)?;
+            builder
+                .call_node("Lambda", vec![args, body_expr], span)
+                .map_err(py_err_to_lower)
+        }
     }
 }
 
@@ -1537,6 +1544,9 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
                 count_placeholders(expr, info);
             }
         }
+        Expr::Lambda { body, .. } => {
+            count_placeholders(body, info);
+        }
     }
 }
 
@@ -1804,6 +1814,11 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                 .iter()
                 .map(|expr| substitute_placeholder(expr, replacement))
                 .collect(),
+            span: span.clone(),
+        },
+        Expr::Lambda { params, body, span } => Expr::Lambda {
+            params: params.clone(),
+            body: Box::new(substitute_placeholder(body, replacement)),
             span: span.clone(),
         },
     }

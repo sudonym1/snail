@@ -2024,3 +2024,143 @@ fn parses_mixed_block_and_simple_stmts() {
     assert!(matches!(&program.stmts[2], Stmt::Assign { .. }));
     assert!(matches!(&program.stmts[3], Stmt::Assign { .. }));
 }
+
+// === Lambda expression tests ===
+
+#[test]
+fn parses_lambda_one_param() {
+    let source = "lambda x: x + 1";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Lambda { params, body, .. } => {
+            assert_eq!(params.len(), 1);
+            assert!(
+                matches!(&params[0], Parameter::Regular { name, default: None, .. } if name == "x")
+            );
+            assert!(matches!(
+                body.as_ref(),
+                Expr::Binary {
+                    op: BinaryOp::Add,
+                    ..
+                }
+            ));
+        }
+        other => panic!("Expected lambda, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_no_params() {
+    let source = "lambda: 42";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Lambda { params, body, .. } => {
+            assert!(params.is_empty());
+            expect_number(body, "42");
+        }
+        other => panic!("Expected lambda, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_multiple_params() {
+    let source = "lambda x, y: x + y";
+    let program = parse_ok(source);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Lambda { params, .. } => {
+            assert_eq!(params.len(), 2);
+            assert!(matches!(&params[0], Parameter::Regular { name, .. } if name == "x"));
+            assert!(matches!(&params[1], Parameter::Regular { name, .. } if name == "y"));
+        }
+        other => panic!("Expected lambda, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_with_default() {
+    let source = "lambda x, y=0: x + y";
+    let program = parse_ok(source);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Lambda { params, .. } => {
+            assert_eq!(params.len(), 2);
+            assert!(
+                matches!(&params[0], Parameter::Regular { name, default: None, .. } if name == "x")
+            );
+            assert!(
+                matches!(&params[1], Parameter::Regular { name, default: Some(_), .. } if name == "y")
+            );
+        }
+        other => panic!("Expected lambda, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_varargs() {
+    let source = "lambda *args: args";
+    let program = parse_ok(source);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Lambda { params, .. } => {
+            assert_eq!(params.len(), 1);
+            assert!(matches!(&params[0], Parameter::VarArgs { name, .. } if name == "args"));
+        }
+        other => panic!("Expected lambda, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_kwargs() {
+    let source = "lambda **kw: kw";
+    let program = parse_ok(source);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Lambda { params, .. } => {
+            assert_eq!(params.len(), 1);
+            assert!(matches!(&params[0], Parameter::KwArgs { name, .. } if name == "kw"));
+        }
+        other => panic!("Expected lambda, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_as_call_argument() {
+    let source = "f(lambda x: x)";
+    let program = parse_ok(source);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Call { args, .. } => {
+            assert_eq!(args.len(), 1);
+            match &args[0] {
+                Argument::Positional { value, .. } => {
+                    assert!(matches!(value, Expr::Lambda { .. }));
+                }
+                other => panic!("Expected positional arg, got {other:?}"),
+            }
+        }
+        other => panic!("Expected call, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_lambda_assigned_to_variable() {
+    let source = "f = lambda x, y: x + y";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    let (targets, value) = expect_assign(&program.stmts[0]);
+    assert_eq!(targets.len(), 1);
+    assert!(matches!(&targets[0], AssignTarget::Name { name, .. } if name == "f"));
+    assert!(matches!(value, Expr::Lambda { .. }));
+}
+
+#[test]
+fn lambda_is_keyword_not_identifier() {
+    // `lambda` should not be usable as a variable name
+    let result = snail_parser::parse("lambda = 1");
+    assert!(result.is_err());
+}

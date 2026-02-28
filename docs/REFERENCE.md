@@ -386,6 +386,24 @@ for value in chain() { print(value) }
 
 `yield` and `yield from` are only valid inside function bodies.
 
+## Lambda expressions
+Anonymous functions use Python's `lambda` syntax:
+```snail
+double = lambda x: x * 2
+add = lambda x, y: x + y
+noop = lambda: None
+```
+Lambdas support default values, `*args`, and `**kwargs`:
+```snail
+f = lambda x, y=10: x + y
+g = lambda *args: sum(args)
+```
+Lambdas work naturally as arguments to higher-order functions:
+```snail
+sorted(words, key=lambda s: len(s))
+list(map(lambda x: x ** 2, [1, 2, 3]))
+```
+
 ## Classes and methods
 Classes use the same block style. Methods take `self` explicitly and interact
 with Python's attribute model:

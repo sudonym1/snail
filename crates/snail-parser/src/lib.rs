@@ -499,6 +499,9 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_expr_mode(iter, source, mode)?;
             validate_exprs_mode(ifs, source, mode)?;
         }
+        Expr::Lambda { body, .. } => {
+            validate_expr_mode(body, source, mode)?;
+        }
     }
     Ok(())
 }

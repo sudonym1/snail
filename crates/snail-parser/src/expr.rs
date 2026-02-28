@@ -8,7 +8,7 @@ use crate::literal::{
     parse_regex_literal, parse_set_literal, parse_slice, parse_structured_accessor,
     parse_subprocess, parse_tuple_literal,
 };
-use crate::stmt::parse_assign_target_ref_expr;
+use crate::stmt::{parse_assign_target_ref_expr, parse_parameters};
 use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
 
 pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -16,6 +16,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::expr
         | Rule::aug_assign_expr
         | Rule::yield_expr
+        | Rule::lambda_expr
         | Rule::or_expr
         | Rule::and_expr
         | Rule::not_expr
@@ -78,6 +79,7 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::expr => parse_expr_rule(pair.into_inner().next().unwrap(), source),
         Rule::aug_assign_expr => parse_aug_assign_expr(pair, source),
         Rule::yield_expr => parse_yield_expr(pair, source),
+        Rule::lambda_expr => parse_lambda_expr(pair, source),
         Rule::or_expr => fold_left_binary(pair, source, BinaryOp::Or),
         Rule::and_expr => fold_left_binary(pair, source, BinaryOp::And),
         Rule::not_expr => parse_not_expr(pair, source),
@@ -128,6 +130,40 @@ fn parse_yield_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
             })
         }
     }
+}
+
+fn parse_lambda_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let mut params = Vec::new();
+    // Check if there are lambda_params before the body expression
+    if let Some(first) = inner.next() {
+        if first.as_rule() == Rule::lambda_params {
+            params = parse_parameters(first, source)?;
+            // Body is the next pair
+            let body_pair = inner.next().ok_or_else(|| {
+                error_with_span("missing lambda body expression", span.clone(), source)
+            })?;
+            let body = parse_expr_pair(body_pair, source)?;
+            return Ok(Expr::Lambda {
+                params,
+                body: Box::new(body),
+                span,
+            });
+        }
+        // No params — first is the body expression
+        let body = parse_expr_pair(first, source)?;
+        return Ok(Expr::Lambda {
+            params,
+            body: Box::new(body),
+            span,
+        });
+    }
+    Err(error_with_span(
+        "missing lambda body expression",
+        span,
+        source,
+    ))
 }
 
 fn parse_aug_assign_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {

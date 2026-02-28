@@ -3224,3 +3224,55 @@ def test_ts_repr(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
     assert captured.out.strip() == 'ts("2024-01-05 10:00:00")'
+
+
+# === Lambda expression tests ===
+
+
+def test_lambda_basic(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "f = lambda x: x + 1\nprint(f(5))"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "6"
+
+
+def test_lambda_no_params(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "f = lambda: 42\nprint(f())"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "42"
+
+
+def test_lambda_multiple_params(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "f = lambda x, y: x * y\nprint(f(3, 7))"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "21"
+
+
+def test_lambda_default_args(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "f = lambda x, y=10: x + y\nprint(f(5))"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "15"
+
+
+def test_lambda_with_map(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "print(list(map(lambda x: x ** 2, [1, 2, 3])))"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "[1, 4, 9]"
+
+
+def test_lambda_with_sorted(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'print(sorted(["bb", "a", "ccc"], key=lambda s: len(s)))'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "['a', 'bb', 'ccc']"
+
+
+def test_lambda_varargs(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "f = lambda *args: sum(args)\nprint(f(1, 2, 3))"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "6"

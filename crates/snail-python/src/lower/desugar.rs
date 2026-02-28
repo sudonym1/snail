@@ -665,6 +665,11 @@ impl LambdaHoister {
                     .collect(),
                 span: span.clone(),
             },
+            Expr::Lambda { params, body, span } => Expr::Lambda {
+                params: self.desugar_params(params, prelude),
+                body: Box::new(self.desugar_expr(body, prelude)),
+                span: span.clone(),
+            },
         }
     }
 }
