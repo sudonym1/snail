@@ -1067,13 +1067,6 @@ pub(crate) fn lower_expr_with_exception(
                 )
                 .map_err(py_err_to_lower)
         }
-        Expr::Lambda { params, body, span } => {
-            let args = lower_parameters(builder, params, exception_name)?;
-            let body_expr = lower_expr_with_exception(builder, body, exception_name)?;
-            builder
-                .call_node("Lambda", vec![args, body_expr], span)
-                .map_err(py_err_to_lower)
-        }
         Expr::Block { .. }
         | Expr::If { .. }
         | Expr::While { .. }
@@ -1559,9 +1552,6 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
                 count_placeholders(expr, info);
             }
         }
-        Expr::Lambda { body, .. } => {
-            count_placeholders(body, info);
-        }
         // Compound expressions: placeholders are not expected inside these
         Expr::Block { .. }
         | Expr::If { .. }
@@ -1840,11 +1830,6 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                 .iter()
                 .map(|expr| substitute_placeholder(expr, replacement))
                 .collect(),
-            span: span.clone(),
-        },
-        Expr::Lambda { params, body, span } => Expr::Lambda {
-            params: params.clone(),
-            body: Box::new(substitute_placeholder(body, replacement)),
             span: span.clone(),
         },
         // Compound expressions: placeholders are not expected inside these,
@@ -2445,11 +2430,12 @@ pub(crate) fn lower_expr_as_stmt(
             span,
         } => lower_for_stmt(builder, target, iter, body, else_body, span),
         Expr::Def {
-            name,
+            name: Some(name),
             params,
             body,
             span,
         } => lower_def_stmt(builder, name, params, body, span),
+        Expr::Def { name: None, .. } => Err(LowerError::new("anonymous def was not desugared")),
         Expr::Class {
             name, body, span, ..
         } => lower_class_stmt(builder, name, body, span),

@@ -300,11 +300,6 @@ pub enum Expr {
         ifs: Vec<Expr>,
         span: SourceSpan,
     },
-    Lambda {
-        params: Vec<Parameter>,
-        body: Box<Expr>,
-        span: SourceSpan,
-    },
     Block {
         stmts: Vec<Stmt>,
         span: SourceSpan,
@@ -330,7 +325,7 @@ pub enum Expr {
         span: SourceSpan,
     },
     Def {
-        name: String,
+        name: Option<String>,
         params: Vec<Parameter>,
         body: Vec<Stmt>,
         span: SourceSpan,

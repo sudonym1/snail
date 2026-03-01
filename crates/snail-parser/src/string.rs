@@ -647,10 +647,6 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             }
             *span = shift_span(span, offset, source);
         }
-        Expr::Lambda { body, span, .. } => {
-            shift_expr_spans(body, offset, source);
-            *span = shift_span(span, offset, source);
-        }
         Expr::Block { span, .. }
         | Expr::If { span, .. }
         | Expr::While { span, .. }

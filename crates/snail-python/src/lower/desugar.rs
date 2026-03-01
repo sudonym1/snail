@@ -1,10 +1,10 @@
 use snail_ast::*;
 
-pub(super) struct LambdaHoister {
+pub(super) struct Desugarer {
     block_counter: usize,
 }
 
-impl LambdaHoister {
+impl Desugarer {
     pub(super) fn new() -> Self {
         Self { block_counter: 0 }
     }
@@ -549,6 +549,23 @@ impl LambdaHoister {
 
     fn desugar_expr(&mut self, expr: &Expr, prelude: &mut Vec<Stmt>) -> Expr {
         let result = self.desugar_expr_no_hoist(expr, prelude);
+        // Named def in expression context: hoist and return name reference.
+        // (Anonymous defs were already hoisted in desugar_expr_no_hoist.)
+        if let Expr::Def {
+            name: Some(ref name),
+            ref span,
+            ..
+        } = result
+        {
+            let name = name.clone();
+            let span = span.clone();
+            prelude.push(Stmt::Expr {
+                value: result,
+                semicolon_terminated: false,
+                span: span.clone(),
+            });
+            return Expr::Name { name, span };
+        }
         if Self::is_hoistable_compound(&result) {
             let span = Self::expr_span(&result);
             self.inline_compound_expr(result, prelude, &span)
@@ -805,45 +822,6 @@ impl LambdaHoister {
                     .collect(),
                 span: span.clone(),
             },
-            Expr::Lambda { params, body, span } => {
-                let params = self.desugar_params(params, prelude);
-                let body_desugared = self.desugar_expr_no_hoist(body, prelude);
-                if Self::is_hoistable_compound(&body_desugared) {
-                    // Convert lambda-with-compound-body into a hoisted def
-                    let name = self.next_block_name();
-                    let def_body = match body_desugared {
-                        Expr::Block { stmts, .. } => stmts,
-                        other => {
-                            let other_span = span.clone();
-                            vec![Stmt::Expr {
-                                value: other,
-                                semicolon_terminated: false,
-                                span: other_span,
-                            }]
-                        }
-                    };
-                    prelude.push(Stmt::Expr {
-                        value: Expr::Def {
-                            name: name.clone(),
-                            params,
-                            body: def_body,
-                            span: span.clone(),
-                        },
-                        semicolon_terminated: false,
-                        span: span.clone(),
-                    });
-                    Expr::Name {
-                        name,
-                        span: span.clone(),
-                    }
-                } else {
-                    Expr::Lambda {
-                        params,
-                        body: Box::new(body_desugared),
-                        span: span.clone(),
-                    }
-                }
-            }
             Expr::Block { stmts, span } => Expr::Block {
                 stmts: self.desugar_block(stmts),
                 span: span.clone(),
@@ -918,11 +896,31 @@ impl LambdaHoister {
             } => {
                 let params = self.desugar_params(params, prelude);
                 let body = self.desugar_block(body);
-                Expr::Def {
-                    name: name.clone(),
-                    params,
-                    body,
-                    span: span.clone(),
+                if name.is_some() {
+                    // Named def: pass through. desugar_expr will hoist if in expression context.
+                    Expr::Def {
+                        name: name.clone(),
+                        params,
+                        body,
+                        span: span.clone(),
+                    }
+                } else {
+                    // Anonymous def: always hoist (needs a generated name to exist).
+                    let gen_name = self.next_block_name();
+                    prelude.push(Stmt::Expr {
+                        value: Expr::Def {
+                            name: Some(gen_name.clone()),
+                            params,
+                            body,
+                            span: span.clone(),
+                        },
+                        semicolon_terminated: false,
+                        span: span.clone(),
+                    });
+                    Expr::Name {
+                        name: gen_name,
+                        span: span.clone(),
+                    }
                 }
             }
             Expr::Class { name, body, span } => {

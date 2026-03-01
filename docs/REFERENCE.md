@@ -386,22 +386,28 @@ for value in chain() { print(value) }
 
 `yield` and `yield from` are only valid inside function bodies.
 
-## Lambda expressions
-Anonymous functions use Python's `lambda` syntax:
+## Anonymous def expressions
+Anonymous functions use `def` without a name:
 ```snail
-double = lambda x: x * 2
-add = lambda x, y: x + y
-noop = lambda: None
+double = def(x) { x * 2 }
+add = def(a, b) { a + b }
+noop = def { None }
 ```
-Lambdas support default values, `*args`, and `**kwargs`:
+Anonymous defs support default values, `*args`, and `**kwargs`:
 ```snail
-f = lambda x, y=10: x + y
-g = lambda *args: sum(args)
+f = def(x, y=10) { x + y }
+g = def(*args) { sum(args) }
 ```
-Lambdas work naturally as arguments to higher-order functions:
+Anonymous defs work naturally as arguments to higher-order functions:
 ```snail
-sorted(words, key=lambda s: len(s))
-list(map(lambda x: x ** 2, [1, 2, 3]))
+sorted(words, key=def(s) { len(s) })
+list(map(def(x) { x ** 2 }, [1, 2, 3]))
+```
+Named defs can also be used in expression context. The def is hoisted and the
+expression evaluates to the function name, creating two bindings:
+```snail
+x = def add(a, b) { a + b }
+# Both `add` and `x` refer to the same function
 ```
 
 ## Classes and methods

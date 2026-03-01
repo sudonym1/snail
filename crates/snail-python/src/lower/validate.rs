@@ -233,10 +233,6 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
                 check_expr(expr, in_function)?;
             }
         }
-        Expr::Lambda { body, .. } => {
-            // Lambda body is inside a function context
-            check_expr(body, true)?;
-        }
         Expr::Block { stmts, .. } => {
             check_stmts(stmts, in_function)?;
         }

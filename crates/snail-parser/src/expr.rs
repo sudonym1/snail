@@ -19,7 +19,6 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::expr
         | Rule::aug_assign_expr
         | Rule::yield_expr
-        | Rule::lambda_expr
         | Rule::or_expr
         | Rule::and_expr
         | Rule::not_expr
@@ -92,7 +91,6 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::expr => parse_expr_rule(pair.into_inner().next().unwrap(), source),
         Rule::aug_assign_expr => parse_aug_assign_expr(pair, source),
         Rule::yield_expr => parse_yield_expr(pair, source),
-        Rule::lambda_expr => parse_lambda_expr(pair, source),
         Rule::or_expr => fold_left_binary(pair, source, BinaryOp::Or),
         Rule::and_expr => fold_left_binary(pair, source, BinaryOp::And),
         Rule::not_expr => parse_not_expr(pair, source),
@@ -143,40 +141,6 @@ fn parse_yield_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
             })
         }
     }
-}
-
-fn parse_lambda_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
-    let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
-    let mut params = Vec::new();
-    // Check if there are lambda_params before the body expression
-    if let Some(first) = inner.next() {
-        if first.as_rule() == Rule::lambda_params {
-            params = parse_parameters(first, source)?;
-            // Body is the next pair
-            let body_pair = inner.next().ok_or_else(|| {
-                error_with_span("missing lambda body expression", span.clone(), source)
-            })?;
-            let body = parse_expr_pair(body_pair, source)?;
-            return Ok(Expr::Lambda {
-                params,
-                body: Box::new(body),
-                span,
-            });
-        }
-        // No params — first is the body expression
-        let body = parse_expr_pair(first, source)?;
-        return Ok(Expr::Lambda {
-            params,
-            body: Box::new(body),
-            span,
-        });
-    }
-    Err(error_with_span(
-        "missing lambda body expression",
-        span,
-        source,
-    ))
 }
 
 fn parse_aug_assign_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
@@ -988,21 +952,35 @@ fn parse_for_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError
 fn parse_def_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
-    let name = inner
+    let first = inner
         .next()
-        .ok_or_else(|| error_with_span("missing def name", span.clone(), source))?
-        .as_str()
-        .to_string();
-    let (params, body_pair) = match inner.next() {
-        Some(pair) if pair.as_rule() == Rule::parameters => {
-            let params = parse_parameters(pair, source)?;
+        .ok_or_else(|| error_with_span("missing def block", span.clone(), source))?;
+    let (name, params, body_pair) = match first.as_rule() {
+        Rule::identifier => {
+            let name = Some(first.as_str().to_string());
+            match inner.next() {
+                Some(pair) if pair.as_rule() == Rule::parameters => {
+                    let params = parse_parameters(pair, source)?;
+                    let body_pair = inner.next().ok_or_else(|| {
+                        error_with_span("missing def block", span.clone(), source)
+                    })?;
+                    (name, params, body_pair)
+                }
+                Some(pair) if pair.as_rule() == Rule::block => (name, Vec::new(), pair),
+                Some(_) | None => {
+                    return Err(error_with_span("missing def block", span.clone(), source));
+                }
+            }
+        }
+        Rule::parameters => {
+            let params = parse_parameters(first, source)?;
             let body_pair = inner
                 .next()
                 .ok_or_else(|| error_with_span("missing def block", span.clone(), source))?;
-            (params, body_pair)
+            (None, params, body_pair)
         }
-        Some(pair) if pair.as_rule() == Rule::block => (Vec::new(), pair),
-        Some(_) | None => {
+        Rule::block => (None, Vec::new(), first),
+        _ => {
             return Err(error_with_span("missing def block", span.clone(), source));
         }
     };

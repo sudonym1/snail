@@ -468,7 +468,7 @@ def test_implicit_return_function(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "3"
 
 
-def test_lambda_semicolon_disables_implicit_return(
+def test_def_semicolon_disables_implicit_return(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     script = "\n".join(
@@ -3226,53 +3226,53 @@ def test_ts_repr(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == 'ts("2024-01-05 10:00:00")'
 
 
-# === Lambda expression tests ===
+# === Anonymous def expression tests ===
 
 
-def test_lambda_basic(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "f = lambda x: x + 1\nprint(f(5))"
+def test_anon_def_no_params(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = def { 1 }\nprint(x())"
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
-    assert captured.out.strip() == "6"
+    assert captured.out.strip() == "1"
 
 
-def test_lambda_no_params(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "f = lambda: 42\nprint(f())"
+def test_anon_def_with_params(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = def(a, b) { a + b }\nprint(x(1, 2))"
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
-    assert captured.out.strip() == "42"
+    assert captured.out.strip() == "3"
 
 
-def test_lambda_multiple_params(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "f = lambda x, y: x * y\nprint(f(3, 7))"
+def test_named_def_in_expr_context(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "x = def add(a, b) { a + b }\nprint(add(1, 2), x(3, 4))"
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
-    assert captured.out.strip() == "21"
+    assert captured.out.strip() == "3 7"
 
 
-def test_lambda_default_args(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "f = lambda x, y=10: x + y\nprint(f(5))"
+def test_anon_def_nested(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "adder = def(x) { def(y) { x + y } }\nprint(adder(1)(2))"
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
-    assert captured.out.strip() == "15"
+    assert captured.out.strip() == "3"
 
 
-def test_lambda_with_map(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "print(list(map(lambda x: x ** 2, [1, 2, 3])))"
-    result, captured = run_cli(capsys, ["-P", script])
-    assert result == 0
-    assert captured.out.strip() == "[1, 4, 9]"
-
-
-def test_lambda_with_sorted(capsys: pytest.CaptureFixture[str]) -> None:
-    script = 'print(sorted(["bb", "a", "ccc"], key=lambda s: len(s)))'
+def test_anon_def_as_keyword_arg(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'print(sorted(["bb", "a", "ccc"], key=def(s) { len(s) }))'
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
     assert captured.out.strip() == "['a', 'bb', 'ccc']"
 
 
-def test_lambda_varargs(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "f = lambda *args: sum(args)\nprint(f(1, 2, 3))"
+def test_anon_def_with_map(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "print(list(map(def(x) { x ** 2 }, [1, 2, 3])))"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "[1, 4, 9]"
+
+
+def test_anon_def_varargs(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "f = def(*args) { sum(args) }\nprint(f(1, 2, 3))"
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
     assert captured.out.strip() == "6"
@@ -3309,8 +3309,8 @@ def test_block_expr_trailing_semicolon(capsys: pytest.CaptureFixture[str]) -> No
     assert captured.out.strip() == "None"
 
 
-def test_lambda_block_body(capsys: pytest.CaptureFixture[str]) -> None:
-    script = "f = lambda x: { y = x * 2; y + 1 }\nprint(f(5))"
+def test_anon_def_multi_stmt(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "f = def(x) { y = x * 2; y + 1 }\nprint(f(5))"
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
     assert captured.out.strip() == "11"

@@ -113,7 +113,7 @@ fn parses_return_and_raise_with_newline_continuations() {
 
     match unwrap_expr(&program.stmts[0]) {
         Expr::Def { name, body, .. } => {
-            assert_eq!(name, "ret");
+            assert_eq!(name, &Some("ret".to_string()));
             assert_eq!(body.len(), 1);
             match &body[0] {
                 Stmt::Return { value, .. } => {
@@ -128,7 +128,7 @@ fn parses_return_and_raise_with_newline_continuations() {
 
     match unwrap_expr(&program.stmts[1]) {
         Expr::Def { name, body, .. } => {
-            assert_eq!(name, "boom");
+            assert_eq!(name, &Some("boom".to_string()));
             assert_eq!(body.len(), 1);
             match &body[0] {
                 Stmt::Raise { value, from, .. } => {

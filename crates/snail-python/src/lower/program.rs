@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use snail_ast::*;
 use snail_error::LowerError;
 
-use super::desugar::LambdaHoister;
+use super::desugar::Desugarer;
 use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_auto;
 use super::validate::validate_yield_usage_program;
@@ -25,7 +25,7 @@ pub fn lower_program(
     auto_print_last: bool,
     capture_last: bool,
 ) -> Result<PyObject, LowerError> {
-    let mut hoister = LambdaHoister::new();
+    let mut hoister = Desugarer::new();
     let program = hoister.desugar_program(program);
     validate_yield_usage_program(&program)?;
     let builder = AstBuilder::new(py).map_err(py_err_to_lower)?;
