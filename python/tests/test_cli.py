@@ -3336,3 +3336,46 @@ def test_if_expr_no_else_false(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
     assert captured.out.strip() == "None"
+
+
+# === Compound expression scoping tests ===
+
+
+def test_if_expr_scope_visibility(capsys: pytest.CaptureFixture[str]) -> None:
+    """Variables set inside an if-expression should be visible in the enclosing scope."""
+    script = "x = if True { y = 2; 1 }; print(y)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "2"
+
+
+def test_block_expr_scope_visibility(capsys: pytest.CaptureFixture[str]) -> None:
+    """Variables set inside a block expression should be visible in the enclosing scope."""
+    script = "x = { y = 10; y + 5 }; print(y)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "10"
+
+
+def test_nested_compound_scope_visibility(capsys: pytest.CaptureFixture[str]) -> None:
+    """Variables set inside nested compound expressions should be visible."""
+    script = "x = { y = if True { z = 3; z } else { 0 }; y }; print(z)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "3"
+
+
+def test_if_expr_as_argument(capsys: pytest.CaptureFixture[str]) -> None:
+    """Compound expression used directly as a function argument."""
+    script = "print(if True { 42 } else { 0 })"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "42"
+
+
+def test_try_expr_value(capsys: pytest.CaptureFixture[str]) -> None:
+    """Try expression should capture the value from the successful branch."""
+    script = "x = try { 1 } except Exception { 2 }; print(x)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "1"

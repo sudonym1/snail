@@ -598,6 +598,14 @@ print("lambda block", multi_lambda(5))
 if_no_else = if False { 42 }
 assert if_no_else is None
 
+# Scope preservation: variables set inside compound expressions are visible
+# in the enclosing scope (no function-hoisting boundary)
+scope_result = if True { scope_var = 99; 1 }
+assert scope_var == 99
+block_result2 = { block_inner = 42; block_inner + 1 }
+assert block_inner == 42
+assert block_result2 == 43
+
 # The implicit return of the last non-semicolon expression is pretty printed
 # to stdout, unless -P is specified
 "automatically printed"

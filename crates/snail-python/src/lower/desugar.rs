@@ -15,37 +15,246 @@ impl LambdaHoister {
         name
     }
 
-    fn hoist_compound_expr(
+    fn next_expr_name(&mut self) -> String {
+        let name = format!("__snail_expr_{}", self.block_counter);
+        self.block_counter += 1;
+        name
+    }
+
+    /// Modify the tail (last unterminated expression) of a statement block to
+    /// assign its value to `tmp_name` instead of discarding it.  For compound
+    /// tails (if, try, with, block) the capture is propagated recursively into
+    /// each branch so that every exit path writes to the same temp variable.
+    fn capture_branch_tail(stmts: &mut Vec<Stmt>, tmp_name: &str, span: &SourceSpan) {
+        // Classify the last statement without borrowing mutably yet.
+        enum Action {
+            CaptureSimple,
+            CaptureCompound,
+            NoCapture,
+        }
+
+        let action = match stmts.last() {
+            Some(Stmt::Expr {
+                value,
+                semicolon_terminated: false,
+                ..
+            }) => match value {
+                Expr::Block { .. } | Expr::If { .. } | Expr::Try { .. } | Expr::With { .. } => {
+                    Action::CaptureCompound
+                }
+                Expr::While { .. } | Expr::For { .. } => Action::NoCapture,
+                _ => Action::CaptureSimple,
+            },
+            _ => Action::NoCapture,
+        };
+
+        match action {
+            Action::CaptureSimple => {
+                if let Some(Stmt::Expr { value, span: s, .. }) = stmts.pop() {
+                    stmts.push(Stmt::Assign {
+                        targets: vec![AssignTarget::Name {
+                            name: tmp_name.to_string(),
+                            span: span.clone(),
+                        }],
+                        value,
+                        span: s,
+                    });
+                }
+            }
+            Action::CaptureCompound => {
+                if let Some(Stmt::Expr {
+                    value,
+                    semicolon_terminated,
+                    span: s,
+                }) = stmts.pop()
+                {
+                    let new_value = match value {
+                        Expr::Block {
+                            stmts: mut inner,
+                            span: bs,
+                        } => {
+                            Self::capture_branch_tail(&mut inner, tmp_name, span);
+                            Expr::Block {
+                                stmts: inner,
+                                span: bs,
+                            }
+                        }
+                        Expr::If {
+                            cond,
+                            mut body,
+                            mut elifs,
+                            mut else_body,
+                            span: is,
+                        } => {
+                            Self::capture_branch_tail(&mut body, tmp_name, span);
+                            for (_, eb) in elifs.iter_mut() {
+                                Self::capture_branch_tail(eb, tmp_name, span);
+                            }
+                            if let Some(eb) = &mut else_body {
+                                Self::capture_branch_tail(eb, tmp_name, span);
+                            }
+                            Expr::If {
+                                cond,
+                                body,
+                                elifs,
+                                else_body,
+                                span: is,
+                            }
+                        }
+                        Expr::Try {
+                            mut body,
+                            mut handlers,
+                            mut else_body,
+                            finally_body,
+                            span: ts,
+                        } => {
+                            Self::capture_branch_tail(&mut body, tmp_name, span);
+                            for h in handlers.iter_mut() {
+                                Self::capture_branch_tail(&mut h.body, tmp_name, span);
+                            }
+                            if let Some(eb) = &mut else_body {
+                                Self::capture_branch_tail(eb, tmp_name, span);
+                            }
+                            Expr::Try {
+                                body,
+                                handlers,
+                                else_body,
+                                finally_body,
+                                span: ts,
+                            }
+                        }
+                        Expr::With {
+                            items,
+                            mut body,
+                            span: ws,
+                        } => {
+                            Self::capture_branch_tail(&mut body, tmp_name, span);
+                            Expr::With {
+                                items,
+                                body,
+                                span: ws,
+                            }
+                        }
+                        other => other,
+                    };
+                    stmts.push(Stmt::Expr {
+                        value: new_value,
+                        semicolon_terminated,
+                        span: s,
+                    });
+                }
+            }
+            Action::NoCapture => {}
+        }
+    }
+
+    /// Replace a compound expression with an inline expansion: emit the
+    /// compound's statements into the prelude and capture the tail value in a
+    /// temp variable.  No new scope is created, so variables assigned inside
+    /// the compound remain visible in the enclosing scope.
+    fn inline_compound_expr(
         &mut self,
         expr: Expr,
         prelude: &mut Vec<Stmt>,
         span: &SourceSpan,
     ) -> Expr {
-        let name = self.next_block_name();
-        let body = match expr {
-            Expr::Block { stmts, .. } => stmts,
-            other => vec![Stmt::Expr {
-                value: other,
-                semicolon_terminated: false,
+        let tmp_name = self.next_expr_name();
+
+        // Push `tmp = None` as default value.
+        prelude.push(Stmt::Assign {
+            targets: vec![AssignTarget::Name {
+                name: tmp_name.clone(),
                 span: span.clone(),
             }],
-        };
-        prelude.push(Stmt::Expr {
-            value: Expr::Def {
-                name: name.clone(),
-                params: vec![],
-                body,
-                span: span.clone(),
-            },
-            semicolon_terminated: false,
+            value: Expr::None { span: span.clone() },
             span: span.clone(),
         });
-        Expr::Call {
-            func: Box::new(Expr::Name {
-                name,
-                span: span.clone(),
-            }),
-            args: vec![],
+
+        match expr {
+            Expr::Block { mut stmts, .. } => {
+                Self::capture_branch_tail(&mut stmts, &tmp_name, span);
+                prelude.extend(stmts);
+            }
+            Expr::If {
+                cond,
+                mut body,
+                mut elifs,
+                mut else_body,
+                span: is,
+            } => {
+                Self::capture_branch_tail(&mut body, &tmp_name, span);
+                for (_, eb) in elifs.iter_mut() {
+                    Self::capture_branch_tail(eb, &tmp_name, span);
+                }
+                if let Some(eb) = &mut else_body {
+                    Self::capture_branch_tail(eb, &tmp_name, span);
+                }
+                prelude.push(Stmt::Expr {
+                    value: Expr::If {
+                        cond,
+                        body,
+                        elifs,
+                        else_body,
+                        span: is,
+                    },
+                    semicolon_terminated: false,
+                    span: span.clone(),
+                });
+            }
+            Expr::Try {
+                mut body,
+                mut handlers,
+                mut else_body,
+                finally_body,
+                span: ts,
+            } => {
+                Self::capture_branch_tail(&mut body, &tmp_name, span);
+                for h in handlers.iter_mut() {
+                    Self::capture_branch_tail(&mut h.body, &tmp_name, span);
+                }
+                if let Some(eb) = &mut else_body {
+                    Self::capture_branch_tail(eb, &tmp_name, span);
+                }
+                prelude.push(Stmt::Expr {
+                    value: Expr::Try {
+                        body,
+                        handlers,
+                        else_body,
+                        finally_body,
+                        span: ts,
+                    },
+                    semicolon_terminated: false,
+                    span: span.clone(),
+                });
+            }
+            Expr::With {
+                items,
+                mut body,
+                span: ws,
+            } => {
+                Self::capture_branch_tail(&mut body, &tmp_name, span);
+                prelude.push(Stmt::Expr {
+                    value: Expr::With {
+                        items,
+                        body,
+                        span: ws,
+                    },
+                    semicolon_terminated: false,
+                    span: span.clone(),
+                });
+            }
+            // Loops and other compounds don't produce values; push as-is.
+            other => {
+                prelude.push(Stmt::Expr {
+                    value: other,
+                    semicolon_terminated: false,
+                    span: span.clone(),
+                });
+            }
+        }
+
+        Expr::Name {
+            name: tmp_name,
             span: span.clone(),
         }
     }
@@ -342,7 +551,7 @@ impl LambdaHoister {
         let result = self.desugar_expr_no_hoist(expr, prelude);
         if Self::is_hoistable_compound(&result) {
             let span = Self::expr_span(&result);
-            self.hoist_compound_expr(result, prelude, &span)
+            self.inline_compound_expr(result, prelude, &span)
         } else {
             result
         }
