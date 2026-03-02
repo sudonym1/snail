@@ -47,3 +47,6 @@ class LazyText(LazyProxy):
 
     def __radd__(self, other):
         return other + str(self)
+
+    def __snail_print__(self):
+        print(str(self))

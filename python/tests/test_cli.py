@@ -1855,6 +1855,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_open_lines_source",
         "__snail_normalize_sources",
         "__snail_stdin_args",
+        "__snail_auto_print",
         "__snail_env",
         "js",
         "path",
@@ -3445,3 +3446,60 @@ def test_try_expr_value(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["-P", script])
     assert result == 0
     assert captured.out.strip() == "1"
+
+
+def test_auto_print_snail_print_dunder(capsys: pytest.CaptureFixture[str]) -> None:
+    """Objects with __snail_print__ control their own auto-print output."""
+    script = "\n".join(
+        [
+            "class Fancy {",
+            "    def __snail_print__(self) {",
+            "        print('fancy output')",
+            "    }",
+            "}",
+            "Fancy()",
+        ]
+    )
+    result, captured = run_cli(capsys, [script])
+    assert result == 0
+    assert captured.out.strip() == "fancy output"
+
+
+def test_auto_print_snail_print_dunder_suppresses(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """__snail_print__ that prints nothing suppresses output."""
+    script = "\n".join(
+        [
+            "class Quiet {",
+            "    def __snail_print__(self) {",
+            "        pass",
+            "    }",
+            "}",
+            "Quiet()",
+        ]
+    )
+    result, captured = run_cli(capsys, [script])
+    assert result == 0
+    assert captured.out == ""
+
+
+def test_auto_print_none_suppressed(capsys: pytest.CaptureFixture[str]) -> None:
+    """None produces no auto-print output."""
+    result, captured = run_cli(capsys, ["None"])
+    assert result == 0
+    assert captured.out == ""
+
+
+def test_auto_print_string_uses_print(capsys: pytest.CaptureFixture[str]) -> None:
+    """Strings use plain print() without quotes."""
+    result, captured = run_cli(capsys, ["'hello world'"])
+    assert result == 0
+    assert captured.out.strip() == "hello world"
+
+
+def test_auto_print_list_uses_pprint(capsys: pytest.CaptureFixture[str]) -> None:
+    """Non-string values use pprint for auto-print."""
+    result, captured = run_cli(capsys, ["[1, 2, 3]"])
+    assert result == 0
+    assert captured.out.strip() == "[1, 2, 3]"

@@ -13,6 +13,7 @@ pub const SNAIL_INCR_ATTR: &str = "__snail_incr_attr";
 pub const SNAIL_INCR_INDEX: &str = "__snail_incr_index";
 pub const SNAIL_AUG_ATTR: &str = "__snail_aug_attr";
 pub const SNAIL_AUG_INDEX: &str = "__snail_aug_index";
+pub(crate) const SNAIL_AUTO_PRINT_HELPER: &str = "__snail_auto_print";
 pub(crate) const SNAIL_AWK_SPLIT_HELPER: &str = "__snail_awk_split";
 pub(crate) const SNAIL_LET_VALUE: &str = "__snail_let_value";
 pub(crate) const SNAIL_LET_OK: &str = "__snail_let_ok";

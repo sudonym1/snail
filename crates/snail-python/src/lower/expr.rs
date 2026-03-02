@@ -2579,175 +2579,35 @@ fn build_auto_print_block(
     expr: PyObject,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    let mut stmts = Vec::new();
-
+    // __snail_last_result = <expr>
     let assign = assign_name(builder, "__snail_last_result", expr, span)?;
-    stmts.push(assign);
 
+    // __snail_auto_print(__snail_last_result)
     let last_result = name_expr(
         builder,
         "__snail_last_result",
         span,
         builder.load_ctx().map_err(py_err_to_lower)?,
     )?;
-
-    let is_string = builder
+    let call = builder
         .call_node(
             "Call",
             vec![
                 name_expr(
                     builder,
-                    "isinstance",
+                    SNAIL_AUTO_PRINT_HELPER,
                     span,
                     builder.load_ctx().map_err(py_err_to_lower)?,
                 )?,
-                PyList::new_bound(
-                    builder.py(),
-                    vec![
-                        last_result.clone_ref(builder.py()),
-                        name_expr(
-                            builder,
-                            "str",
-                            span,
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        )?,
-                    ],
-                )
-                .into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let print_call = builder
-        .call_node(
-            "Call",
-            vec![
-                name_expr(
-                    builder,
-                    "print",
-                    span,
-                    builder.load_ctx().map_err(py_err_to_lower)?,
-                )?,
-                PyList::new_bound(builder.py(), vec![last_result.clone_ref(builder.py())])
-                    .into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-    let print_stmt = builder
-        .call_node("Expr", vec![print_call], span)
-        .map_err(py_err_to_lower)?;
-
-    let is_not_none = builder
-        .call_node(
-            "Compare",
-            vec![
-                last_result.clone_ref(builder.py()),
-                PyList::new_bound(
-                    builder.py(),
-                    vec![lower_compare_op(builder, CompareOp::IsNot)?],
-                )
-                .into_py(builder.py()),
-                PyList::new_bound(
-                    builder.py(),
-                    vec![
-                        builder
-                            .call_node(
-                                "Constant",
-                                vec![builder.py().None().into_py(builder.py())],
-                                span,
-                            )
-                            .map_err(py_err_to_lower)?,
-                    ],
-                )
-                .into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let import_pprint = builder
-        .call_node(
-            "Import",
-            vec![
-                PyList::new_bound(
-                    builder.py(),
-                    vec![
-                        builder
-                            .call_node_no_loc(
-                                "alias",
-                                vec![
-                                    "pprint".to_string().into_py(builder.py()),
-                                    builder.py().None().into_py(builder.py()),
-                                ],
-                            )
-                            .map_err(py_err_to_lower)?,
-                    ],
-                )
-                .into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let pprint_call = builder
-        .call_node(
-            "Call",
-            vec![
-                builder
-                    .call_node(
-                        "Attribute",
-                        vec![
-                            name_expr(
-                                builder,
-                                "pprint",
-                                span,
-                                builder.load_ctx().map_err(py_err_to_lower)?,
-                            )?,
-                            "pprint".to_string().into_py(builder.py()),
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)?,
                 PyList::new_bound(builder.py(), vec![last_result]).into_py(builder.py()),
                 PyList::empty_bound(builder.py()).into_py(builder.py()),
             ],
             span,
         )
         .map_err(py_err_to_lower)?;
-    let pprint_stmt = builder
-        .call_node("Expr", vec![pprint_call], span)
+    let call_stmt = builder
+        .call_node("Expr", vec![call], span)
         .map_err(py_err_to_lower)?;
 
-    let pprint_if = builder
-        .call_node(
-            "If",
-            vec![
-                is_not_none,
-                PyList::new_bound(builder.py(), vec![import_pprint, pprint_stmt])
-                    .into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    let top_if = builder
-        .call_node(
-            "If",
-            vec![
-                is_string,
-                PyList::new_bound(builder.py(), vec![print_stmt]).into_py(builder.py()),
-                PyList::new_bound(builder.py(), vec![pprint_if]).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-
-    stmts.push(top_if);
-    Ok(stmts)
+    Ok(vec![assign, call_stmt])
 }

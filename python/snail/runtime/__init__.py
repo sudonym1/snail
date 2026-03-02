@@ -264,6 +264,20 @@ def __snail_normalize_sources(*sources):
     return list(source)
 
 
+def __snail_auto_print(value):
+    if value is None:
+        return
+    if hasattr(value, "__snail_print__"):
+        value.__snail_print__()
+        return
+    if isinstance(value, str):
+        print(value)
+    else:
+        import pprint
+
+        pprint.pprint(value)
+
+
 def install_helpers(globals_dict: dict) -> None:
     for helper_name, wrapper_name in _INSTALL_LAZY_HELPER_REGISTRY.items():
         globals_dict[helper_name] = _LAZY_WRAPPERS[wrapper_name]
@@ -276,6 +290,7 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_open_lines_source"] = __snail_open_lines_source
     globals_dict["__snail_normalize_sources"] = __snail_normalize_sources
     globals_dict["__snail_stdin_args"] = __snail_stdin_args
+    globals_dict["__snail_auto_print"] = __snail_auto_print
 
     for helper_name, getter_name in _INSTALL_EAGER_HELPER_REGISTRY.items():
         globals_dict[helper_name] = _GETTERS[getter_name]()
