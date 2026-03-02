@@ -241,6 +241,11 @@ def __snail_open_lines_source(source):
         )
 
 
+def __snail_stdin_args():
+    """Read file paths from stdin, one per line. Filters blank lines."""
+    return [line for line in sys.stdin.read().splitlines() if line]
+
+
 def __snail_normalize_sources(*sources):
     """Normalize lines()/files() source arguments to a flat list of sources.
 
@@ -270,6 +275,7 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_lines_iter"] = __snail_lines_iter
     globals_dict["__snail_open_lines_source"] = __snail_open_lines_source
     globals_dict["__snail_normalize_sources"] = __snail_normalize_sources
+    globals_dict["__snail_stdin_args"] = __snail_stdin_args
 
     for helper_name, getter_name in _INSTALL_EAGER_HELPER_REGISTRY.items():
         globals_dict[helper_name] = _GETTERS[getter_name]()

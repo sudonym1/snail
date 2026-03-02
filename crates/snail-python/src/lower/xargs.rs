@@ -133,51 +133,28 @@ fn lower_xargs_no_source(
     auto_print: bool,
     capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
-    // import sys
-    // for __snail_src in sys.argv[1:]:
+    // for __snail_src in __snail_stdin_args():
     //     with __SnailLazyFile(__snail_src, 'r') as __snail_fd:
     //         __snail_text = __SnailLazyText(__snail_fd)
     //         <body>
-    let mut stmts = Vec::new();
-
-    // import sys
-    let sys_import = builder
+    let iter_expr = builder
         .call_node(
-            "Import",
+            "Call",
             vec![
-                PyList::new_bound(
-                    builder.py(),
-                    vec![
-                        builder
-                            .call_node_no_loc(
-                                "alias",
-                                vec![
-                                    "sys".to_string().into_py(builder.py()),
-                                    builder.py().None().into_py(builder.py()),
-                                ],
-                            )
-                            .map_err(py_err_to_lower)?,
-                    ],
-                )
-                .into_py(builder.py()),
+                name_expr(
+                    builder,
+                    SNAIL_STDIN_ARGS_HELPER,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
             ],
             span,
         )
         .map_err(py_err_to_lower)?;
-    stmts.push(sys_import);
 
-    // sys.argv[1:]
-    let iter_expr = lower_paths_source(builder, span)?;
-
-    stmts.extend(lower_xargs_loop(
-        builder,
-        iter_expr,
-        body,
-        span,
-        auto_print,
-        capture_last,
-    )?);
-    Ok(stmts)
+    lower_xargs_loop(builder, iter_expr, body, span, auto_print, capture_last)
 }
 
 fn build_xargs_with_body(
@@ -227,48 +204,6 @@ fn build_xargs_with_body(
     with_body.extend(user_code);
 
     Ok(with_body)
-}
-
-fn lower_paths_source(builder: &AstBuilder<'_>, span: &SourceSpan) -> Result<PyObject, LowerError> {
-    // sys.argv[1:]
-    builder
-        .call_node(
-            "Subscript",
-            vec![
-                builder
-                    .call_node(
-                        "Attribute",
-                        vec![
-                            name_expr(
-                                builder,
-                                "sys",
-                                span,
-                                builder.load_ctx().map_err(py_err_to_lower)?,
-                            )?,
-                            "argv".to_string().into_py(builder.py()),
-                            builder.load_ctx().map_err(py_err_to_lower)?,
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)?,
-                builder
-                    .call_node(
-                        "Slice",
-                        vec![
-                            builder
-                                .call_node("Constant", vec![1i64.into_py(builder.py())], span)
-                                .map_err(py_err_to_lower)?,
-                            builder.py().None().into_py(builder.py()),
-                            builder.py().None().into_py(builder.py()),
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)?,
-                builder.load_ctx().map_err(py_err_to_lower)?,
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)
 }
 
 fn build_lazy_file_call(

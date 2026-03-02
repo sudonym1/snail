@@ -496,6 +496,15 @@ def main(argv: Optional[list[str]] = None) -> int:
             print('Missing input (see "snail --help")', file=sys.stderr)
             return 1
 
+    if mode == "xargs" and not args[1:]:
+        try:
+            is_tty = sys.stdin.isatty()
+        except Exception:
+            is_tty = False
+        if is_tty:
+            print('Missing input (see "snail --help")', file=sys.stderr)
+            return 1
+
     return exec(
         source,
         argv=args,

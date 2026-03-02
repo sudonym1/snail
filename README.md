@@ -90,7 +90,7 @@ Setup and teardown code can be supplied via CLI flags (`-b`/`--begin`, `-e`/`--e
 Begin code runs before the file-processing loop, end code runs after.
 Xargs `$` variables are not available in begin/end code (they are outside the `xargs { }` block).
 ```bash
-snail --xargs --begin "print('start')" --end "print('done')" "print($src)" *.txt
+find . -name "*.txt" | snail --xargs --begin "print('start')" --end "print('done')" "print($src)"
 ```
 
 ### Built-in Variables (All Modes)

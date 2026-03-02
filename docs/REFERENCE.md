@@ -45,9 +45,10 @@ CLI BEGIN blocks run before in-file BEGIN blocks; CLI END blocks run after
 in-file END blocks.
 
 ## Xargs mode
-Xargs mode processes input files one at a time:
+Xargs mode processes input files one at a time, reading file paths from stdin:
 ```bash
-snail --xargs "print($src)" file_a.txt file_b.txt
+find . -name "*.txt" | snail --xargs "print($src)"
+echo -e "a.txt\nb.txt" | snail --xargs "print($src)"
 ```
 
 Xargs mode provides three special variables:
@@ -72,7 +73,7 @@ You can also run setup/teardown blocks with `--begin` and `--end`, which execute
 once before the first file and once after the last file. CLI BEGIN blocks run before
 in-file BEGIN blocks; CLI END blocks run after in-file END blocks:
 ```bash
-snail --xargs --begin "print('start')" --end "print('done')" "print($src)" *.txt
+find . -name "*.txt" | snail --xargs --begin "print('start')" --end "print('done')" "print($src)"
 ```
 `BEGIN` and `END` are reserved keywords in all modes.
 BEGIN/END blocks are regular Snail blocks, so awk/xargs-only variables are not available inside them.
@@ -153,7 +154,7 @@ xargs(path("*.log")) {
 }
 ```
 
-A bare `xargs { }` block (no source) reads file paths from `sys.argv[1:]`,
+A bare `xargs { }` block (no source) reads file paths from stdin,
 matching the behavior of `snail --xargs`.
 
 Inside a `xargs { }` block, the following variables are available:

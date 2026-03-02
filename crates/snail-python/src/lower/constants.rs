@@ -46,6 +46,7 @@ pub const SNAIL_LAZY_TEXT_CLASS: &str = "__SnailLazyText";
 pub const SNAIL_LAZY_FILE_CLASS: &str = "__SnailLazyFile";
 pub(crate) const SNAIL_OPEN_LINES_SOURCE_HELPER: &str = "__snail_open_lines_source";
 pub(crate) const SNAIL_NORMALIZE_SOURCES_HELPER: &str = "__snail_normalize_sources";
+pub(crate) const SNAIL_STDIN_ARGS_HELPER: &str = "__snail_stdin_args";
 
 pub(crate) fn injected_py_name(name: &str) -> Option<&'static str> {
     match name {

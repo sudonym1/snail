@@ -1854,6 +1854,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_lines_iter",
         "__snail_open_lines_source",
         "__snail_normalize_sources",
+        "__snail_stdin_args",
         "__snail_env",
         "js",
         "path",
@@ -2309,7 +2310,8 @@ def _parse_oneliner_command(command: str) -> tuple[str, list[str]]:
     return mode, argv
 
 
-def _replace_xargs_oneliner_args(argv: list[str], map_file: Path) -> list[str]:
+def _strip_xargs_trailing_args(argv: list[str]) -> list[str]:
+    """Strip trailing file args from an xargs oneliner argv (filenames come from stdin now)."""
     idx = 0
     while idx < len(argv):
         tok = argv[idx]
@@ -2319,9 +2321,10 @@ def _replace_xargs_oneliner_args(argv: list[str], map_file: Path) -> list[str]:
         if tok.startswith("-"):
             idx += 1
             continue
+        # This is the code arg; include it and stop
         idx += 1
         break
-    return [*argv[:idx], str(map_file)]
+    return argv[:idx]
 
 
 _README_ONELINERS = _collect_readme_oneliners(ROOT / "README.md")
@@ -2370,8 +2373,9 @@ def test_readme_snail_blocks_parse(
         assert main(["--awk", source]) == 0, f"failed at {path}:{line_no}"
     elif lang == "snail-xargs":
         map_file = _ensure_readme_xargs_file(tmp_path)
+        set_stdin(monkeypatch, f"{map_file}\n")
         assert (
-            main(["--xargs", source, str(map_file)]) == 0
+            main(["--xargs", source]) == 0
         ), f"failed at {path}:{line_no}"
     else:
         combined = f"{README_SNIPPET_PREAMBLE}\n{source}"
@@ -2401,8 +2405,9 @@ def test_readme_snail_oneliners(
         assert main(["--awk", *argv]) == 0, f"failed at {path}:{line_no}"
     elif mode == "xargs":
         map_file = _ensure_readme_xargs_file(tmp_path)
-        map_argv = _replace_xargs_oneliner_args(argv, map_file)
-        assert main(["--xargs", *map_argv]) == 0, f"failed at {path}:{line_no}"
+        set_stdin(monkeypatch, f"{map_file}\n")
+        xargs_argv = _strip_xargs_trailing_args(argv)
+        assert main(["--xargs", *xargs_argv]) == 0, f"failed at {path}:{line_no}"
     else:
         argv = ["-b", README_SNIPPET_PREAMBLE] + argv
 
@@ -2421,119 +2426,154 @@ def test_readme_snail_oneliners(
 # Xargs mode tests
 
 
-def test_xargs_mode_from_args(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_xargs_mode_from_stdin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Test xargs mode with files passed as CLI arguments."""
+    """Test xargs mode with file paths piped via stdin."""
     file_a = tmp_path / "a.txt"
     file_b = tmp_path / "b.txt"
     file_a.write_text("hello")
     file_b.write_text("world")
-    result = main(["--xargs", "print($src)", str(file_a), str(file_b)])
+    set_stdin(monkeypatch, f"{file_a}\n{file_b}\n")
+    result = main(["--xargs", "print($src)"])
     assert result == 0
     captured = capsys.readouterr()
     assert str(file_a) in captured.out
     assert str(file_b) in captured.out
 
 
-def test_xargs_mode_dash_reads_stdin(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_xargs_mode_blank_lines_filtered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.StringIO("stdin data"))
-    result = main(["--xargs", "print($src)\nprint($text)", "-"])
+    """Test that blank lines in stdin are skipped."""
+    file_a = tmp_path / "a.txt"
+    file_a.write_text("hello")
+    set_stdin(monkeypatch, f"\n{file_a}\n\n\n")
+    result = main(["--xargs", "print($src)"])
     assert result == 0
     captured = capsys.readouterr()
-    assert captured.out.splitlines() == ["-", "stdin data"]
+    assert captured.out.splitlines() == [str(file_a)]
 
 
 def test_xargs_mode_missing_file_src_only(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     missing = tmp_path / "missing.txt"
-    result = main(["--xargs", "print($src)", str(missing)])
+    set_stdin(monkeypatch, f"{missing}\n")
+    result = main(["--xargs", "print($src)"])
     assert result == 0
     captured = capsys.readouterr()
     assert str(missing) in captured.out
 
 
-def test_xargs_mode_missing_file_fd_access(tmp_path: Path) -> None:
+def test_xargs_mode_missing_file_fd_access(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     missing = tmp_path / "missing.txt"
+    set_stdin(monkeypatch, f"{missing}\n")
     with pytest.raises(FileNotFoundError):
-        main(["--xargs", "print($fd.read())", str(missing)])
+        main(["--xargs", "print($fd.read())"])
 
 
-def test_xargs_mode_missing_file_text_access(tmp_path: Path) -> None:
+def test_xargs_mode_missing_file_text_access(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     missing = tmp_path / "missing.txt"
+    set_stdin(monkeypatch, f"{missing}\n")
     with pytest.raises(FileNotFoundError):
-        main(["--xargs", "print($text)", str(missing)])
+        main(["--xargs", "print($text)"])
 
 
 def test_xargs_mode_text_content(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test that $text contains file content."""
     file_a = tmp_path / "a.txt"
     file_a.write_text("hello world")
-    result = main(["--xargs", "print(len($text))", str(file_a)])
+    set_stdin(monkeypatch, f"{file_a}\n")
+    result = main(["--xargs", "print(len($text))"])
     assert result == 0
     captured = capsys.readouterr()
     assert "11" in captured.out
 
 
 def test_xargs_mode_fd_access(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test that $fd is a readable file handle."""
     file_a = tmp_path / "a.txt"
     file_a.write_text("first line\nsecond line\n")
-    result = main(["--xargs", "print($fd.readline().strip())", str(file_a)])
+    set_stdin(monkeypatch, f"{file_a}\n")
+    result = main(["--xargs", "print($fd.readline().strip())"])
     assert result == 0
     captured = capsys.readouterr()
     assert "first line" in captured.out
 
 
 def test_xargs_mode_fd_iteration_delegates_to_file(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     file_a = tmp_path / "a.txt"
     file_a.write_text("first line\nsecond line\n")
-    result = main(["--xargs", "for line in $fd { print(line.strip()) }", str(file_a)])
+    set_stdin(monkeypatch, f"{file_a}\n")
+    result = main(["--xargs", "for line in $fd { print(line.strip()) }"])
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == ["first line", "second line"]
 
 
 def test_xargs_mode_text_forwards_string_methods(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     file_a = tmp_path / "a.txt"
     file_a.write_text("hello xargs mode")
-    result = main(["--xargs", "print($text.upper())", str(file_a)])
+    set_stdin(monkeypatch, f"{file_a}\n")
+    result = main(["--xargs", "print($text.upper())"])
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == ["HELLO XARGS MODE"]
 
 
 def test_xargs_mode_lazy_text(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Test that $text is lazy (can use $fd first, then $text is empty)."""
     file_a = tmp_path / "a.txt"
     file_a.write_text("content")
+    set_stdin(monkeypatch, f"{file_a}\n")
     # Reading $fd first consumes the file, so $text will be empty
-    result = main(["--xargs", "_ = $fd.read(); print(repr(str($text)))", str(file_a)])
+    result = main(["--xargs", "_ = $fd.read(); print(repr(str($text)))"])
     assert result == 0
     captured = capsys.readouterr()
     assert "''" in captured.out
 
 
 def test_xargs_begin_end_flags(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     file_a = tmp_path / "a.txt"
     file_b = tmp_path / "b.txt"
     file_a.write_text("alpha")
     file_b.write_text("beta")
+    set_stdin(monkeypatch, f"{file_a}\n{file_b}\n")
     result = main(
         [
             "--xargs",
@@ -2542,8 +2582,6 @@ def test_xargs_begin_end_flags(
             "-e",
             "print('done')",
             "print($src)",
-            str(file_a),
-            str(file_b),
         ]
     )
     assert result == 0
@@ -2557,10 +2595,13 @@ def test_xargs_begin_end_flags(
 
 
 def test_xargs_multiple_begin_end_flags(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     file_a = tmp_path / "a.txt"
     file_a.write_text("alpha")
+    set_stdin(monkeypatch, f"{file_a}\n")
     result = main(
         [
             "--xargs",
@@ -2573,7 +2614,6 @@ def test_xargs_multiple_begin_end_flags(
             "print('e1')",
             "--end",
             "print('e2')",
-            str(file_a),
         ]
     )
     assert result == 0
@@ -2588,13 +2628,16 @@ def test_xargs_multiple_begin_end_flags(
 
 
 def test_xargs_begin_end_oneliner_via_flags(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     # BEGIN/END blocks no longer exist; use -b/-e flags instead
     file_a = tmp_path / "a.txt"
     file_a.write_text("alpha")
+    set_stdin(monkeypatch, f"{file_a}\n")
     result = main(
-        ["--xargs", "-b", "print(1)", "-e", "print(2)", "print($src)", str(file_a)]
+        ["--xargs", "-b", "print(1)", "-e", "print(2)", "print($src)"]
     )
     assert result == 0
     captured = capsys.readouterr()
@@ -2602,13 +2645,16 @@ def test_xargs_begin_end_oneliner_via_flags(
 
 
 def test_xargs_begin_end_file_and_cli_order(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     # BEGIN/END blocks no longer exist as syntax; -b/-e code is prepended/appended
     map_file = tmp_path / "file1"
     map_file.write_text("readme xargs input\n")
     script = tmp_path / "script.snail"
     script.write_text("print($src)\n")
+    set_stdin(monkeypatch, f"{map_file}\n")
     result = main(
         [
             "--xargs",
@@ -2618,7 +2664,6 @@ def test_xargs_begin_end_file_and_cli_order(
             "print('cli end')",
             "-f",
             str(script),
-            str(map_file),
         ]
     )
     assert result == 0
@@ -2630,9 +2675,7 @@ def test_xargs_begin_end_file_and_cli_order(
     ]
 
 
-def test_xargs_begin_end_flags_reject_xargs_vars(tmp_path: Path) -> None:
-    file_a = tmp_path / "a.txt"
-    file_a.write_text("alpha")
+def test_xargs_begin_end_flags_reject_xargs_vars() -> None:
     with pytest.raises(SyntaxError):
         main(
             [
@@ -2640,7 +2683,6 @@ def test_xargs_begin_end_flags_reject_xargs_vars(tmp_path: Path) -> None:
                 "-b",
                 "print($src)",
                 "print($src)",
-                str(file_a),
             ]
         )
 
@@ -2684,9 +2726,7 @@ def test_xargs_identifiers_require_xargs_mode_in_def_call_arguments() -> None:
         assert "awk" in str(excinfo.value) or "xargs" in str(excinfo.value)
 
 
-def test_xargs_begin_end_flags_reject_xargs_vars_fd_text(tmp_path: Path) -> None:
-    file_a = tmp_path / "a.txt"
-    file_a.write_text("alpha")
+def test_xargs_begin_end_flags_reject_xargs_vars_fd_text() -> None:
     for begin_snippet in ["print($fd)", "print($text)"]:
         with pytest.raises(SyntaxError):
             main(
@@ -2695,7 +2735,6 @@ def test_xargs_begin_end_flags_reject_xargs_vars_fd_text(tmp_path: Path) -> None
                     "-b",
                     begin_snippet,
                     "print($src)",
-                    str(file_a),
                 ]
             )
 
@@ -2708,12 +2747,29 @@ def test_awk_and_xargs_mutually_exclusive(capsys: pytest.CaptureFixture[str]) ->
     assert "--awk and --xargs cannot be used together" in captured.err
 
 
-def test_example_xargs(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_xargs_mode_tty_guard(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Test that xargs mode errors when stdin is a TTY and no file args."""
+    set_stdin(monkeypatch, "", is_tty=True)
+    result = main(["--xargs", "print($src)"])
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Missing input" in captured.err
+
+
+def test_example_xargs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Test that examples/xargs.snail runs successfully."""
     file_a = tmp_path / "test.txt"
     file_a.write_text("test content here\n")
+    set_stdin(monkeypatch, f"{file_a}\n")
     # -b/-e flags from the shebang are not picked up by the test runner
-    result = main(["--xargs", "-f", str(EXAMPLES_DIR / "xargs.snail"), str(file_a)])
+    result = main(["--xargs", "-f", str(EXAMPLES_DIR / "xargs.snail")])
     assert result == 0, f"xargs.snail failed with exit code {result}"
     captured = capsys.readouterr()
     assert str(file_a) in captured.out
@@ -3137,9 +3193,11 @@ def test_awk_mode_auto_prints_tail_expression(
 
 
 def test_xargs_mode_auto_prints_tail_expression(
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = main(["-x", "$src", "1", "2", "3"])
+    set_stdin(monkeypatch, "1\n2\n3\n")
+    result = main(["-x", "$src"])
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == ["1", "2", "3"]
