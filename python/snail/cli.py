@@ -487,16 +487,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(output)
         return 0
 
-    if mode == "awk" and not args[1:]:
-        try:
-            is_tty = sys.stdin.isatty()
-        except Exception:
-            is_tty = False
-        if is_tty:
-            print('Missing input (see "snail --help")', file=sys.stderr)
-            return 1
-
-    if mode == "xargs" and not args[1:]:
+    if mode in ("awk", "xargs") and not args[1:]:
+        # Validate the code before checking for input so that syntax errors
+        # are reported immediately regardless of whether stdin is a tty.
+        # Without this, Windows (where pytest stdin is a tty) would bail
+        # with "Missing input" before compilation ever runs.
+        compile_ast(
+            source,
+            mode=mode,
+            auto_print=auto_print,
+            filename=filename,
+            begin_code=namespace.begin_code,
+            end_code=namespace.end_code,
+            field_separators=field_separators,
+            include_whitespace=include_whitespace,
+        )
         try:
             is_tty = sys.stdin.isatty()
         except Exception:
