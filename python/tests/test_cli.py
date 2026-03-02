@@ -2421,7 +2421,9 @@ def test_readme_snail_oneliners(
 # Xargs mode tests
 
 
-def test_xargs_mode_from_args(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_xargs_mode_from_args(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test xargs mode with files passed as CLI arguments."""
     file_a = tmp_path / "a.txt"
     file_b = tmp_path / "b.txt"
@@ -2478,7 +2480,9 @@ def test_xargs_mode_text_content(
     assert "11" in captured.out
 
 
-def test_xargs_mode_fd_access(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_xargs_mode_fd_access(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test that $fd is a readable file handle."""
     file_a = tmp_path / "a.txt"
     file_a.write_text("first line\nsecond line\n")
@@ -2510,7 +2514,9 @@ def test_xargs_mode_text_forwards_string_methods(
     assert captured.out.splitlines() == ["HELLO XARGS MODE"]
 
 
-def test_xargs_mode_lazy_text(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_xargs_mode_lazy_text(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test that $text is lazy (can use $fd first, then $text is empty)."""
     file_a = tmp_path / "a.txt"
     file_a.write_text("content")
@@ -2639,7 +2645,9 @@ def test_xargs_begin_end_flags_reject_xargs_vars(tmp_path: Path) -> None:
         )
 
 
-def test_xargs_identifiers_require_xargs_mode(capsys: pytest.CaptureFixture[str]) -> None:
+def test_xargs_identifiers_require_xargs_mode(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Test that $src is rejected outside awk { } or xargs { } blocks."""
     with pytest.raises(SyntaxError) as excinfo:
         main(["print($src)"])

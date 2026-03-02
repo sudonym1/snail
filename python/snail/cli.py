@@ -123,7 +123,9 @@ def _print_help(file=None) -> None:
         file=file,
     )
     print("  -a, --awk               awk mode", file=file)
-    print("  -x, --xargs             xargs mode (process files one at a time)", file=file)
+    print(
+        "  -x, --xargs             xargs mode (process files one at a time)", file=file
+    )
     print(
         "  -b, --begin <code>       begin block code (repeatable)",
         file=file,
