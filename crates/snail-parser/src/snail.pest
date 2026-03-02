@@ -14,10 +14,10 @@ segment_break = { "\x1F" ~ stmt_sep* }
 stmt = _{ simple_stmt | expr_stmt }
 
 // Compound expression statement: wraps expr_stmt for expressions that start
-// with compound keywords (if/while/for/def/class/try/with/awk/xargs) or
+// with compound keywords (if/while/for/class/try/with/awk/xargs) or
 // bare blocks. These don't require trailing separators.
 compound_expr_stmt = { compound_expr }
-compound_expr = _{ if_expr | while_expr | for_expr | def_expr | class_expr | try_expr | with_expr | awk_expr | xargs_expr | block }
+compound_expr = _{ if_expr | while_expr | for_expr | class_expr | try_expr | with_expr | awk_expr | xargs_expr | block }
 
 simple_stmt = _{
   return_stmt

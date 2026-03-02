@@ -126,6 +126,9 @@ with_default = def(x, y=10) { x + y }
 sorted_words = sorted(["bb", "a", "ccc"], key=def(s) { len(s) })
 # Named def in expression context
 add_named = def add_fn(a, b) { a + b }
+# Immediate anonymous def invocation
+assert def { 1 }() == 1
+assert def(x) { x * 2 }(5) == 10
 
 # ---- Collections, destructuring, and comprehension ----
 nums = [1, 2, 3, 4]

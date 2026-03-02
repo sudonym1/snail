@@ -1485,8 +1485,9 @@ fn parses_for_followed_by_stmt_without_separator() {
 }
 
 #[test]
-fn parses_def_followed_by_stmt_without_separator() {
-    let source = "def f() { pass } f()";
+fn parses_def_followed_by_stmt_with_separator() {
+    // def is no longer a compound_expr, so it needs a separator before the next statement
+    let source = "def f() { pass }; f()";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
     assert!(matches!(unwrap_expr(&program.stmts[0]), Expr::Def { .. }));
@@ -2081,6 +2082,22 @@ fn parses_named_def_unchanged() {
             assert_eq!(body.len(), 1);
         }
         other => panic!("Expected named def, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_anonymous_def_immediate_call() {
+    // def { 1 }() should parse as a single Call expression wrapping a Def
+    let source = "def { 1 }()";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    let expr = unwrap_expr(&program.stmts[0]);
+    match expr {
+        Expr::Call { func, args, .. } => {
+            assert!(matches!(func.as_ref(), Expr::Def { .. }));
+            assert!(args.is_empty());
+        }
+        other => panic!("Expected Call wrapping Def, got {other:?}"),
     }
 }
 

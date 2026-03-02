@@ -3503,3 +3503,10 @@ def test_auto_print_list_uses_pprint(capsys: pytest.CaptureFixture[str]) -> None
     result, captured = run_cli(capsys, ["[1, 2, 3]"])
     assert result == 0
     assert captured.out.strip() == "[1, 2, 3]"
+
+
+def test_anon_def_immediate_call(capsys: pytest.CaptureFixture[str]) -> None:
+    """def { 1 }() should evaluate to 1, not be split into two statements."""
+    result, captured = run_cli(capsys, ["def { 1 }()"])
+    assert result == 0
+    assert captured.out.strip() == "1"
