@@ -44,18 +44,18 @@ You can also provide setup/teardown code via `--begin` and `--end` in any mode.
 CLI BEGIN blocks run before in-file BEGIN blocks; CLI END blocks run after
 in-file END blocks.
 
-## Map mode
-Map mode processes input files one at a time:
+## Xargs mode
+Xargs mode processes input files one at a time:
 ```bash
-snail --map "print($src)" file_a.txt file_b.txt
+snail --xargs "print($src)" file_a.txt file_b.txt
 ```
 
-Map mode provides three special variables:
+Xargs mode provides three special variables:
 - `$src`: current file path
 - `$fd`: open file handle for the current file
 - `$text`: lazy text view of the current file contents
 
-Map mode opens files lazily: the file is only opened when `$fd` or `$text` is
+Xargs mode opens files lazily: the file is only opened when `$fd` or `$text` is
 first accessed. Scripts that only use `$src` won't attempt to open files, and
 missing/unreadable paths only error once `$fd`/`$text` are used. The file handle
 is closed when the per-file `with` scope ends, so `$fd`/`$text` behave like a
@@ -72,40 +72,40 @@ You can also run setup/teardown blocks with `--begin` and `--end`, which execute
 once before the first file and once after the last file. CLI BEGIN blocks run before
 in-file BEGIN blocks; CLI END blocks run after in-file END blocks:
 ```bash
-snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
+snail --xargs --begin "print('start')" --end "print('done')" "print($src)" *.txt
 ```
 `BEGIN` and `END` are reserved keywords in all modes.
-BEGIN/END blocks are regular Snail blocks, so awk/map-only variables are not available inside them.
+BEGIN/END blocks are regular Snail blocks, so awk/xargs-only variables are not available inside them.
 
-## Lines blocks
+## Awk blocks
 
-`lines { }` is a first-class loop block that processes input line by line,
+`awk { }` is a first-class loop block that processes input line by line,
 bringing awk-style processing into regular Snail scripts:
 
 ```snail
 # Read from stdin/argv (same as --awk mode)
-lines {
+awk {
     print($n, $0)
 }
 
 # Read from a specific file
-lines("server.log") {
+awk("server.log") {
     /ERROR/ { print($0) }
 }
 
 # Read from multiple files — $fn resets and $src updates per file
-lines("access.log", "error.log") {
+awk("access.log", "error.log") {
     print($src, $fn, $0)
 }
 
 # Read from a file handle
-lines(open("data.txt")) {
+awk(open("data.txt")) {
     print($1, $2)
 }
 
 # Read from a list of paths (single expression is normalized)
 paths = ["a.txt", "b.txt"]
-lines(paths) {
+awk(paths) {
     print($src, $0)
 }
 ```
@@ -116,7 +116,7 @@ is normalized: a string or file-like object becomes a single source, while any
 other iterable (e.g. a list of paths) is expanded so each element is processed
 as a separate source.
 
-Inside a `lines { }` block, the following variables are available:
+Inside an `awk { }` block, the following variables are available:
 - `$0`: current line (stripped of trailing newline)
 - `$1`, `$2`, ...: whitespace-split fields
 - `$f`: all fields as a list
@@ -125,9 +125,9 @@ Inside a `lines { }` block, the following variables are available:
 - `$src`: current file path (updates for each source)
 - `$m`: last regex match object
 
-Pattern/action rules work inside `lines { }` blocks just like in awk mode:
+Pattern/action rules work inside `awk { }` blocks just like in awk mode:
 ```snail
-lines("log.txt") {
+awk("log.txt") {
     /ERROR (\d+)/ { print("Error code:", $m.1) }
     /WARNING/ { print("Warn:", $0) }
 }
@@ -136,38 +136,38 @@ lines("log.txt") {
 A bare block `{ action }` runs for every line. A bare pattern `/regex/` prints
 matching lines.
 
-## Files blocks
+## Xargs blocks
 
-`files { }` is a first-class loop block that processes files one at a time,
-bringing map-mode processing into regular Snail scripts:
+`xargs { }` is a first-class loop block that processes files one at a time,
+bringing xargs-mode processing into regular Snail scripts:
 
 ```snail
 # Multiple comma-separated sources
-files("a.txt", "b.txt") {
+xargs("a.txt", "b.txt") {
     print($src, len(str($text)), "bytes")
 }
 
 # Single expression source (list is iterated as individual sources)
-files(path("*.log")) {
+xargs(path("*.log")) {
     print($src)
 }
 ```
 
-A bare `files { }` block (no source) reads file paths from `sys.argv[1:]`,
-matching the behavior of `snail --map`.
+A bare `xargs { }` block (no source) reads file paths from `sys.argv[1:]`,
+matching the behavior of `snail --xargs`.
 
-Inside a `files { }` block, the following variables are available:
+Inside a `xargs { }` block, the following variables are available:
 - `$src`: current file path
 - `$fd`: open file handle for the current file
 - `$text`: lazy text view of the current file contents
 
-### Composing lines and files
+### Composing awk and xargs
 
-`lines` and `files` blocks can be nested and composed with regular code:
+`awk` and `xargs` blocks can be nested and composed with regular code:
 
 ```snail
 results = []
-lines("server.log") {
+awk("server.log") {
     /ERROR (\d+)/ { results.append($m.1) }
 }
 print(f"Found {len(results)} errors")
@@ -697,7 +697,7 @@ echo "hello" | snail --awk --begin 'print("start")' --end 'print("done")' '{ pri
 
 Multiple `-b`/`--begin` and `-e`/`--end` flags are processed in order. `BEGIN` and `END`
 are reserved keywords in all modes. BEGIN/END blocks are regular Snail blocks, so
-awk/map-only variables are not available inside them. See `examples/awk.snail`
+awk/xargs-only variables are not available inside them. See `examples/awk.snail`
 for a runnable sample program.
 
 While processing, Snail populates awk-style variables:

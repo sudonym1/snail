@@ -64,16 +64,16 @@ Process files line-by-line with familiar awk semantics:
 
 Setup and teardown code can be supplied via CLI flags (`-b`/`--begin`, `-e`/`--end`).
 Begin code runs before the line-processing loop, end code runs after.
-Awk `$` variables are not available in begin/end code (they are outside the `lines { }` block).
+Awk `$` variables are not available in begin/end code (they are outside the `awk { }` block).
 ```bash
 echo -e "5\n4\n3\n2\n1" | snail --awk --begin 'total = 0' --end 'print("Sum:", total)' '/^[0-9]+/ { total = total + int($1) }'
 ```
 
-### Map Mode
+### Xargs Mode
 
 Process files one at a time instead of line-by-line:
 
-```snail-map
+```snail-xargs
 print("File:", $src)
 print("Size:", len($text), "bytes")
 ```
@@ -88,9 +88,9 @@ print("Size:", len($text), "bytes")
 
 Setup and teardown code can be supplied via CLI flags (`-b`/`--begin`, `-e`/`--end`).
 Begin code runs before the file-processing loop, end code runs after.
-Map `$` variables are not available in begin/end code (they are outside the `files { }` block).
+Xargs `$` variables are not available in begin/end code (they are outside the `xargs { }` block).
 ```bash
-snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
+snail --xargs --begin "print('start')" --end "print('done')" "print($src)" *.txt
 ```
 
 ### Built-in Variables (All Modes)
@@ -103,8 +103,8 @@ snail --map --begin "print('start')" --end "print('done')" "print($src)" *.txt
 ### Begin/End Flags
 
 The `-b`/`--begin` and `-e`/`--end` CLI flags prepend and append code around the
-main program in all modes. In awk mode the code runs outside the `lines { }` wrapper;
-in map mode it runs outside the `files { }` wrapper.
+main program in all modes. In awk mode the code runs outside the `awk { }` wrapper;
+in xargs mode it runs outside the `xargs { }` wrapper.
 
 ```snail
 print("running")
@@ -294,7 +294,7 @@ Documentation is WIP
 - **[Language Reference](docs/REFERENCE.md)** — Complete syntax and semantics
 - **[examples/all_syntax.snail](examples/all_syntax.snail)** — Every feature in one file
 - **[examples/awk.snail](examples/awk.snail)** — Awk mode examples
-- **[examples/map.snail](examples/map.snail)** — Map mode examples
+- **[examples/xargs.snail](examples/xargs.snail)** — Xargs mode examples
 
 ## 🔌 Editor Support
 

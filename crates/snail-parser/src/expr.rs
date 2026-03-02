@@ -76,8 +76,8 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::class_expr => parse_class_expr(pair, source),
         Rule::try_expr => parse_try_expr(pair, source),
         Rule::with_expr => parse_with_expr(pair, source),
-        Rule::lines_expr => parse_lines_expr(pair, source),
-        Rule::files_expr => parse_files_expr(pair, source),
+        Rule::awk_expr => parse_awk_expr(pair, source),
+        Rule::xargs_expr => parse_xargs_expr(pair, source),
         _ => Err(error_with_span(
             format!("unsupported expression: {:?}", pair.as_rule()),
             span_from_pair(&pair, source),
@@ -764,8 +764,8 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         Rule::class_expr => parse_class_expr(inner_pair, source),
         Rule::try_expr => parse_try_expr(inner_pair, source),
         Rule::with_expr => parse_with_expr(inner_pair, source),
-        Rule::lines_expr => parse_lines_expr(inner_pair, source),
-        Rule::files_expr => parse_files_expr(inner_pair, source),
+        Rule::awk_expr => parse_awk_expr(inner_pair, source),
+        Rule::xargs_expr => parse_xargs_expr(inner_pair, source),
         _ => Err(error_with_span(
             format!("unsupported atom: {:?}", inner_pair.as_rule()),
             span_from_pair(&inner_pair, source),
@@ -1076,21 +1076,21 @@ fn parse_with_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
     Ok(Expr::With { items, body, span })
 }
 
-fn parse_lines_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+fn parse_awk_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut sources = Vec::new();
     let mut body = Vec::new();
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
-            Rule::lines_source => {
+            Rule::awk_source => {
                 for arg_pair in inner.into_inner() {
                     if arg_pair.as_rule() == Rule::argument {
                         sources.push(parse_argument(arg_pair, source)?);
                     }
                 }
             }
-            Rule::lines_body => {
+            Rule::awk_body => {
                 for entry in inner.into_inner() {
                     match entry.as_rule() {
                         Rule::pattern_action => {
@@ -1106,21 +1106,21 @@ fn parse_lines_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
         }
     }
 
-    Ok(Expr::Lines {
+    Ok(Expr::Awk {
         sources,
         body,
         span,
     })
 }
 
-fn parse_files_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+fn parse_xargs_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut sources = Vec::new();
     let mut body = Vec::new();
 
     for inner in pair.into_inner() {
         match inner.as_rule() {
-            Rule::files_source => {
+            Rule::xargs_source => {
                 for arg_pair in inner.into_inner() {
                     if arg_pair.as_rule() == Rule::argument {
                         sources.push(parse_argument(arg_pair, source)?);
@@ -1134,7 +1134,7 @@ fn parse_files_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
         }
     }
 
-    Ok(Expr::Files {
+    Ok(Expr::Xargs {
         sources,
         body,
         span,

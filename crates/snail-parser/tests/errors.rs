@@ -10,9 +10,9 @@ fn assert_regular_mode_error(source: &str, token: &str, mode_hint: &str) {
     assert!(message.contains(mode_hint), "{source:?} => {message:?}");
 }
 
-fn assert_files_mode_error(source: &str, token: &str, mode_hint: &str) {
-    let wrapped = format!("files {{ {source} }}");
-    let err = parse_program(&wrapped).expect_err("source should fail in files mode");
+fn assert_xargs_mode_error(source: &str, token: &str, mode_hint: &str) {
+    let wrapped = format!("xargs {{ {source} }}");
+    let err = parse_program(&wrapped).expect_err("source should fail in xargs mode");
     let message = err.to_string();
     assert!(message.contains(token), "{source:?} => {message:?}");
     assert!(message.contains(mode_hint), "{source:?} => {message:?}");
@@ -42,7 +42,7 @@ fn rejects_awk_only_variables_in_regular_mode() {
     let err = parse_err("value = $n");
     let message = err.to_string();
     assert!(message.contains("$n"));
-    assert!(message.contains("lines"));
+    assert!(message.contains("awk"));
     expect_err_span(&err, 1, 9);
 }
 
@@ -51,7 +51,7 @@ fn rejects_awk_field_indices_in_regular_mode() {
     let err = parse_err("value = $1");
     let message = err.to_string();
     assert!(message.contains("$1"));
-    assert!(message.contains("lines"));
+    assert!(message.contains("awk"));
     expect_err_span(&err, 1, 9);
 }
 
@@ -277,7 +277,7 @@ fn rejects_map_only_variables_in_regular_mode() {
         ("value = $text", "$text"),
         ("x = risky():$fd?", "$fd"),
     ] {
-        assert_regular_mode_error(source, token, "files");
+        assert_regular_mode_error(source, token, "xargs");
     }
 }
 
@@ -288,22 +288,22 @@ fn rejects_additional_awk_only_variables_in_regular_mode() {
         ("value = $m", "$m"),
         ("value = $f", "$f"),
     ] {
-        assert_regular_mode_error(source, token, "lines");
+        assert_regular_mode_error(source, token, "awk");
     }
 }
 
 #[test]
 fn rejects_reserved_names_in_assignment_target_positions_in_regular_mode() {
     for (source, token, mode_hint) in [
-        ("items[$n] = 1", "$n", "lines"),
-        ("items[$1] = 1", "$1", "lines"),
-        ("items[$n] += 1", "$n", "lines"),
-        ("items[$1]++", "$1", "lines"),
-        ("++items[$n]", "$n", "lines"),
-        ("items[$src] = 1", "$src", "lines"),
-        ("items[$fd] += 1", "$fd", "files"),
-        ("items[$text]++", "$text", "files"),
-        ("++items[$src]", "$src", "lines"),
+        ("items[$n] = 1", "$n", "awk"),
+        ("items[$1] = 1", "$1", "awk"),
+        ("items[$n] += 1", "$n", "awk"),
+        ("items[$1]++", "$1", "awk"),
+        ("++items[$n]", "$n", "awk"),
+        ("items[$src] = 1", "$src", "awk"),
+        ("items[$fd] += 1", "$fd", "xargs"),
+        ("items[$text]++", "$text", "xargs"),
+        ("++items[$src]", "$src", "awk"),
     ] {
         assert_regular_mode_error(source, token, mode_hint);
     }
@@ -311,25 +311,25 @@ fn rejects_reserved_names_in_assignment_target_positions_in_regular_mode() {
 
 #[test]
 fn rejects_src_in_regular_mode_plain_stmt() {
-    assert_regular_mode_error("print($src)", "$src", "lines");
+    assert_regular_mode_error("print($src)", "$src", "awk");
 }
 
 #[test]
 fn rejects_awk_vars_in_unary_yieldfrom_paren() {
-    assert_regular_mode_error("def gen() { yield from (-($n)) }", "$n", "lines");
+    assert_regular_mode_error("def gen() { yield from (-($n)) }", "$n", "awk");
 }
 
 #[test]
 fn rejects_awk_vars_in_structural_exprs_and_compare() {
     for source in ["x = [$n]", "x = ($n,)", "x = #{$n}", "x = 1 < $n < 3"] {
-        assert_regular_mode_error(source, "$n", "lines");
+        assert_regular_mode_error(source, "$n", "awk");
     }
 }
 
 #[test]
 fn rejects_awk_vars_in_call_argument_forms() {
     for source in ["x = f($n)", "x = f(k=$n)", "x = f(*$n)", "x = f(**$n)"] {
-        assert_regular_mode_error(source, "$n", "lines");
+        assert_regular_mode_error(source, "$n", "awk");
     }
 }
 
@@ -344,7 +344,7 @@ fn rejects_awk_vars_in_dict_index_slice_try_yield() {
         "x = risky():$n?",
         "def g() { yield $n }",
     ] {
-        assert_regular_mode_error(source, "$n", "lines");
+        assert_regular_mode_error(source, "$n", "awk");
     }
 }
 
@@ -355,7 +355,7 @@ fn rejects_reserved_names_in_fstring_subprocess_regex_interpolation() {
         "out = $(echo {$src})",
         "ok = \"x\" in /{$src}/",
     ] {
-        assert_regular_mode_error(source, "$src", "lines");
+        assert_regular_mode_error(source, "$src", "awk");
     }
 }
 
@@ -366,48 +366,48 @@ fn rejects_awk_field_indices_in_interpolation_contexts_regular_mode() {
         ("out = $(echo {$0})", "$0"),
         ("ok = \"x\" in /{$1}/", "$1"),
     ] {
-        assert_regular_mode_error(source, token, "lines");
+        assert_regular_mode_error(source, token, "awk");
     }
 }
 
 #[test]
 fn rejects_reserved_names_in_nested_format_spec() {
-    assert_regular_mode_error("s = \"{value:{$n}.{prec}f}\"", "$n", "lines");
-    assert_regular_mode_error("s = \"{value:{$src}.{prec}f}\"", "$src", "lines");
-    assert_regular_mode_error("s = \"{value:{$fd}.{prec}f}\"", "$fd", "files");
+    assert_regular_mode_error("s = \"{value:{$n}.{prec}f}\"", "$n", "awk");
+    assert_regular_mode_error("s = \"{value:{$src}.{prec}f}\"", "$src", "awk");
+    assert_regular_mode_error("s = \"{value:{$fd}.{prec}f}\"", "$fd", "xargs");
 }
 
 #[test]
 fn rejects_reserved_names_in_list_comp_positions() {
-    assert_regular_mode_error("items = [$n for n in nums]", "$n", "lines");
-    assert_regular_mode_error("items = [n for n in $text]", "$text", "files");
-    assert_regular_mode_error("items = [n for n in nums if $src]", "$src", "lines");
+    assert_regular_mode_error("items = [$n for n in nums]", "$n", "awk");
+    assert_regular_mode_error("items = [n for n in $text]", "$text", "xargs");
+    assert_regular_mode_error("items = [n for n in nums if $src]", "$src", "awk");
 }
 
 #[test]
 fn rejects_reserved_names_in_dict_comp_positions() {
-    assert_regular_mode_error("lookup = %{$n: n for n in nums}", "$n", "lines");
-    assert_regular_mode_error("lookup = %{n: $fd for n in nums}", "$fd", "files");
-    assert_regular_mode_error("lookup = %{n: n for n in $text}", "$text", "files");
-    assert_regular_mode_error("lookup = %{n: n for n in nums if $src}", "$src", "lines");
+    assert_regular_mode_error("lookup = %{$n: n for n in nums}", "$n", "awk");
+    assert_regular_mode_error("lookup = %{n: $fd for n in nums}", "$fd", "xargs");
+    assert_regular_mode_error("lookup = %{n: n for n in $text}", "$text", "xargs");
+    assert_regular_mode_error("lookup = %{n: n for n in nums if $src}", "$src", "awk");
 }
 
 #[test]
-fn files_allows_map_vars_in_nested_expr_contexts() {
-    // These sources use map variables which are valid inside files { } blocks
+fn xargs_allows_xargs_vars_in_nested_expr_contexts() {
+    // These sources use xargs variables which are valid inside xargs { } blocks
     for source in [
-        "files { s = \"{$src}\" }",
-        "files { out = $(echo {$text}) }",
-        "files { ok = \"x\" in /{$src}/ }",
-        "files { items = [$src for n in $text if $fd] }",
-        "files { lookup = %{$src: $fd for n in $text if $src} }",
+        "xargs { s = \"{$src}\" }",
+        "xargs { out = $(echo {$text}) }",
+        "xargs { ok = \"x\" in /{$src}/ }",
+        "xargs { items = [$src for n in $text if $fd] }",
+        "xargs { lookup = %{$src: $fd for n in $text if $src} }",
     ] {
-        parse_program(source).expect("files mode source should parse");
+        parse_program(source).expect("xargs mode source should parse");
     }
 }
 
 #[test]
-fn files_rejects_awk_vars_in_nested_expr_contexts() {
+fn xargs_rejects_awk_vars_in_nested_expr_contexts() {
     for source in [
         "items = [$n for n in nums if n > 0]",
         "items = [n for n in nums if $n]",
@@ -426,12 +426,12 @@ fn files_rejects_awk_vars_in_nested_expr_contexts() {
         } else {
             "$n"
         };
-        assert_files_mode_error(source, token, "awk");
+        assert_xargs_mode_error(source, token, "awk");
     }
 }
 
 #[test]
-fn files_rejects_awk_names_in_assignment_target_positions() {
+fn xargs_rejects_awk_names_in_assignment_target_positions() {
     for (source, token) in [
         ("items[$n] = 1", "$n"),
         ("items[$1] = 1", "$1"),
@@ -439,6 +439,6 @@ fn files_rejects_awk_names_in_assignment_target_positions() {
         ("items[$1]++", "$1"),
         ("++items[$n]", "$n"),
     ] {
-        assert_files_mode_error(source, token, "awk");
+        assert_xargs_mode_error(source, token, "awk");
     }
 }

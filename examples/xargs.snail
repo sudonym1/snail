@@ -1,6 +1,6 @@
-#!/usr/bin/env -S snail --map -b 'print("map start")' -e 'print("map done")' -f
-# Map mode example (process each file as a whole).
-# -b and -e flags in the shebang run code before/after the files { } block.
+#!/usr/bin/env -S snail --xargs -b 'print("xargs start")' -e 'print("xargs done")' -f
+# Xargs mode example (process each file as a whole).
+# -b and -e flags in the shebang run code before/after the xargs { } block.
 
 # $src is the input path; $text is the full file contents.
 print("File:", $src)

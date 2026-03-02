@@ -10,8 +10,8 @@ use super::py_ast::{AstBuilder, py_err_to_lower};
 
 use super::stmt::lower_block_auto;
 
-/// Lower a `files` statement: iterates files from sources or argv.
-pub(crate) fn lower_files_stmt(
+/// Lower a `xargs` statement: iterates files from sources or argv.
+pub(crate) fn lower_xargs_stmt(
     builder: &AstBuilder<'_>,
     sources: &[Argument],
     body: &[Stmt],
@@ -20,13 +20,13 @@ pub(crate) fn lower_files_stmt(
     capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
     if sources.is_empty() {
-        lower_files_no_source(builder, body, span, auto_print, capture_last)
+        lower_xargs_no_source(builder, body, span, auto_print, capture_last)
     } else {
-        lower_files_with_sources(builder, sources, body, span, auto_print, capture_last)
+        lower_xargs_with_sources(builder, sources, body, span, auto_print, capture_last)
     }
 }
 
-/// Shared loop structure for all `files` variants.
+/// Shared loop structure for all `xargs` variants.
 ///
 /// Generates:
 /// ```python
@@ -35,7 +35,7 @@ pub(crate) fn lower_files_stmt(
 ///         __snail_text = __SnailLazyText(__snail_fd)
 ///         <body>
 /// ```
-fn lower_files_loop(
+fn lower_xargs_loop(
     builder: &AstBuilder<'_>,
     iter_expr: PyObject,
     body: &[Stmt],
@@ -45,7 +45,7 @@ fn lower_files_loop(
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
 
-    let with_body = build_files_with_body(builder, body, span, auto_print, capture_last)?;
+    let with_body = build_xargs_with_body(builder, body, span, auto_print, capture_last)?;
     let lazy_file_call = build_lazy_file_call(builder, span)?;
 
     let with_item = builder
@@ -55,7 +55,7 @@ fn lower_files_loop(
                 lazy_file_call,
                 name_expr(
                     builder,
-                    SNAIL_MAP_FD_PYVAR,
+                    SNAIL_XARGS_FD_PYVAR,
                     span,
                     builder.store_ctx().map_err(py_err_to_lower)?,
                 )?,
@@ -80,7 +80,7 @@ fn lower_files_loop(
             vec![
                 name_expr(
                     builder,
-                    SNAIL_MAP_SRC_PYVAR,
+                    SNAIL_XARGS_SRC_PYVAR,
                     span,
                     builder.store_ctx().map_err(py_err_to_lower)?,
                 )?,
@@ -95,7 +95,7 @@ fn lower_files_loop(
     Ok(stmts)
 }
 
-fn lower_files_with_sources(
+fn lower_xargs_with_sources(
     builder: &AstBuilder<'_>,
     sources: &[Argument],
     body: &[Stmt],
@@ -123,10 +123,10 @@ fn lower_files_with_sources(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_files_loop(builder, iter_expr, body, span, auto_print, capture_last)
+    lower_xargs_loop(builder, iter_expr, body, span, auto_print, capture_last)
 }
 
-fn lower_files_no_source(
+fn lower_xargs_no_source(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
@@ -169,7 +169,7 @@ fn lower_files_no_source(
     // sys.argv[1:]
     let iter_expr = lower_paths_source(builder, span)?;
 
-    stmts.extend(lower_files_loop(
+    stmts.extend(lower_xargs_loop(
         builder,
         iter_expr,
         body,
@@ -180,7 +180,7 @@ fn lower_files_no_source(
     Ok(stmts)
 }
 
-fn build_files_with_body(
+fn build_xargs_with_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
@@ -204,7 +204,7 @@ fn build_files_with_body(
                     builder.py(),
                     vec![name_expr(
                         builder,
-                        SNAIL_MAP_FD_PYVAR,
+                        SNAIL_XARGS_FD_PYVAR,
                         span,
                         builder.load_ctx().map_err(py_err_to_lower)?,
                     )?],
@@ -217,7 +217,7 @@ fn build_files_with_body(
         .map_err(py_err_to_lower)?;
     with_body.push(assign_name(
         builder,
-        SNAIL_MAP_TEXT_PYVAR,
+        SNAIL_XARGS_TEXT_PYVAR,
         lazy_text_call,
         span,
     )?);
@@ -290,7 +290,7 @@ fn build_lazy_file_call(
                     vec![
                         name_expr(
                             builder,
-                            SNAIL_MAP_SRC_PYVAR,
+                            SNAIL_XARGS_SRC_PYVAR,
                             span,
                             builder.load_ctx().map_err(py_err_to_lower)?,
                         )?,

@@ -1075,8 +1075,8 @@ pub(crate) fn lower_expr_with_exception(
         | Expr::Class { .. }
         | Expr::Try { .. }
         | Expr::With { .. }
-        | Expr::Lines { .. }
-        | Expr::Files { .. } => Err(LowerError::new(
+        | Expr::Awk { .. }
+        | Expr::Xargs { .. } => Err(LowerError::new(
             "compound expressions cannot be used in expression context yet",
         )),
     }
@@ -1561,8 +1561,8 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
         | Expr::Class { .. }
         | Expr::Try { .. }
         | Expr::With { .. }
-        | Expr::Lines { .. }
-        | Expr::Files { .. } => {}
+        | Expr::Awk { .. }
+        | Expr::Xargs { .. } => {}
     }
 }
 
@@ -1913,20 +1913,20 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             body: body.clone(),
             span: span.clone(),
         },
-        Expr::Lines {
+        Expr::Awk {
             sources,
             body,
             span,
-        } => Expr::Lines {
+        } => Expr::Awk {
             sources: sources.clone(),
             body: body.clone(),
             span: span.clone(),
         },
-        Expr::Files {
+        Expr::Xargs {
             sources,
             body,
             span,
-        } => Expr::Files {
+        } => Expr::Xargs {
             sources: sources.clone(),
             body: body.clone(),
             span: span.clone(),
@@ -2449,18 +2449,18 @@ pub(crate) fn lower_expr_as_stmt(
         Expr::With {
             items, body, span, ..
         } => lower_with_stmt(builder, items, body, span),
-        Expr::Lines {
+        Expr::Awk {
             sources,
             body,
             span,
             ..
-        } => super::awk::lower_lines_stmt(builder, sources, body, span, false, false),
-        Expr::Files {
+        } => super::awk::lower_awk_stmt(builder, sources, body, span, false, false),
+        Expr::Xargs {
             sources,
             body,
             span,
             ..
-        } => super::map::lower_files_stmt(builder, sources, body, span, false, false),
+        } => super::xargs::lower_xargs_stmt(builder, sources, body, span, false, false),
         Expr::Block { stmts, span } => lower_block(builder, stmts, span),
         _ => {
             let value = lower_expr(builder, expr)?;
@@ -2474,7 +2474,7 @@ pub(crate) fn lower_expr_as_stmt(
 }
 
 /// Lower an expression at tail position with the given tail behavior.
-/// Handles tail propagation into compound expression branches (if, lines, files)
+/// Handles tail propagation into compound expression branches (if, lines, xargs)
 /// and generic tail wrapping (auto-print, capture, implicit return) for other expressions.
 pub(crate) fn lower_tail_expr(
     builder: &AstBuilder<'_>,
@@ -2501,16 +2501,16 @@ pub(crate) fn lower_tail_expr(
     {
         return lower_block_with_tail(builder, stmts, tail, block_span);
     }
-    // Propagate tail behavior into lines/files blocks
+    // Propagate tail behavior into lines/xargs blocks
     if matches!(tail, TailBehavior::AutoPrint | TailBehavior::CaptureOnly) {
         match expr {
-            Expr::Lines {
+            Expr::Awk {
                 sources,
                 body,
                 span,
                 ..
             } => {
-                return super::awk::lower_lines_stmt(
+                return super::awk::lower_awk_stmt(
                     builder,
                     sources,
                     body,
@@ -2519,13 +2519,13 @@ pub(crate) fn lower_tail_expr(
                     tail == TailBehavior::CaptureOnly,
                 );
             }
-            Expr::Files {
+            Expr::Xargs {
                 sources,
                 body,
                 span,
                 ..
             } => {
-                return super::map::lower_files_stmt(
+                return super::xargs::lower_xargs_stmt(
                     builder,
                     sources,
                     body,
@@ -2546,8 +2546,8 @@ pub(crate) fn lower_tail_expr(
             | Expr::Class { .. }
             | Expr::Try { .. }
             | Expr::With { .. }
-            | Expr::Lines { .. }
-            | Expr::Files { .. }
+            | Expr::Awk { .. }
+            | Expr::Xargs { .. }
     ) {
         return lower_expr_as_stmt(builder, expr, span);
     }

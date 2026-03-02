@@ -178,7 +178,7 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                 .map_err(py_err_to_lower)
         }
         Stmt::PatternAction { .. } => Err(LowerError::new(
-            "pattern/action should be lowered via lower_lines_body",
+            "pattern/action should be lowered via lower_awk_body",
         )),
         Stmt::SegmentBreak { .. } => Err(LowerError::new(
             "segment break should be handled by lower_block_with_tail",

@@ -9,15 +9,15 @@ use super::helpers::{assign_name, name_expr, number_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
 use super::stmt::lower_block_auto;
 
-/// Configuration extracted from `lines(sep=..., ws=...)` kwargs.
-struct LinesConfig<'a> {
+/// Configuration extracted from `awk(sep=..., ws=...)` kwargs.
+struct AwkConfig<'a> {
     sep: Option<&'a Expr>,
     ws: Option<&'a Expr>,
 }
 
 /// Partition `sources` into config kwargs (`sep`, `ws`) and remaining source args.
-fn extract_lines_config(sources: &[Argument]) -> (LinesConfig<'_>, Vec<&Argument>) {
-    let mut config = LinesConfig {
+fn extract_awk_config(sources: &[Argument]) -> (AwkConfig<'_>, Vec<&Argument>) {
+    let mut config = AwkConfig {
         sep: None,
         ws: None,
     };
@@ -38,11 +38,11 @@ fn extract_lines_config(sources: &[Argument]) -> (LinesConfig<'_>, Vec<&Argument
     (config, remaining)
 }
 
-/// Lower a `lines` statement: sets up line-processing variables and iterates lines.
+/// Lower an `awk` statement: sets up line-processing variables and iterates lines.
 ///
-/// For `lines { body }` (no source), generates the full argv/stdin file loop.
-/// For `lines(expr, ...) { body }`, generates a two-level file loop with per-file state.
-pub(crate) fn lower_lines_stmt(
+/// For `awk { body }` (no source), generates the full argv/stdin file loop.
+/// For `awk(expr, ...) { body }`, generates a two-level file loop with per-file state.
+pub(crate) fn lower_awk_stmt(
     builder: &AstBuilder<'_>,
     sources: &[Argument],
     body: &[Stmt],
@@ -50,13 +50,13 @@ pub(crate) fn lower_lines_stmt(
     auto_print: bool,
     capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
-    let (config, remaining) = extract_lines_config(sources);
+    let (config, remaining) = extract_awk_config(sources);
     if remaining.is_empty() {
         // No source: generate the full argv/stdin file loop (same as awk mode)
-        lower_lines_no_source(builder, body, span, &config, auto_print, capture_last)
+        lower_awk_no_source(builder, body, span, &config, auto_print, capture_last)
     } else {
         // With sources: generate two-level file loop
-        lower_lines_with_sources(
+        lower_awk_with_sources(
             builder,
             &remaining,
             body,
@@ -68,7 +68,7 @@ pub(crate) fn lower_lines_stmt(
     }
 }
 
-/// Shared implementation for all `lines` variants.
+/// Shared implementation for all `awk` variants.
 ///
 /// Generates:
 /// ```python
@@ -80,12 +80,12 @@ pub(crate) fn lower_lines_stmt(
 ///         for __snail_raw in __snail_file:
 ///             # ... line loop body ...
 /// ```
-fn lower_lines_loop(
+fn lower_awk_loop(
     builder: &AstBuilder<'_>,
     iter_expr: PyObject,
     body: &[Stmt],
     span: &SourceSpan,
-    config: &LinesConfig<'_>,
+    config: &AwkConfig<'_>,
     auto_print: bool,
     capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
@@ -127,7 +127,7 @@ fn lower_lines_loop(
 
     // Build the file loop body
     let file_loop_body =
-        lower_lines_file_loop_body(builder, body, span, config, auto_print, capture_last)?;
+        lower_awk_file_loop_body(builder, body, span, config, auto_print, capture_last)?;
 
     // for __snail_source_item in <iter_expr>:
     let for_loop = builder
@@ -151,7 +151,7 @@ fn lower_lines_loop(
     Ok(stmts)
 }
 
-/// Generates the per-file loop body shared by all `lines` variants.
+/// Generates the per-file loop body shared by all `awk` variants.
 ///
 /// ```python
 /// __snail_fnr = 0
@@ -159,11 +159,11 @@ fn lower_lines_loop(
 ///     for __snail_raw in __snail_file:
 ///         # ... line processing ...
 /// ```
-fn lower_lines_file_loop_body(
+fn lower_awk_file_loop_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
-    config: &LinesConfig<'_>,
+    config: &AwkConfig<'_>,
     auto_print: bool,
     capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
@@ -279,12 +279,12 @@ fn lower_lines_file_loop_body(
     Ok(file_loop)
 }
 
-fn lower_lines_with_sources(
+fn lower_awk_with_sources(
     builder: &AstBuilder<'_>,
     sources: &[&Argument],
     body: &[Stmt],
     span: &SourceSpan,
-    config: &LinesConfig<'_>,
+    config: &AwkConfig<'_>,
     auto_print: bool,
     capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
@@ -309,7 +309,7 @@ fn lower_lines_with_sources(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_lines_loop(
+    lower_awk_loop(
         builder,
         iter_expr,
         body,
@@ -320,11 +320,11 @@ fn lower_lines_with_sources(
     )
 }
 
-fn lower_lines_no_source(
+fn lower_awk_no_source(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
-    config: &LinesConfig<'_>,
+    config: &AwkConfig<'_>,
     auto_print: bool,
     capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
@@ -401,7 +401,7 @@ fn lower_lines_no_source(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_lines_loop(
+    lower_awk_loop(
         builder,
         files_expr,
         body,
@@ -418,7 +418,7 @@ fn build_line_loop_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
-    config: &LinesConfig<'_>,
+    config: &AwkConfig<'_>,
     auto_print: bool,
     capture_last: bool,
 ) -> Result<Vec<PyObject>, LowerError> {
@@ -607,7 +607,7 @@ fn build_line_loop_body(
     )?);
     loop_body.push(assign_name(
         builder,
-        SNAIL_MAP_SRC_PYVAR,
+        SNAIL_XARGS_SRC_PYVAR,
         name_expr(
             builder,
             "__snail_path",
@@ -618,7 +618,7 @@ fn build_line_loop_body(
     )?);
 
     // Lower user body (mix of pattern/action and regular statements)
-    loop_body.extend(lower_lines_body(
+    loop_body.extend(lower_awk_body(
         builder,
         body,
         span,
@@ -629,8 +629,8 @@ fn build_line_loop_body(
     Ok(loop_body)
 }
 
-/// Lower a mixed body of statements and pattern/action entries for `lines { }` blocks.
-pub(crate) fn lower_lines_body(
+/// Lower a mixed body of statements and pattern/action entries for `awk { }` blocks.
+pub(crate) fn lower_awk_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,

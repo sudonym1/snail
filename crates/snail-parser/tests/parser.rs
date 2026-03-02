@@ -1631,76 +1631,76 @@ fn compact_try_stmt_still_requires_separator() {
     );
 }
 
-// ========== Lines/Files Block Tests ==========
+// ========== Awk/Xargs Block Tests ==========
 
 #[test]
-fn parses_bare_lines_block() {
-    let source = "lines { print($0) }";
+fn parses_bare_awk_block() {
+    let source = "awk { print($0) }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } => {
             assert!(sources.is_empty());
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_with_source() {
-    let source = r#"lines("file.txt") { print($0) }"#;
+fn parses_awk_with_source() {
+    let source = r#"awk("file.txt") { print($0) }"#;
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } => {
             assert_eq!(sources.len(), 1);
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_with_multiple_sources() {
-    let source = r#"lines("a", "b") { print($0) }"#;
+fn parses_awk_with_multiple_sources() {
+    let source = r#"awk("a", "b") { print($0) }"#;
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } => {
             assert_eq!(sources.len(), 2);
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_with_trailing_comma() {
-    let source = r#"lines("a",) { print($0) }"#;
+fn parses_awk_with_trailing_comma() {
+    let source = r#"awk("a",) { print($0) }"#;
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } => {
             assert_eq!(sources.len(), 1);
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_with_pattern_action() {
-    let source = r#"lines("file.txt") { /pat/ { print($0) } }"#;
+fn parses_awk_with_pattern_action() {
+    let source = r#"awk("file.txt") { /pat/ { print($0) } }"#;
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { body, .. } => {
+        Expr::Awk { body, .. } => {
             assert_eq!(body.len(), 1);
             match &body[0] {
                 Stmt::PatternAction {
@@ -1712,18 +1712,18 @@ fn parses_lines_with_pattern_action() {
                 other => panic!("Expected pattern/action, got {other:?}"),
             }
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_with_bare_block() {
-    let source = "lines { { print($0) } }";
+fn parses_awk_with_bare_block() {
+    let source = "awk { { print($0) } }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { body, .. } => {
+        Expr::Awk { body, .. } => {
             assert_eq!(body.len(), 1);
             match &body[0] {
                 Stmt::PatternAction {
@@ -1735,18 +1735,18 @@ fn parses_lines_with_bare_block() {
                 other => panic!("Expected pattern/action (bare block), got {other:?}"),
             }
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_with_bare_pattern() {
-    let source = "lines { /pat/ }";
+fn parses_awk_with_bare_pattern() {
+    let source = "awk { /pat/ }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { body, .. } => {
+        Expr::Awk { body, .. } => {
             assert_eq!(body.len(), 1);
             match &body[0] {
                 Stmt::PatternAction {
@@ -1758,148 +1758,148 @@ fn parses_lines_with_bare_pattern() {
                 other => panic!("Expected pattern/action (bare pattern), got {other:?}"),
             }
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_bare_files_block() {
-    let source = "files { print($src) }";
+fn parses_bare_xargs_block() {
+    let source = "xargs { print($src) }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Files { sources, body, .. } => {
+        Expr::Xargs { sources, body, .. } => {
             assert!(sources.is_empty());
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected files statement, got {other:?}"),
+        other => panic!("Expected xargs statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_files_with_source() {
-    let source = "files(paths) { print($src) }";
+fn parses_xargs_with_source() {
+    let source = "xargs(paths) { print($src) }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Files { sources, body, .. } => {
+        Expr::Xargs { sources, body, .. } => {
             assert_eq!(sources.len(), 1);
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected files statement, got {other:?}"),
+        other => panic!("Expected xargs statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_files_with_multiple_sources() {
-    let source = r#"files("a", "b") { print($src) }"#;
+fn parses_xargs_with_multiple_sources() {
+    let source = r#"xargs("a", "b") { print($src) }"#;
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Files { sources, body, .. } => {
+        Expr::Xargs { sources, body, .. } => {
             assert_eq!(sources.len(), 2);
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected files statement, got {other:?}"),
+        other => panic!("Expected xargs statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_files_with_trailing_comma() {
-    let source = r#"files("a",) { print($src) }"#;
+fn parses_xargs_with_trailing_comma() {
+    let source = r#"xargs("a",) { print($src) }"#;
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Files { sources, body, .. } => {
+        Expr::Xargs { sources, body, .. } => {
             assert_eq!(sources.len(), 1);
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected files statement, got {other:?}"),
+        other => panic!("Expected xargs statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_followed_by_stmt() {
-    let source = "lines { print($0) } x = 1";
+fn parses_awk_followed_by_stmt() {
+    let source = "awk { print($0) } x = 1";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(unwrap_expr(&program.stmts[0]), Expr::Lines { .. }));
+    assert!(matches!(unwrap_expr(&program.stmts[0]), Expr::Awk { .. }));
     assert!(matches!(&program.stmts[1], Stmt::Assign { .. }));
 }
 
 #[test]
-fn parses_files_followed_by_stmt() {
-    let source = "files { print($src) } x = 1";
+fn parses_xargs_followed_by_stmt() {
+    let source = "xargs { print($src) } x = 1";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 2);
-    assert!(matches!(unwrap_expr(&program.stmts[0]), Expr::Files { .. }));
+    assert!(matches!(unwrap_expr(&program.stmts[0]), Expr::Xargs { .. }));
     assert!(matches!(&program.stmts[1], Stmt::Assign { .. }));
 }
 
 #[test]
-fn parses_lines_with_multiline() {
-    let source = "lines\n{\nprint($0)\n}";
+fn parses_awk_with_multiline() {
+    let source = "awk\n{\nprint($0)\n}";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
-    assert!(matches!(unwrap_expr(&program.stmts[0]), Expr::Lines { .. }));
+    assert!(matches!(unwrap_expr(&program.stmts[0]), Expr::Awk { .. }));
 }
 
 #[test]
-fn parser_rejects_dollar_zero_outside_lines() {
+fn parser_rejects_dollar_zero_outside_awk() {
     let err = parse_err("print($0)");
     let message = err.to_string();
     assert!(message.contains("awk"));
 }
 
 #[test]
-fn parser_rejects_fd_inside_lines() {
-    let err = parse_err("lines { print($fd) }");
+fn parser_rejects_fd_inside_awk() {
+    let err = parse_err("awk { print($fd) }");
     let message = err.to_string();
-    assert!(message.contains("map variables"));
+    assert!(message.contains("xargs variables"));
 }
 
 #[test]
-fn parser_rejects_field_index_outside_lines() {
+fn parser_rejects_field_index_outside_awk() {
     let err = parse_err("print($1)");
     let message = err.to_string();
     assert!(message.contains("awk"));
 }
 
 #[test]
-fn parser_rejects_awk_vars_inside_files() {
-    let err = parse_err("files { print($n) }");
+fn parser_rejects_awk_vars_inside_xargs() {
+    let err = parse_err("xargs { print($n) }");
     let message = err.to_string();
     assert!(message.contains("awk variables"));
 }
 
 #[test]
-fn parses_lines_with_star_arg() {
-    let source = "lines(*args) { print($0) }";
+fn parses_awk_with_star_arg() {
+    let source = "awk(*args) { print($0) }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } => {
             assert_eq!(sources.len(), 1);
             assert!(matches!(&sources[0], Argument::Star { .. }));
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_with_kw_arg() {
-    let source = r#"lines("file", encoding="utf-8") { print($0) }"#;
+fn parses_awk_with_kw_arg() {
+    let source = r#"awk("file", encoding="utf-8") { print($0) }"#;
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } => {
             assert_eq!(sources.len(), 2);
             assert!(matches!(&sources[0], Argument::Positional { .. }));
             match &sources[1] {
@@ -1908,43 +1908,43 @@ fn parses_lines_with_kw_arg() {
             }
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_files_with_star_arg() {
-    let source = "files(*paths) { print($src) }";
+fn parses_xargs_with_star_arg() {
+    let source = "xargs(*paths) { print($src) }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Files { sources, body, .. } => {
+        Expr::Xargs { sources, body, .. } => {
             assert_eq!(sources.len(), 1);
             assert!(matches!(&sources[0], Argument::Star { .. }));
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected files statement, got {other:?}"),
+        other => panic!("Expected xargs statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parses_lines_empty_parens() {
-    let source = "lines() { print($0) }";
+fn parses_awk_empty_parens() {
+    let source = "awk() { print($0) }";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
 
     match unwrap_expr(&program.stmts[0]) {
-        Expr::Lines { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } => {
             assert!(sources.is_empty());
             assert_eq!(body.len(), 1);
         }
-        other => panic!("Expected lines statement, got {other:?}"),
+        other => panic!("Expected awk statement, got {other:?}"),
     }
 }
 
 #[test]
-fn parser_rejects_pattern_action_outside_lines() {
+fn parser_rejects_pattern_action_outside_awk() {
     let err = parse_err("/pattern/ { print(1) }");
     let message = err.to_string();
     assert!(

@@ -318,7 +318,7 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
             }
             check_stmts(body, in_function)?;
         }
-        Expr::Lines { sources, body, .. } | Expr::Files { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } | Expr::Xargs { sources, body, .. } => {
             for source in sources {
                 match source {
                     Argument::Positional { value, .. }

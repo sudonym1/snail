@@ -320,7 +320,7 @@ text = "abc123"
 regex_match = text in /abc(\d+)/
 compiled_regex = /abc(\d+)/
 compiled_match = compiled_regex.search(text)
-# Match groups: $m.1 maps to $m[1] (inside lines { } blocks)
+# Match groups: $m.1 maps to $m[1] (inside awk { } blocks)
 
 # ---- Exception fallback hooks and compound expressions ----
 def fallback_handler() {
@@ -449,86 +449,86 @@ print("byte strings", byte_text, byte_single, raw_byte, raw_byte_alt)
 print("byte interp", byte_interp)
 print(sysmod.version)
 
-# ---- Lines and Files blocks (inline awk/map) ----
-# lines { } processes lines from stdin or a source
+# ---- Awk and Xargs blocks (inline awk/xargs) ----
+# awk { } processes lines from stdin or a source
 import tempfile
 temp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
 temp.write("hello world\nfoo bar\nbaz qux\n")
 temp.close()
 
 line_count = 0
-lines(temp.name) {
+awk(temp.name) {
     line_count += 1
 }
-assert line_count == 3, "lines counted"
-print("lines count", line_count)
+assert line_count == 3, "awk counted"
+print("awk count", line_count)
 
-# Pattern/action inside lines
+# Pattern/action inside awk
 found = []
-lines(temp.name) {
+awk(temp.name) {
     /hello/ { found.append($0) }
 }
 assert found == ["hello world"], "pattern/action match"
-print("lines pattern found", found)
+print("awk pattern found", found)
 
-# Multi-file lines: $fn resets per file, $src tracks path
+# Multi-file awk: $fn resets per file, $src tracks path
 temp2 = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
 temp2.write("extra line\n")
 temp2.close()
 multi_srcs = []
-lines(temp.name, temp2.name) {
+awk(temp.name, temp2.name) {
     multi_srcs.append(str($fn) + ":" + $src)
 }
 
-# Lines/files with call argument syntax: *args, **kwargs, keyword args
+# Awk/xargs with call argument syntax: *args, **kwargs, keyword args
 src_list = [temp.name, temp2.name]
 star_count = 0
-lines(*src_list) {
+awk(*src_list) {
     star_count += 1
 }
-assert star_count == 4, "lines *args counted"
-print("lines *args count", star_count)
+assert star_count == 4, "awk *args counted"
+print("awk *args count", star_count)
 assert multi_srcs[0].endswith(temp.name.split("/")[-1])
 assert multi_srcs[-1].endswith(temp2.name.split("/")[-1])
-print("lines multi-source", len(multi_srcs))
+print("awk multi-source", len(multi_srcs))
 
-# Files block with source expression
+# Xargs block with source expression
 file_sizes = []
-files([temp.name]) {
+xargs([temp.name]) {
     file_sizes.append(len(str($text)))
 }
 assert len(file_sizes) == 1
-print("files text size", file_sizes)
+print("xargs text size", file_sizes)
 
-# Multi-file files: comma-separated sources
+# Multi-file xargs: comma-separated sources
 multi_file_srcs = []
-files(temp.name, temp2.name) {
+xargs(temp.name, temp2.name) {
     multi_file_srcs.append($src)
 }
 assert len(multi_file_srcs) == 2
-print("files multi-source", len(multi_file_srcs))
+print("xargs multi-source", len(multi_file_srcs))
 
-# Lines with sep kwarg (field separator)
+# Awk with sep kwarg (field separator)
 sep_fields = []
 temp3 = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
 temp3.write("a/b/c\n")
 temp3.close()
-lines(temp3.name, sep="/") {
+awk(temp3.name, sep="/") {
     sep_fields.append($1)
 }
-assert sep_fields == ["a"], "lines sep kwarg"
-print("lines sep kwarg", sep_fields)
+assert sep_fields == ["a"], "awk sep kwarg"
+print("awk sep kwarg", sep_fields)
 
-# Lines with sep + ws kwargs (field separator with whitespace)
+# Awk with sep + ws kwargs (field separator with whitespace)
 ws_fields = []
 temp4 = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
 temp4.write("x y/z\n")
 temp4.close()
-lines(temp4.name, sep="/", ws=True) {
+awk(temp4.name, sep="/", ws=True) {
     ws_fields.append(str(len($f)))
 }
-assert ws_fields == ["3"], "lines sep+ws kwargs"
-print("lines sep+ws kwargs", ws_fields)
+assert ws_fields == ["3"], "awk sep+ws kwargs"
+print("awk sep+ws kwargs", ws_fields)
 
 os.unlink(temp3.name)
 os.unlink(temp4.name)

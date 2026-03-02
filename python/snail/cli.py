@@ -9,7 +9,7 @@ from . import __build_info__, compile_ast, exec
 
 _USAGE = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]..."
 _DESCRIPTION = "Snail programming language interpreter"
-_BOOLEAN_FLAGS = frozenset("amptPIvhW")
+_BOOLEAN_FLAGS = frozenset("axptPIvhW")
 _VALUE_FLAGS = frozenset("fbeF")
 
 
@@ -92,7 +92,7 @@ class _Args:
     def __init__(self) -> None:
         self.file: Optional[str] = None
         self.awk = False
-        self.map = False
+        self.xargs = False
         self.test = False
         self.force_print = False
         self.no_print = False
@@ -123,7 +123,7 @@ def _print_help(file=None) -> None:
         file=file,
     )
     print("  -a, --awk               awk mode", file=file)
-    print("  -m, --map               map mode (process files one at a time)", file=file)
+    print("  -x, --xargs             xargs mode (process files one at a time)", file=file)
     print(
         "  -b, --begin <code>       begin block code (repeatable)",
         file=file,
@@ -239,8 +239,8 @@ def _parse_args(argv: list[str]) -> _Args:
             args.awk = True
             idx += 1
             continue
-        if token in ("-m", "--map"):
-            args.map = True
+        if token in ("-x", "--xargs"):
+            args.xargs = True
             idx += 1
             continue
         if token in ("-t", "--test"):
@@ -370,12 +370,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(_format_python_runtime())
         return 0
 
-    # Validate --awk and --map are mutually exclusive
-    if namespace.awk and namespace.map:
-        print("error: --awk and --map cannot be used together", file=sys.stderr)
+    # Validate --awk and --xargs are mutually exclusive
+    if namespace.awk and namespace.xargs:
+        print("error: --awk and --xargs cannot be used together", file=sys.stderr)
         return 2
 
-    mode = "map" if namespace.map else ("awk" if namespace.awk else "snail")
+    mode = "xargs" if namespace.xargs else ("awk" if namespace.awk else "snail")
 
     if namespace.file:
         from pathlib import Path

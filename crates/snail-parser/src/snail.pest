@@ -14,10 +14,10 @@ segment_break = { "\x1F" ~ stmt_sep* }
 stmt = _{ simple_stmt | expr_stmt }
 
 // Compound expression statement: wraps expr_stmt for expressions that start
-// with compound keywords (if/while/for/def/class/try/with/lines/files) or
+// with compound keywords (if/while/for/def/class/try/with/awk/xargs) or
 // bare blocks. These don't require trailing separators.
 compound_expr_stmt = { compound_expr }
-compound_expr = _{ if_expr | while_expr | for_expr | def_expr | class_expr | try_expr | with_expr | lines_expr | files_expr | block }
+compound_expr = _{ if_expr | while_expr | for_expr | def_expr | class_expr | try_expr | with_expr | awk_expr | xargs_expr | block }
 
 simple_stmt = _{
   return_stmt
@@ -56,19 +56,19 @@ except_type = { identifier ~ ("." ~ identifier)* }
 else_clause = { "else" ~ block }
 finally_clause = { "finally" ~ block }
 
-// Lines block (now expression): iterate lines from a source
-lines_expr = { "lines" ~ lines_source? ~ "{" ~ stmt_sep* ~ lines_body? ~ stmt_sep* ~ "}" }
-lines_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
-lines_body = { lines_entry ~ (stmt_sep+ ~ lines_entry)* ~ stmt_sep* }
-lines_entry = _{ pattern_action | stmt }
+// Awk block (now expression): iterate lines from a source
+awk_expr = { "awk" ~ awk_source? ~ "{" ~ stmt_sep* ~ awk_body? ~ stmt_sep* ~ "}" }
+awk_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
+awk_body = { awk_entry ~ (stmt_sep+ ~ awk_entry)* ~ stmt_sep* }
+awk_entry = _{ pattern_action | stmt }
 
 // Pattern/action (same shape as former awk_rule)
 pattern_action = { block | pattern_action_pattern ~ block? }
 pattern_action_pattern = { expr }
 
-// Files block (now expression): iterate files from a source
-files_expr = { "files" ~ files_source? ~ block }
-files_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
+// Xargs block (now expression): iterate files from a source
+xargs_expr = { "xargs" ~ xargs_source? ~ block }
+xargs_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
 
 // Context managers (now expression)
 with_expr = { "with" ~ with_items ~ block }
@@ -215,8 +215,8 @@ atom = _{
   | class_expr
   | try_expr
   | with_expr
-  | lines_expr
-  | files_expr
+  | awk_expr
+  | xargs_expr
 }
 
 // Parenthesized expression (preserved in AST for proper validation)
@@ -298,7 +298,7 @@ keyword = _{
   | "finally" | "with" | "assert" | "del" | "and" | "or" | "not" | "import" | "from" | "as"
   | "yield"
   | "let"
-  | "lines" | "files"
+  | "awk" | "xargs"
   | "True" | "False" | "None") ~ !ident_continue
 }
 

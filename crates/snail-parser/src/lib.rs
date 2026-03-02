@@ -41,18 +41,18 @@ pub fn parse(source: &str) -> Result<Program, ParseError> {
 }
 
 const AWK_ONLY_NAMES: [&str; 4] = ["$n", "$fn", "$m", "$f"];
-const AWK_ONLY_MESSAGE: &str = "awk variables are only valid inside lines { } blocks";
+const AWK_ONLY_MESSAGE: &str = "awk variables are only valid inside awk { } blocks";
 
-const MAP_ONLY_NAMES: [&str; 2] = ["$fd", "$text"];
-const MAP_ONLY_MESSAGE: &str = "map variables are only valid inside files { } blocks";
-const MAP_OR_AWK_NAMES: [&str; 1] = ["$src"];
-const MAP_OR_AWK_MESSAGE: &str = "$src is only valid inside lines { } or files { } blocks";
+const XARGS_ONLY_NAMES: [&str; 2] = ["$fd", "$text"];
+const XARGS_ONLY_MESSAGE: &str = "xargs variables are only valid inside xargs { } blocks";
+const XARGS_OR_AWK_NAMES: [&str; 1] = ["$src"];
+const XARGS_OR_AWK_MESSAGE: &str = "$src is only valid inside awk { } or xargs { } blocks";
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum ValidationMode {
     Main,
-    Lines,
-    Files,
+    Awk,
+    Xargs,
 }
 
 fn validate_program(
@@ -113,9 +113,9 @@ fn validate_stmt_mode(stmt: &Stmt, source: &str, mode: ValidationMode) -> Result
             span,
             ..
         } => {
-            if mode != ValidationMode::Lines {
+            if mode != ValidationMode::Awk {
                 return Err(error_with_span(
-                    "pattern/action rules are only valid inside lines { } blocks",
+                    "pattern/action rules are only valid inside awk { } blocks",
                     span.clone(),
                     source,
                 ));
@@ -247,21 +247,21 @@ fn validate_name_for_mode(
     mode: ValidationMode,
 ) -> Result<(), ParseError> {
     match mode {
-        ValidationMode::Lines => {
-            // Lines mode allows awk vars ($n, $fn, $m, $f) and $src, but not $fd/$text
-            if MAP_ONLY_NAMES.contains(&name) {
+        ValidationMode::Awk => {
+            // Awk mode allows awk vars ($n, $fn, $m, $f) and $src, but not $fd/$text
+            if XARGS_ONLY_NAMES.contains(&name) {
                 return Err(error_with_span(
-                    "map variables ($fd, $text) are not valid inside lines { } blocks",
+                    "xargs variables ($fd, $text) are not valid inside awk { } blocks",
                     span.clone(),
                     source,
                 ));
             }
         }
-        ValidationMode::Files => {
-            // Files mode allows map vars ($src, $fd, $text) but not awk-only vars
+        ValidationMode::Xargs => {
+            // Xargs mode allows xargs vars ($src, $fd, $text) but not awk-only vars
             if AWK_ONLY_NAMES.contains(&name) {
                 return Err(error_with_span(
-                    "awk variables ($n, $fn, $m, $f) are not valid inside files { } blocks",
+                    "awk variables ($n, $fn, $m, $f) are not valid inside xargs { } blocks",
                     span.clone(),
                     source,
                 ));
@@ -272,11 +272,11 @@ fn validate_name_for_mode(
             if AWK_ONLY_NAMES.contains(&name) {
                 return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
             }
-            if MAP_ONLY_NAMES.contains(&name) {
-                return Err(error_with_span(MAP_ONLY_MESSAGE, span.clone(), source));
+            if XARGS_ONLY_NAMES.contains(&name) {
+                return Err(error_with_span(XARGS_ONLY_MESSAGE, span.clone(), source));
             }
-            if MAP_OR_AWK_NAMES.contains(&name) {
-                return Err(error_with_span(MAP_OR_AWK_MESSAGE, span.clone(), source));
+            if XARGS_OR_AWK_NAMES.contains(&name) {
+                return Err(error_with_span(XARGS_OR_AWK_MESSAGE, span.clone(), source));
             }
         }
     }
@@ -311,7 +311,7 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_name_for_mode(name, span, source, mode)?;
         }
         Expr::FieldIndex { span, .. } => {
-            if mode != ValidationMode::Lines {
+            if mode != ValidationMode::Awk {
                 return Err(error_with_span(AWK_ONLY_MESSAGE, span.clone(), source));
             }
         }
@@ -490,17 +490,17 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             }
             validate_block_mode(body, source, mode)?;
         }
-        Expr::Lines { sources, body, .. } => {
+        Expr::Awk { sources, body, .. } => {
             for src in sources {
                 validate_argument_mode(src, source, mode)?;
             }
-            validate_block_mode(body, source, ValidationMode::Lines)?;
+            validate_block_mode(body, source, ValidationMode::Awk)?;
         }
-        Expr::Files { sources, body, .. } => {
+        Expr::Xargs { sources, body, .. } => {
             for src in sources {
                 validate_argument_mode(src, source, mode)?;
             }
-            validate_block_mode(body, source, ValidationMode::Files)?;
+            validate_block_mode(body, source, ValidationMode::Xargs)?;
         }
     }
     Ok(())

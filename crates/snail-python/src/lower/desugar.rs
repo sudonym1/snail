@@ -965,11 +965,11 @@ impl Desugarer {
                     span: span.clone(),
                 }
             }
-            Expr::Lines {
+            Expr::Awk {
                 sources,
                 body,
                 span,
-            } => Expr::Lines {
+            } => Expr::Awk {
                 sources: sources
                     .iter()
                     .map(|src| self.desugar_argument(src, prelude))
@@ -977,11 +977,11 @@ impl Desugarer {
                 body: self.desugar_block(body),
                 span: span.clone(),
             },
-            Expr::Files {
+            Expr::Xargs {
                 sources,
                 body,
                 span,
-            } => Expr::Files {
+            } => Expr::Xargs {
                 sources: sources
                     .iter()
                     .map(|src| self.desugar_argument(src, prelude))

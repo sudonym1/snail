@@ -347,12 +347,12 @@ pub enum Expr {
         body: Vec<Stmt>,
         span: SourceSpan,
     },
-    Lines {
+    Awk {
         sources: Vec<Argument>,
         body: Vec<Stmt>,
         span: SourceSpan,
     },
-    Files {
+    Xargs {
         sources: Vec<Argument>,
         body: Vec<Stmt>,
         span: SourceSpan,

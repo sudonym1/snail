@@ -144,7 +144,7 @@ fn has_tail_expression(source: &str) -> bool {
 
 /// Returns true for compound expressions that act as statements and don't
 /// produce a meaningful expression value (for, while, def, class, try, with,
-/// lines, files, block).
+/// lines, xargs, block).
 fn is_compound_statement_expr(expr: &Expr) -> bool {
     matches!(
         expr,
@@ -155,8 +155,8 @@ fn is_compound_statement_expr(expr: &Expr) -> bool {
             | Expr::Class { .. }
             | Expr::Try { .. }
             | Expr::With { .. }
-            | Expr::Lines { .. }
-            | Expr::Files { .. }
+            | Expr::Awk { .. }
+            | Expr::Xargs { .. }
     )
 }
 
@@ -350,8 +350,8 @@ fn parse_py(
         .map_err(|err| parse_error_to_syntax(err, filename))
 }
 
-/// Wrap source code based on mode. For awk mode, wraps in `lines { ... }`.
-/// For map mode, wraps in `files { ... }`. Begin/end code is prepended/appended.
+/// Wrap source code based on mode. For awk mode, wraps in `awk { ... }`.
+/// For xargs mode, wraps in `xargs { ... }`. Begin/end code is prepended/appended.
 fn wrap_source(
     source: &str,
     mode: &str,
@@ -381,7 +381,7 @@ fn wrap_source(
             for b in begin_code {
                 segments.push(b.clone());
             }
-            // Build kwargs for lines()
+            // Build kwargs for awk()
             let mut kwargs = Vec::new();
             if let Some(sep) = field_separators {
                 let escaped = lower::escape_for_python_string(sep);
@@ -397,25 +397,25 @@ fn wrap_source(
             } else {
                 format!("({})", kwargs.join(", "))
             };
-            segments.push(format!("lines{kwargs_str} {{\n{source}\n}}"));
+            segments.push(format!("awk{kwargs_str} {{\n{source}\n}}"));
             for e in end_code {
                 segments.push(e.clone());
             }
             Ok(segments.join("\n\x1f"))
         }
-        "map" => {
+        "xargs" => {
             let mut segments: Vec<String> = Vec::new();
             for b in begin_code {
                 segments.push(b.clone());
             }
-            segments.push(format!("files {{\n{source}\n}}"));
+            segments.push(format!("xargs {{\n{source}\n}}"));
             for e in end_code {
                 segments.push(e.clone());
             }
             Ok(segments.join("\n\x1f"))
         }
         _ => Err(PyRuntimeError::new_err(format!(
-            "unknown mode: {mode} (expected 'snail', 'awk', or 'map')"
+            "unknown mode: {mode} (expected 'snail', 'awk', or 'xargs')"
         ))),
     }
 }
