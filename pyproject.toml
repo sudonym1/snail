@@ -50,6 +50,10 @@ target-version = "py38"
 src = ["python"]
 exclude = ["target", ".venv", "build", "dist"]
 
+[tool.uv]
+cache-keys = [{file = "pyproject.toml"}, {file = "crates/**/Cargo.toml"}, {file = "crates/**/*.rs"}]
+cache-dir = ".uv-cache"
+
 [tool.mypy]
 python_version = "3.12"
 show_error_codes = true
