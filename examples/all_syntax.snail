@@ -282,6 +282,12 @@ while let [left, right] = next_pair(pair_items, pair_idx) {
     pair_idx = pair_idx + 1
 }
 
+# Unconditional while loop (desugars to while True)
+while {
+    if pair_idx <= 0 { break }
+    pair_idx = pair_idx - 1
+}
+
 for_done = False
 for n in nums {
     try { if n < 0 { break } } finally { cleanup() }

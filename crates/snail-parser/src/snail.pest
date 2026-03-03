@@ -36,7 +36,7 @@ block = { "{" ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ "}" }
 
 // Control flow (now expressions): if/elif/else, while/else, for/else
 if_expr = { "if" ~ if_cond ~ block ~ (stmt_sep* ~ "elif" ~ if_cond ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
-while_expr = { "while" ~ while_cond ~ block ~ (stmt_sep* ~ "else" ~ block)? }
+while_expr = { "while" ~ (while_cond ~ block ~ (stmt_sep* ~ "else" ~ block)? | block) }
 for_expr = { "for" ~ assign_target_list ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
 if_cond = { let_cond | expr }
 while_cond = { let_cond | expr }

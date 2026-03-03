@@ -787,6 +787,22 @@ def test_while_let_destructure(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out == "a\nb\n"
 
 
+def test_unconditional_while(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "i = 0",
+            "while {",
+            "    if i >= 3 { break }",
+            "    print(i)",
+            "    i = i + 1",
+            "}",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == "0\n1\n2\n"
+
+
 def test_regex_match_tuple(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [
@@ -2375,9 +2391,7 @@ def test_readme_snail_blocks_parse(
     elif lang == "snail-xargs":
         map_file = _ensure_readme_xargs_file(tmp_path)
         set_stdin(monkeypatch, f"{map_file}\n")
-        assert (
-            main(["--xargs", source]) == 0
-        ), f"failed at {path}:{line_no}"
+        assert main(["--xargs", source]) == 0, f"failed at {path}:{line_no}"
     else:
         combined = f"{README_SNIPPET_PREAMBLE}\n{source}"
         assert main([combined]) == 0, f"failed at {path}:{line_no}"
@@ -2637,9 +2651,7 @@ def test_xargs_begin_end_oneliner_via_flags(
     file_a = tmp_path / "a.txt"
     file_a.write_text("alpha")
     set_stdin(monkeypatch, f"{file_a}\n")
-    result = main(
-        ["--xargs", "-b", "print(1)", "-e", "print(2)", "print($src)"]
-    )
+    result = main(["--xargs", "-b", "print(1)", "-e", "print(2)", "print($src)"])
     assert result == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == ["1", str(file_a), "2"]

@@ -439,6 +439,16 @@ while i < 4 {
 }
 ```
 
+`while { }` without a condition is an unconditional loop (equivalent to
+`while True`), typically controlled with `break`:
+```snail
+while {
+    line = input()?
+    if line == "quit" { break }
+    print(line)
+}
+```
+
 `if let` and `while let` bind destructured values in the condition, optionally
 followed by a guard after a semicolon:
 ```snail

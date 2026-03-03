@@ -1,5 +1,7 @@
 use pest::iterators::Pair;
-use snail_ast::{Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Expr, IncrOp, UnaryOp};
+use snail_ast::{
+    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, Expr, IncrOp, UnaryOp,
+};
 use snail_error::ParseError;
 
 use crate::Rule;
@@ -893,22 +895,31 @@ fn parse_if_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
 fn parse_while_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
-    let cond = parse_condition(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing while condition", span.clone(), source))?,
-        source,
-    )?;
-    let body = parse_block(
-        inner
-            .next()
-            .ok_or_else(|| error_with_span("missing while block", span.clone(), source))?,
-        source,
-    )?;
-    let else_body = inner
+    let first = inner
         .next()
-        .map(|pair| parse_block(pair, source))
-        .transpose()?;
+        .ok_or_else(|| error_with_span("missing while body", span.clone(), source))?;
+    let (cond, body, else_body) = if first.as_rule() == Rule::block {
+        // Unconditional while: `while { ... }` desugars to `while True { ... }`
+        let body = parse_block(first, source)?;
+        let cond = Condition::Expr(Box::new(Expr::Bool {
+            value: true,
+            span: span.clone(),
+        }));
+        (cond, body, None)
+    } else {
+        let cond = parse_condition(first, source)?;
+        let body = parse_block(
+            inner
+                .next()
+                .ok_or_else(|| error_with_span("missing while block", span.clone(), source))?,
+            source,
+        )?;
+        let else_body = inner
+            .next()
+            .map(|pair| parse_block(pair, source))
+            .transpose()?;
+        (cond, body, else_body)
+    };
     Ok(Expr::While {
         cond,
         body,

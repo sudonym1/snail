@@ -206,6 +206,35 @@ fn parses_while_let() {
 }
 
 #[test]
+fn parses_unconditional_while() {
+    let source = "while { print(1) }\n";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::While {
+            cond,
+            body,
+            else_body,
+            ..
+        } => {
+            match cond {
+                Condition::Expr(expr) => {
+                    assert!(
+                        matches!(expr.as_ref(), Expr::Bool { value: true, .. }),
+                        "Expected Bool(true), got {expr:?}"
+                    );
+                }
+                other => panic!("Expected Expr condition, got {other:?}"),
+            }
+            assert_eq!(body.len(), 1);
+            assert!(else_body.is_none());
+        }
+        other => panic!("Expected while statement, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_for_header_with_newlines() {
     let source = "for\nx\nin\nrange(1) { }\n";
     let program = parse_ok(source);
