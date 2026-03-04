@@ -39,10 +39,12 @@ impl Desugarer {
                 semicolon_terminated: false,
                 ..
             }) => match value {
-                Expr::Block { .. } | Expr::If { .. } | Expr::Try { .. } | Expr::With { .. } => {
-                    Action::CaptureCompound
-                }
-                Expr::While { .. } | Expr::For { .. } => Action::NoCapture,
+                Expr::Block { .. }
+                | Expr::If { .. }
+                | Expr::Try { .. }
+                | Expr::With { .. }
+                | Expr::While { .. }
+                | Expr::For { .. } => Action::CaptureCompound,
                 _ => Action::CaptureSimple,
             },
             _ => Action::NoCapture,
@@ -132,6 +134,42 @@ impl Desugarer {
                             Expr::With {
                                 items,
                                 body,
+                                span: ws,
+                            }
+                        }
+                        Expr::For {
+                            target,
+                            iter,
+                            mut body,
+                            mut else_body,
+                            span: fs,
+                        } => {
+                            Self::capture_branch_tail(&mut body, tmp_name, span);
+                            if let Some(eb) = &mut else_body {
+                                Self::capture_branch_tail(eb, tmp_name, span);
+                            }
+                            Expr::For {
+                                target,
+                                iter,
+                                body,
+                                else_body,
+                                span: fs,
+                            }
+                        }
+                        Expr::While {
+                            cond,
+                            mut body,
+                            mut else_body,
+                            span: ws,
+                        } => {
+                            Self::capture_branch_tail(&mut body, tmp_name, span);
+                            if let Some(eb) = &mut else_body {
+                                Self::capture_branch_tail(eb, tmp_name, span);
+                            }
+                            Expr::While {
+                                cond,
+                                body,
+                                else_body,
                                 span: ws,
                             }
                         }
@@ -243,7 +281,51 @@ impl Desugarer {
                     span: span.clone(),
                 });
             }
-            // Loops and other compounds don't produce values; push as-is.
+            Expr::For {
+                target,
+                iter,
+                mut body,
+                mut else_body,
+                span: fs,
+            } => {
+                Self::capture_branch_tail(&mut body, &tmp_name, span);
+                if let Some(eb) = &mut else_body {
+                    Self::capture_branch_tail(eb, &tmp_name, span);
+                }
+                prelude.push(Stmt::Expr {
+                    value: Expr::For {
+                        target,
+                        iter,
+                        body,
+                        else_body,
+                        span: fs,
+                    },
+                    semicolon_terminated: false,
+                    span: span.clone(),
+                });
+            }
+            Expr::While {
+                cond,
+                mut body,
+                mut else_body,
+                span: ws,
+            } => {
+                Self::capture_branch_tail(&mut body, &tmp_name, span);
+                if let Some(eb) = &mut else_body {
+                    Self::capture_branch_tail(eb, &tmp_name, span);
+                }
+                prelude.push(Stmt::Expr {
+                    value: Expr::While {
+                        cond,
+                        body,
+                        else_body,
+                        span: ws,
+                    },
+                    semicolon_terminated: false,
+                    span: span.clone(),
+                });
+            }
+            // Other compounds don't produce values; push as-is.
             other => {
                 prelude.push(Stmt::Expr {
                     value: other,

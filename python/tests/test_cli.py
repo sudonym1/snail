@@ -3522,3 +3522,97 @@ def test_anon_def_immediate_call(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["def { 1 }()"])
     assert result == 0
     assert captured.out.strip() == "1"
+
+
+# --- Tests for compound expression block values ---
+
+
+def test_for_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
+    """For loop at program tail prints the last iteration's value once."""
+    result, captured = run_cli(capsys, ["for x in [1,2,3] { x * 2 }"])
+    assert result == 0
+    assert captured.out.strip() == "6"
+
+
+def test_while_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
+    """While loop at program tail prints the last iteration's value once."""
+    result, captured = run_cli(capsys, ["i = 0; while i < 3 { i += 1; i * 10 }"])
+    assert result == 0
+    assert captured.out.strip() == "30"
+
+
+def test_try_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
+    """Try/except at program tail prints the value from the taken branch."""
+    result, captured = run_cli(capsys, ['try { 1/0 } except { "caught" }'])
+    assert result == 0
+    assert captured.out.strip() == "caught"
+
+
+def test_with_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
+    """With statement at program tail prints its body's value."""
+    result, captured = run_cli(capsys, ['with open("/dev/null") as f { "ok" }'])
+    assert result == 0
+    assert captured.out.strip() == "ok"
+
+
+def test_for_empty_list_auto_print(capsys: pytest.CaptureFixture[str]) -> None:
+    """For over empty list evaluates to None, which auto-print suppresses."""
+    result, captured = run_cli(capsys, ["for x in [] { x }"])
+    assert result == 0
+    assert captured.out == ""
+
+
+def test_for_expression_context_capture(capsys: pytest.CaptureFixture[str]) -> None:
+    """For loop in expression context captures the last iteration's value."""
+    result, captured = run_cli(capsys, ["-P", "x = for i in range(5) { i }; print(x)"])
+    assert result == 0
+    assert captured.out.strip() == "4"
+
+
+def test_while_expression_context_capture(capsys: pytest.CaptureFixture[str]) -> None:
+    """While loop in expression context captures the last iteration's value."""
+    script = "i = 0; x = while i < 3 { i += 1; i * 10 }; print(x)"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "30"
+
+
+def test_for_implicit_return_from_function(capsys: pytest.CaptureFixture[str]) -> None:
+    """For loop at function tail provides implicit return value."""
+    script = "def f() { for x in [1,2,3] { x * 2 } }; print(f())"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "6"
+
+
+def test_while_implicit_return_from_function(capsys: pytest.CaptureFixture[str]) -> None:
+    """While loop at function tail provides implicit return value."""
+    script = "def f() { i = 0; while i < 3 { i += 1; i } }; print(f())"
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "3"
+
+
+def test_try_implicit_return_from_function(capsys: pytest.CaptureFixture[str]) -> None:
+    """Try/except at function tail provides implicit return value."""
+    script = 'def f() { try { 1/0 } except { "caught" } }; print(f())'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "caught"
+
+
+def test_nested_compound_tail(capsys: pytest.CaptureFixture[str]) -> None:
+    """Nested compound expressions at tail propagate correctly."""
+    script = "for x in [1,2,3] { if x > 1 { x * 10 } else { x } }"
+    result, captured = run_cli(capsys, [script])
+    assert result == 0
+    assert captured.out.strip() == "30"
+
+
+def test_semicolon_terminated_compound_no_capture(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Semicolon-terminated compound at tail does NOT auto-print."""
+    result, captured = run_cli(capsys, ["for x in [1,2,3] { x * 2 };"])
+    assert result == 0
+    assert captured.out == ""

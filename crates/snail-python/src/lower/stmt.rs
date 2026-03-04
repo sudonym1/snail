@@ -276,15 +276,21 @@ pub(crate) fn lower_while_stmt(
     cond: &Condition,
     body: &[Stmt],
     else_body: &Option<Vec<Stmt>>,
+    tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     match cond {
         Condition::Expr(cond) => {
             let test = lower_expr(builder, cond.as_ref())?;
-            let body = lower_block(builder, body, span)?;
+            let body_tail = if tail != TailBehavior::None {
+                TailBehavior::CaptureOnly
+            } else {
+                TailBehavior::None
+            };
+            let body = lower_block_with_tail(builder, body, body_tail, span)?;
             let orelse = else_body
                 .as_ref()
-                .map(|items| lower_block(builder, items, span))
+                .map(|items| lower_block_with_tail(builder, items, body_tail, span))
                 .transpose()?
                 .unwrap_or_default();
             let while_node = builder
@@ -298,7 +304,11 @@ pub(crate) fn lower_while_stmt(
                     span,
                 )
                 .map_err(py_err_to_lower)?;
-            Ok(vec![while_node])
+            if tail != TailBehavior::None {
+                super::expr::wrap_compound_with_tail(builder, vec![while_node], tail, span)
+            } else {
+                Ok(vec![while_node])
+            }
         }
         Condition::Let {
             target,
@@ -312,11 +322,13 @@ pub(crate) fn lower_while_stmt(
             guard.as_ref().map(|expr| expr.as_ref()),
             body,
             else_body,
+            tail,
             cond_span,
         ),
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn lower_while_let(
     builder: &AstBuilder<'_>,
     target: &AssignTarget,
@@ -324,6 +336,7 @@ fn lower_while_let(
     guard: Option<&Expr>,
     body: &[Stmt],
     else_body: &Option<Vec<Stmt>>,
+    tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
@@ -333,6 +346,12 @@ fn lower_while_let(
         bool_constant(builder, true, span)?,
         span,
     )?);
+
+    let body_tail = if tail != TailBehavior::None {
+        TailBehavior::CaptureOnly
+    } else {
+        TailBehavior::None
+    };
 
     let mut loop_body = Vec::new();
     let value_expr = lower_expr(builder, value)?;
@@ -348,7 +367,7 @@ fn lower_while_let(
     loop_body.push(try_node);
 
     let test = build_let_guard_test(builder, guard, span)?;
-    let body = lower_block(builder, body, span)?;
+    let body = lower_block_with_tail(builder, body, body_tail, span)?;
     let keep_false = assign_name(
         builder,
         SNAIL_LET_KEEP,
@@ -376,7 +395,7 @@ fn lower_while_let(
     )?;
     let orelse = else_body
         .as_ref()
-        .map(|items| lower_block(builder, items, span))
+        .map(|items| lower_block_with_tail(builder, items, body_tail, span))
         .transpose()?
         .unwrap_or_default();
     let while_node = builder
@@ -391,7 +410,12 @@ fn lower_while_let(
         )
         .map_err(py_err_to_lower)?;
     stmts.push(while_node);
-    Ok(stmts)
+
+    if tail != TailBehavior::None {
+        super::expr::wrap_compound_with_tail(builder, stmts, tail, span)
+    } else {
+        Ok(stmts)
+    }
 }
 
 pub(crate) fn lower_parameters(
@@ -475,6 +499,7 @@ pub(crate) fn lower_parameters(
 pub(crate) fn lower_except_handler(
     builder: &AstBuilder<'_>,
     handler: &ExceptHandler,
+    tail: TailBehavior,
 ) -> Result<PyObject, LowerError> {
     let type_name = handler
         .type_name
@@ -487,7 +512,12 @@ pub(crate) fn lower_except_handler(
         .as_ref()
         .map(|name| name.to_string().into_py(builder.py()))
         .unwrap_or_else(|| builder.py().None().into_py(builder.py()));
-    let body = lower_block(builder, &handler.body, &handler.span)?;
+    let body_tail = if tail != TailBehavior::None {
+        TailBehavior::CaptureOnly
+    } else {
+        TailBehavior::None
+    };
+    let body = lower_block_with_tail(builder, &handler.body, body_tail, &handler.span)?;
     builder
         .call_node(
             "ExceptHandler",

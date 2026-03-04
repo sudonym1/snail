@@ -617,6 +617,33 @@ block_result2 = { block_inner = 42; block_inner + 1 }
 assert block_inner == 42
 assert block_result2 == 43
 
+# ---- Compound expression block values ----
+# For loops as expressions: last iteration's value is the block's value
+for_result = for x in [1, 2, 3] { x * 2 }
+assert for_result == 6
+
+# While loops as expressions
+i = 0
+while_result = while i < 3 { i += 1; i * 10 }
+assert while_result == 30
+
+# For over empty list evaluates to None
+empty_for = for x in [] { x }
+assert empty_for is None
+
+# Try/except as expressions (already worked, verify still works)
+try_result = try { 1/0 } except { "caught" }
+assert try_result == "caught"
+
+# Implicit return from function via compound tail
+def for_last() { for x in [1, 2, 3] { x * 2 } }
+assert for_last() == 6
+
+def while_last() { i = 0; while i < 3 { i += 1; i } }
+assert while_last() == 3
+
+print("compound block values ok")
+
 # The implicit return of the last non-semicolon expression is pretty printed
 # to stdout, unless -P is specified
 "automatically printed"

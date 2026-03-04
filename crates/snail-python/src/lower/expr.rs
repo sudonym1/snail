@@ -2066,14 +2066,20 @@ fn lower_for_stmt(
     iter: &Expr,
     body: &[Stmt],
     else_body: &Option<Vec<Stmt>>,
+    tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     let target = lower_assign_target(builder, target)?;
     let iter_expr = lower_expr(builder, iter)?;
-    let body = lower_block(builder, body, span)?;
+    let body_tail = if tail != TailBehavior::None {
+        TailBehavior::CaptureOnly
+    } else {
+        TailBehavior::None
+    };
+    let body = lower_block_with_tail(builder, body, body_tail, span)?;
     let orelse = else_body
         .as_ref()
-        .map(|items| lower_block(builder, items, span))
+        .map(|items| lower_block_with_tail(builder, items, body_tail, span))
         .transpose()?
         .unwrap_or_default();
     let for_node = builder
@@ -2088,7 +2094,11 @@ fn lower_for_stmt(
             span,
         )
         .map_err(py_err_to_lower)?;
-    Ok(vec![for_node])
+    if tail != TailBehavior::None {
+        wrap_compound_with_tail(builder, vec![for_node], tail, span)
+    } else {
+        Ok(vec![for_node])
+    }
 }
 
 fn lower_def_stmt(
@@ -2146,18 +2156,25 @@ fn lower_try_stmt(
     handlers: &[ExceptHandler],
     else_body: &Option<Vec<Stmt>>,
     finally_body: &Option<Vec<Stmt>>,
+    tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    let body = lower_block(builder, body, span)?;
+    let body_tail = if tail != TailBehavior::None {
+        TailBehavior::CaptureOnly
+    } else {
+        TailBehavior::None
+    };
+    let body = lower_block_with_tail(builder, body, body_tail, span)?;
     let handlers = handlers
         .iter()
-        .map(|handler| lower_except_handler(builder, handler))
+        .map(|handler| lower_except_handler(builder, handler, tail))
         .collect::<Result<Vec<_>, _>>()?;
     let orelse = else_body
         .as_ref()
-        .map(|items| lower_block(builder, items, span))
+        .map(|items| lower_block_with_tail(builder, items, body_tail, span))
         .transpose()?
         .unwrap_or_default();
+    // Finally blocks are cleanup code — never capture
     let finalbody = finally_body
         .as_ref()
         .map(|items| lower_block(builder, items, span))
@@ -2175,20 +2192,30 @@ fn lower_try_stmt(
             span,
         )
         .map_err(py_err_to_lower)?;
-    Ok(vec![try_node])
+    if tail != TailBehavior::None {
+        wrap_compound_with_tail(builder, vec![try_node], tail, span)
+    } else {
+        Ok(vec![try_node])
+    }
 }
 
 fn lower_with_stmt(
     builder: &AstBuilder<'_>,
     items: &[WithItem],
     body: &[Stmt],
+    tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     let items = items
         .iter()
         .map(|item| lower_with_item(builder, item))
         .collect::<Result<Vec<_>, _>>()?;
-    let body = lower_block(builder, body, span)?;
+    let body_tail = if tail != TailBehavior::None {
+        TailBehavior::CaptureOnly
+    } else {
+        TailBehavior::None
+    };
+    let body = lower_block_with_tail(builder, body, body_tail, span)?;
     let with_node = builder
         .call_node(
             "With",
@@ -2199,7 +2226,11 @@ fn lower_with_stmt(
             span,
         )
         .map_err(py_err_to_lower)?;
-    Ok(vec![with_node])
+    if tail != TailBehavior::None {
+        wrap_compound_with_tail(builder, vec![with_node], tail, span)
+    } else {
+        Ok(vec![with_node])
+    }
 }
 
 fn lower_if_expr(
@@ -2421,14 +2452,22 @@ pub(crate) fn lower_expr_as_stmt(
             body,
             else_body,
             span,
-        } => lower_while_stmt(builder, cond, body, else_body, span),
+        } => lower_while_stmt(builder, cond, body, else_body, TailBehavior::None, span),
         Expr::For {
             target,
             iter,
             body,
             else_body,
             span,
-        } => lower_for_stmt(builder, target, iter, body, else_body, span),
+        } => lower_for_stmt(
+            builder,
+            target,
+            iter,
+            body,
+            else_body,
+            TailBehavior::None,
+            span,
+        ),
         Expr::Def {
             name: Some(name),
             params,
@@ -2445,10 +2484,18 @@ pub(crate) fn lower_expr_as_stmt(
             else_body,
             finally_body,
             span,
-        } => lower_try_stmt(builder, body, handlers, else_body, finally_body, span),
+        } => lower_try_stmt(
+            builder,
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            TailBehavior::None,
+            span,
+        ),
         Expr::With {
             items, body, span, ..
-        } => lower_with_stmt(builder, items, body, span),
+        } => lower_with_stmt(builder, items, body, TailBehavior::None, span),
         Expr::Awk {
             sources,
             body,
@@ -2537,19 +2584,44 @@ pub(crate) fn lower_tail_expr(
             _ => {}
         }
     }
-    // Compound expressions that don't propagate tail behavior are lowered as statements
-    if matches!(
-        expr,
-        Expr::While { .. }
-            | Expr::For { .. }
-            | Expr::Def { .. }
-            | Expr::Class { .. }
-            | Expr::Try { .. }
-            | Expr::With { .. }
-            | Expr::Awk { .. }
-            | Expr::Xargs { .. }
-    ) {
-        return lower_expr_as_stmt(builder, expr, span);
+    // Compound expressions that propagate tail behavior via CaptureOnly + after-action
+    match expr {
+        Expr::While {
+            cond,
+            body,
+            else_body,
+            span,
+        } => {
+            return lower_while_stmt(builder, cond, body, else_body, tail, span);
+        }
+        Expr::For {
+            target,
+            iter,
+            body,
+            else_body,
+            span,
+        } => {
+            return lower_for_stmt(builder, target, iter, body, else_body, tail, span);
+        }
+        Expr::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            span,
+        } => {
+            return lower_try_stmt(builder, body, handlers, else_body, finally_body, tail, span);
+        }
+        Expr::With {
+            items, body, span, ..
+        } => {
+            return lower_with_stmt(builder, items, body, tail, span);
+        }
+        // Def, Class, Awk, Xargs still don't propagate tail
+        Expr::Def { .. } | Expr::Class { .. } | Expr::Awk { .. } | Expr::Xargs { .. } => {
+            return lower_expr_as_stmt(builder, expr, span);
+        }
+        _ => {}
     }
     let value = lower_expr(builder, expr)?;
     match tail {
@@ -2610,4 +2682,90 @@ fn build_auto_print_block(
         .map_err(py_err_to_lower)?;
 
     Ok(vec![assign, call_stmt])
+}
+
+/// Emit `__snail_auto_print(__snail_last_result)` as a standalone statement.
+/// Used after compound statements whose body already captured to `__snail_last_result`.
+fn emit_auto_print_of_last_result(
+    builder: &AstBuilder<'_>,
+    span: &SourceSpan,
+) -> Result<PyObject, LowerError> {
+    let last_result = name_expr(
+        builder,
+        "__snail_last_result",
+        span,
+        builder.load_ctx().map_err(py_err_to_lower)?,
+    )?;
+    let call = builder
+        .call_node(
+            "Call",
+            vec![
+                name_expr(
+                    builder,
+                    SNAIL_AUTO_PRINT_HELPER,
+                    span,
+                    builder.load_ctx().map_err(py_err_to_lower)?,
+                )?,
+                PyList::new_bound(builder.py(), vec![last_result]).into_py(builder.py()),
+                PyList::empty_bound(builder.py()).into_py(builder.py()),
+            ],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    builder
+        .call_node("Expr", vec![call], span)
+        .map_err(py_err_to_lower)
+}
+
+/// Wrap a compound statement with tail behavior:
+/// 1. Prepend `__snail_last_result = None`
+/// 2. Append the compound statement(s)
+/// 3. Based on tail: append auto-print / return / nothing
+pub(crate) fn wrap_compound_with_tail(
+    builder: &AstBuilder<'_>,
+    compound_stmts: Vec<PyObject>,
+    tail: TailBehavior,
+    span: &SourceSpan,
+) -> Result<Vec<PyObject>, LowerError> {
+    let mut result = Vec::new();
+
+    // __snail_last_result = None
+    let none_val = builder
+        .call_node(
+            "Constant",
+            vec![builder.py().None().into_py(builder.py())],
+            span,
+        )
+        .map_err(py_err_to_lower)?;
+    result.push(assign_name(builder, "__snail_last_result", none_val, span)?);
+
+    // The compound statement(s) themselves
+    result.extend(compound_stmts);
+
+    // Tail action after the compound
+    match tail {
+        TailBehavior::AutoPrint => {
+            result.push(emit_auto_print_of_last_result(builder, span)?);
+        }
+        TailBehavior::ImplicitReturn => {
+            let last_result = name_expr(
+                builder,
+                "__snail_last_result",
+                span,
+                builder.load_ctx().map_err(py_err_to_lower)?,
+            )?;
+            let return_stmt = builder
+                .call_node("Return", vec![last_result], span)
+                .map_err(py_err_to_lower)?;
+            result.push(return_stmt);
+        }
+        TailBehavior::CaptureOnly => {
+            // Already captured inside the body — nothing extra needed
+        }
+        TailBehavior::None => {
+            unreachable!("wrap_compound_with_tail should not be called with TailBehavior::None")
+        }
+    }
+
+    Ok(result)
 }
