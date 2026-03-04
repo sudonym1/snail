@@ -2501,13 +2501,13 @@ pub(crate) fn lower_expr_as_stmt(
             body,
             span,
             ..
-        } => super::awk::lower_awk_stmt(builder, sources, body, span, false, false),
+        } => super::awk::lower_awk_stmt(builder, sources, body, span, TailBehavior::None),
         Expr::Xargs {
             sources,
             body,
             span,
             ..
-        } => super::xargs::lower_xargs_stmt(builder, sources, body, span, false, false),
+        } => super::xargs::lower_xargs_stmt(builder, sources, body, span, TailBehavior::None),
         Expr::Block { stmts, span } => lower_block(builder, stmts, span),
         _ => {
             let value = lower_expr(builder, expr)?;
@@ -2529,17 +2529,6 @@ pub(crate) fn lower_tail_expr(
     tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    // Propagate tail behavior into if branches
-    if let Expr::If {
-        cond,
-        body,
-        elifs,
-        else_body,
-        span,
-    } = expr
-    {
-        return lower_if_block_with_tail(builder, cond, body, elifs, else_body, tail, span);
-    }
     // Propagate tail behavior into block expressions
     if let Expr::Block {
         stmts,
@@ -2548,44 +2537,26 @@ pub(crate) fn lower_tail_expr(
     {
         return lower_block_with_tail(builder, stmts, tail, block_span);
     }
-    // Propagate tail behavior into lines/xargs blocks
-    if matches!(tail, TailBehavior::AutoPrint | TailBehavior::CaptureOnly) {
-        match expr {
-            Expr::Awk {
-                sources,
-                body,
-                span,
-                ..
-            } => {
-                return super::awk::lower_awk_stmt(
-                    builder,
-                    sources,
-                    body,
-                    span,
-                    tail == TailBehavior::AutoPrint,
-                    tail == TailBehavior::CaptureOnly,
-                );
-            }
-            Expr::Xargs {
-                sources,
-                body,
-                span,
-                ..
-            } => {
-                return super::xargs::lower_xargs_stmt(
-                    builder,
-                    sources,
-                    body,
-                    span,
-                    tail == TailBehavior::AutoPrint,
-                    tail == TailBehavior::CaptureOnly,
-                );
-            }
-            _ => {}
-        }
-    }
-    // Compound expressions that propagate tail behavior via CaptureOnly + after-action
+    // Compound expressions that propagate tail behavior via CaptureOnly + wrap
     match expr {
+        Expr::If {
+            cond,
+            body,
+            elifs,
+            else_body,
+            span,
+        } => {
+            let if_stmts = lower_if_block_with_tail(
+                builder,
+                cond,
+                body,
+                elifs,
+                else_body,
+                TailBehavior::CaptureOnly,
+                span,
+            )?;
+            return wrap_compound_with_tail(builder, if_stmts, tail, span);
+        }
         Expr::While {
             cond,
             body,
@@ -2617,8 +2588,24 @@ pub(crate) fn lower_tail_expr(
         } => {
             return lower_with_stmt(builder, items, body, tail, span);
         }
-        // Def, Class, Awk, Xargs still don't propagate tail
-        Expr::Def { .. } | Expr::Class { .. } | Expr::Awk { .. } | Expr::Xargs { .. } => {
+        Expr::Awk {
+            sources,
+            body,
+            span,
+            ..
+        } => {
+            return super::awk::lower_awk_stmt(builder, sources, body, span, tail);
+        }
+        Expr::Xargs {
+            sources,
+            body,
+            span,
+            ..
+        } => {
+            return super::xargs::lower_xargs_stmt(builder, sources, body, span, tail);
+        }
+        // Def, Class still don't propagate tail
+        Expr::Def { .. } | Expr::Class { .. } => {
             return lower_expr_as_stmt(builder, expr, span);
         }
         _ => {}
@@ -2651,37 +2638,9 @@ fn build_auto_print_block(
     expr: PyObject,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    // __snail_last_result = <expr>
     let assign = assign_name(builder, "__snail_last_result", expr, span)?;
-
-    // __snail_auto_print(__snail_last_result)
-    let last_result = name_expr(
-        builder,
-        "__snail_last_result",
-        span,
-        builder.load_ctx().map_err(py_err_to_lower)?,
-    )?;
-    let call = builder
-        .call_node(
-            "Call",
-            vec![
-                name_expr(
-                    builder,
-                    SNAIL_AUTO_PRINT_HELPER,
-                    span,
-                    builder.load_ctx().map_err(py_err_to_lower)?,
-                )?,
-                PyList::new_bound(builder.py(), vec![last_result]).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-            span,
-        )
-        .map_err(py_err_to_lower)?;
-    let call_stmt = builder
-        .call_node("Expr", vec![call], span)
-        .map_err(py_err_to_lower)?;
-
-    Ok(vec![assign, call_stmt])
+    let print_call = emit_auto_print_of_last_result(builder, span)?;
+    Ok(vec![assign, print_call])
 }
 
 /// Emit `__snail_auto_print(__snail_last_result)` as a standalone statement.

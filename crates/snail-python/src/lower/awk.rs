@@ -7,7 +7,7 @@ use super::constants::*;
 use super::expr::{lower_call_arguments, lower_expr, lower_regex_match};
 use super::helpers::{assign_name, name_expr, number_expr, string_expr};
 use super::py_ast::{AstBuilder, py_err_to_lower};
-use super::stmt::lower_block_auto;
+use super::stmt::{TailBehavior, lower_block_with_tail};
 
 /// Configuration extracted from `awk(sep=..., ws=...)` kwargs.
 struct AwkConfig<'a> {
@@ -47,24 +47,15 @@ pub(crate) fn lower_awk_stmt(
     sources: &[Argument],
     body: &[Stmt],
     span: &SourceSpan,
-    auto_print: bool,
-    capture_last: bool,
+    tail: TailBehavior,
 ) -> Result<Vec<PyObject>, LowerError> {
     let (config, remaining) = extract_awk_config(sources);
     if remaining.is_empty() {
         // No source: generate the full argv/stdin file loop (same as awk mode)
-        lower_awk_no_source(builder, body, span, &config, auto_print, capture_last)
+        lower_awk_no_source(builder, body, span, &config, tail)
     } else {
         // With sources: generate two-level file loop
-        lower_awk_with_sources(
-            builder,
-            &remaining,
-            body,
-            span,
-            &config,
-            auto_print,
-            capture_last,
-        )
+        lower_awk_with_sources(builder, &remaining, body, span, &config, tail)
     }
 }
 
@@ -86,8 +77,7 @@ fn lower_awk_loop(
     body: &[Stmt],
     span: &SourceSpan,
     config: &AwkConfig<'_>,
-    auto_print: bool,
-    capture_last: bool,
+    tail: TailBehavior,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
 
@@ -126,8 +116,7 @@ fn lower_awk_loop(
     )?);
 
     // Build the file loop body
-    let file_loop_body =
-        lower_awk_file_loop_body(builder, body, span, config, auto_print, capture_last)?;
+    let file_loop_body = lower_awk_file_loop_body(builder, body, span, config, tail)?;
 
     // for __snail_source_item in <iter_expr>:
     let for_loop = builder
@@ -164,8 +153,7 @@ fn lower_awk_file_loop_body(
     body: &[Stmt],
     span: &SourceSpan,
     config: &AwkConfig<'_>,
-    auto_print: bool,
-    capture_last: bool,
+    tail: TailBehavior,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut file_loop = Vec::new();
 
@@ -238,7 +226,7 @@ fn lower_awk_file_loop_body(
         .map_err(py_err_to_lower)?;
 
     // Build the line loop body
-    let loop_body = build_line_loop_body(builder, body, span, config, auto_print, capture_last)?;
+    let loop_body = build_line_loop_body(builder, body, span, config, tail)?;
 
     // for __snail_raw in __snail_file:
     let line_loop = builder
@@ -285,8 +273,7 @@ fn lower_awk_with_sources(
     body: &[Stmt],
     span: &SourceSpan,
     config: &AwkConfig<'_>,
-    auto_print: bool,
-    capture_last: bool,
+    tail: TailBehavior,
 ) -> Result<Vec<PyObject>, LowerError> {
     // Lower all arguments via lower_call_arguments and generate:
     //   __snail_normalize_sources(arg1, arg2, *args, key=val, ...)
@@ -309,15 +296,7 @@ fn lower_awk_with_sources(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_awk_loop(
-        builder,
-        iter_expr,
-        body,
-        span,
-        config,
-        auto_print,
-        capture_last,
-    )
+    lower_awk_loop(builder, iter_expr, body, span, config, tail)
 }
 
 fn lower_awk_no_source(
@@ -325,8 +304,7 @@ fn lower_awk_no_source(
     body: &[Stmt],
     span: &SourceSpan,
     config: &AwkConfig<'_>,
-    auto_print: bool,
-    capture_last: bool,
+    tail: TailBehavior,
 ) -> Result<Vec<PyObject>, LowerError> {
     // Build files_expr: sys.argv[1:] or ["-"]
     let files_expr = builder
@@ -401,15 +379,7 @@ fn lower_awk_no_source(
         )
         .map_err(py_err_to_lower)?;
 
-    lower_awk_loop(
-        builder,
-        files_expr,
-        body,
-        span,
-        config,
-        auto_print,
-        capture_last,
-    )
+    lower_awk_loop(builder, files_expr, body, span, config, tail)
 }
 
 /// Build the inner body of a line processing loop — sets up $0, $f, $n, $fn, $m, $src
@@ -419,8 +389,7 @@ fn build_line_loop_body(
     body: &[Stmt],
     span: &SourceSpan,
     config: &AwkConfig<'_>,
-    auto_print: bool,
-    capture_last: bool,
+    tail: TailBehavior,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut loop_body = Vec::new();
 
@@ -618,13 +587,7 @@ fn build_line_loop_body(
     )?);
 
     // Lower user body (mix of pattern/action and regular statements)
-    loop_body.extend(lower_awk_body(
-        builder,
-        body,
-        span,
-        auto_print,
-        capture_last,
-    )?);
+    loop_body.extend(lower_awk_body(builder, body, span, tail)?);
 
     Ok(loop_body)
 }
@@ -634,8 +597,7 @@ pub(crate) fn lower_awk_body(
     builder: &AstBuilder<'_>,
     body: &[Stmt],
     span: &SourceSpan,
-    auto_print: bool,
-    capture_last: bool,
+    tail: TailBehavior,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
     for (idx, stmt) in body.iter().enumerate() {
@@ -644,6 +606,11 @@ pub(crate) fn lower_awk_body(
         }
         let is_last = idx == body.len().saturating_sub(1);
         let next_is_break = matches!(body.get(idx + 1), Some(Stmt::SegmentBreak { .. }));
+        let stmt_tail = if is_last || next_is_break {
+            tail
+        } else {
+            TailBehavior::None
+        };
         match stmt {
             Stmt::PatternAction {
                 pattern,
@@ -655,24 +622,13 @@ pub(crate) fn lower_awk_body(
                     action: action.clone(),
                     span: span.clone(),
                 };
-                stmts.extend(lower_awk_rules(builder, &[rule], auto_print, capture_last)?);
+                stmts.extend(lower_awk_rules(builder, &[rule], stmt_tail)?);
             }
             other => {
-                let stmt_auto_print = if is_last || next_is_break {
-                    auto_print
-                } else {
-                    false
-                };
-                let stmt_capture_last = if is_last || next_is_break {
-                    capture_last
-                } else {
-                    false
-                };
-                stmts.extend(lower_block_auto(
+                stmts.extend(lower_block_with_tail(
                     builder,
                     std::slice::from_ref(other),
-                    stmt_auto_print,
-                    stmt_capture_last,
+                    stmt_tail,
                     span,
                 )?);
             }
@@ -684,19 +640,12 @@ pub(crate) fn lower_awk_body(
 pub(crate) fn lower_awk_rules(
     builder: &AstBuilder<'_>,
     rules: &[AwkRule],
-    auto_print: bool,
-    capture_last: bool,
+    tail: TailBehavior,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut stmts = Vec::new();
     for rule in rules {
         let mut action = if rule.has_explicit_action() {
-            lower_block_auto(
-                builder,
-                rule.action.as_ref().unwrap(),
-                auto_print,
-                capture_last,
-                &rule.span,
-            )?
+            lower_block_with_tail(builder, rule.action.as_ref().unwrap(), tail, &rule.span)?
         } else {
             vec![awk_default_print(builder, &rule.span)?]
         };

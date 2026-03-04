@@ -3555,6 +3555,34 @@ def test_with_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "ok"
 
 
+def test_if_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
+    """If statement at program tail prints its body's value."""
+    result, captured = run_cli(capsys, ["if True { 42 }"])
+    assert result == 0
+    assert captured.out.strip() == "42"
+
+
+def test_if_else_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
+    """If/else at program tail prints the taken branch's value."""
+    result, captured = run_cli(capsys, ["if False { 1 } else { 2 }"])
+    assert result == 0
+    assert captured.out.strip() == "2"
+
+
+def test_if_no_else_false_prints_nothing(capsys: pytest.CaptureFixture[str]) -> None:
+    """If without else where condition is false prints nothing."""
+    result, captured = run_cli(capsys, ["if False { 42 }"])
+    assert result == 0
+    assert captured.out == ""
+
+
+def test_if_not_at_tail_no_print(capsys: pytest.CaptureFixture[str]) -> None:
+    """If not at tail position does not auto-print."""
+    result, captured = run_cli(capsys, ['if True { 10 }; "hello"'])
+    assert result == 0
+    assert captured.out.strip() == "hello"
+
+
 def test_for_empty_list_auto_print(capsys: pytest.CaptureFixture[str]) -> None:
     """For over empty list evaluates to None, which auto-print suppresses."""
     result, captured = run_cli(capsys, ["for x in [] { x }"])

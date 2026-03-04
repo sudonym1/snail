@@ -194,23 +194,6 @@ pub(crate) fn lower_block(
     lower_block_with_tail(builder, block, TailBehavior::None, span)
 }
 
-pub(crate) fn lower_block_auto(
-    builder: &AstBuilder<'_>,
-    block: &[Stmt],
-    auto_print: bool,
-    capture_last: bool,
-    span: &SourceSpan,
-) -> Result<Vec<PyObject>, LowerError> {
-    let tail = if auto_print {
-        TailBehavior::AutoPrint
-    } else if capture_last {
-        TailBehavior::CaptureOnly
-    } else {
-        TailBehavior::None
-    };
-    lower_block_with_tail(builder, block, tail, span)
-}
-
 pub(crate) fn lower_block_with_implicit_return(
     builder: &AstBuilder<'_>,
     block: &[Stmt],
