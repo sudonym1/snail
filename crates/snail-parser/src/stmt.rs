@@ -29,9 +29,15 @@ pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError
         Rule::raise_stmt => parse_raise(pair, source),
         Rule::assert_stmt => parse_assert(pair, source),
         Rule::del_stmt => parse_del(pair, source),
-        Rule::break_stmt => Ok(Stmt::Break {
-            span: span_from_pair(&pair, source),
-        }),
+        Rule::break_stmt => {
+            let span = span_from_pair(&pair, source);
+            let value = pair
+                .into_inner()
+                .next()
+                .map(|p| parse_expr_pair(p, source))
+                .transpose()?;
+            Ok(Stmt::Break { value, span })
+        }
         Rule::continue_stmt => Ok(Stmt::Continue {
             span: span_from_pair(&pair, source),
         }),

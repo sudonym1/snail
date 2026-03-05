@@ -88,7 +88,7 @@ return_stmt = { "return" ~ expr? }
 raise_stmt = { "raise" ~ expr? ~ ("from" ~ expr)? }
 assert_stmt = { "assert" ~ expr ~ ("," ~ expr)? }
 del_stmt = { "del" ~ assign_target ~ ("," ~ assign_target)* }
-break_stmt = { "break" }
+break_stmt = { "break" ~ expr? }
 continue_stmt = { "continue" }
 pass_stmt = { "pass" }
 

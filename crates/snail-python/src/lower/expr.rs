@@ -2069,6 +2069,7 @@ fn lower_for_stmt(
     tail: TailBehavior,
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
+    use super::break_rewrite::rewrite_breaks_in_block;
     let target = lower_assign_target(builder, target)?;
     let iter_expr = lower_expr(builder, iter)?;
     let body_tail = if tail != TailBehavior::None {
@@ -2076,7 +2077,18 @@ fn lower_for_stmt(
     } else {
         TailBehavior::None
     };
-    let body = lower_block_with_tail(builder, body, body_tail, span)?;
+    let rewritten_body;
+    let body_ref = if tail != TailBehavior::None {
+        rewritten_body = {
+            let mut b = body.to_vec();
+            rewrite_breaks_in_block(&mut b, "__snail_last_result", span);
+            b
+        };
+        &rewritten_body[..]
+    } else {
+        body
+    };
+    let body = lower_block_with_tail(builder, body_ref, body_tail, span)?;
     let orelse = else_body
         .as_ref()
         .map(|items| lower_block_with_tail(builder, items, body_tail, span))

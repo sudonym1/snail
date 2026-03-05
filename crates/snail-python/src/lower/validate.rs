@@ -47,8 +47,12 @@ fn check_stmt(stmt: &Stmt, in_function: bool) -> Result<(), LowerError> {
         Stmt::Expr { value, .. } => {
             check_expr(value, in_function)?;
         }
-        Stmt::Break { .. }
-        | Stmt::Continue { .. }
+        Stmt::Break { value, .. } => {
+            if let Some(value) = value {
+                check_expr(value, in_function)?;
+            }
+        }
+        Stmt::Continue { .. }
         | Stmt::Pass { .. }
         | Stmt::Import { .. }
         | Stmt::ImportFrom { .. }

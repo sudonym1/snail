@@ -1,5 +1,7 @@
 use snail_ast::*;
 
+use super::break_rewrite::rewrite_breaks_in_block;
+
 pub(super) struct Desugarer {
     block_counter: usize,
 }
@@ -144,6 +146,7 @@ impl Desugarer {
                             mut else_body,
                             span: fs,
                         } => {
+                            rewrite_breaks_in_block(&mut body, tmp_name, span);
                             Self::capture_branch_tail(&mut body, tmp_name, span);
                             if let Some(eb) = &mut else_body {
                                 Self::capture_branch_tail(eb, tmp_name, span);
@@ -162,6 +165,7 @@ impl Desugarer {
                             mut else_body,
                             span: ws,
                         } => {
+                            rewrite_breaks_in_block(&mut body, tmp_name, span);
                             Self::capture_branch_tail(&mut body, tmp_name, span);
                             if let Some(eb) = &mut else_body {
                                 Self::capture_branch_tail(eb, tmp_name, span);
@@ -288,6 +292,7 @@ impl Desugarer {
                 mut else_body,
                 span: fs,
             } => {
+                rewrite_breaks_in_block(&mut body, &tmp_name, span);
                 Self::capture_branch_tail(&mut body, &tmp_name, span);
                 if let Some(eb) = &mut else_body {
                     Self::capture_branch_tail(eb, &tmp_name, span);
@@ -310,6 +315,7 @@ impl Desugarer {
                 mut else_body,
                 span: ws,
             } => {
+                rewrite_breaks_in_block(&mut body, &tmp_name, span);
                 Self::capture_branch_tail(&mut body, &tmp_name, span);
                 if let Some(eb) = &mut else_body {
                     Self::capture_branch_tail(eb, &tmp_name, span);
@@ -392,7 +398,12 @@ impl Desugarer {
                     .collect(),
                 span: span.clone(),
             },
-            Stmt::Break { span } => Stmt::Break { span: span.clone() },
+            Stmt::Break { value, span } => Stmt::Break {
+                value: value
+                    .as_ref()
+                    .map(|value| self.desugar_expr(value, prelude)),
+                span: span.clone(),
+            },
             Stmt::Continue { span } => Stmt::Continue { span: span.clone() },
             Stmt::Pass { span } => Stmt::Pass { span: span.clone() },
             Stmt::Import { items, span } => Stmt::Import {

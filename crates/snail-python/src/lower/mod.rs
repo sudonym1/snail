@@ -1,4 +1,5 @@
 mod awk;
+mod break_rewrite;
 mod constants;
 mod desugar;
 mod expr;

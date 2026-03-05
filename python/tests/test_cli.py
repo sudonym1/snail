@@ -3644,3 +3644,56 @@ def test_semicolon_terminated_compound_no_capture(
     result, captured = run_cli(capsys, ["for x in [1,2,3] { x * 2 };"])
     assert result == 0
     assert captured.out == ""
+
+
+def test_break_with_value_while(capsys: pytest.CaptureFixture[str]) -> None:
+    """break expr in while returns the value."""
+    result, captured = run_cli(capsys, ['x = while { break "found" }; assert x == "found"'])
+    assert result == 0
+
+
+def test_break_with_value_for(capsys: pytest.CaptureFixture[str]) -> None:
+    """break expr in for returns the value."""
+    result, captured = run_cli(
+        capsys, ["x = for i in range(5) { if i == 3 { break i } }; assert x == 3"]
+    )
+    assert result == 0
+
+
+def test_break_bare_yields_none(capsys: pytest.CaptureFixture[str]) -> None:
+    """Bare break in capturing loop yields None."""
+    result, captured = run_cli(capsys, ["x = while { break }; assert x is None"])
+    assert result == 0
+
+
+def test_break_nested_loops_independent(capsys: pytest.CaptureFixture[str]) -> None:
+    """Inner break value doesn't clobber outer loop value."""
+    code = (
+        "x = for i in range(3) {"
+        "  y = while { break 99 };"
+        "  if i == 1 { break i }"
+        "};"
+        "assert x == 1; assert y == 99"
+    )
+    result, captured = run_cli(capsys, [code])
+    assert result == 0
+
+
+def test_break_with_value_in_try_finally(capsys: pytest.CaptureFixture[str]) -> None:
+    """break expr inside try/finally in a capturing loop."""
+    code = (
+        "cleanup = False;"
+        "x = while {"
+        "  try { break 42 } finally { cleanup = True }"
+        "};"
+        "assert x == 42; assert cleanup"
+    )
+    result, captured = run_cli(capsys, [code])
+    assert result == 0
+
+
+def test_break_with_value_auto_print(capsys: pytest.CaptureFixture[str]) -> None:
+    """break expr at tail position auto-prints the value."""
+    result, captured = run_cli(capsys, ["while { break 42 }"])
+    assert result == 0
+    assert captured.out.strip() == "42"

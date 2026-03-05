@@ -288,6 +288,22 @@ while {
     pair_idx = pair_idx - 1
 }
 
+# Break with value: break expr exits a loop and provides a value
+found = while {
+    if pair_idx <= 0 { break "done" }
+    pair_idx = pair_idx - 1
+}
+assert found == "done"
+
+search = for i in range(10) {
+    if i == 7 { break i }
+}
+assert search == 7
+
+# Bare break yields None
+empty = while { break }
+assert empty is None
+
 for_done = False
 for n in nums {
     try { if n < 0 { break } } finally { cleanup() }

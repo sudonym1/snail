@@ -2131,6 +2131,83 @@ fn parses_anonymous_def_immediate_call() {
 }
 
 #[test]
+fn parses_break_without_value() {
+    let source = "while True { break }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    let expr = unwrap_expr(&program.stmts[0]);
+    match expr {
+        Expr::While { body, .. } => {
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::Break { value, .. } => assert!(value.is_none()),
+                other => panic!("Expected Break, got {other:?}"),
+            }
+        }
+        other => panic!("Expected While, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_break_with_value() {
+    let source = "while True { break 42 }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    let expr = unwrap_expr(&program.stmts[0]);
+    match expr {
+        Expr::While { body, .. } => {
+            assert_eq!(body.len(), 1);
+            match &body[0] {
+                Stmt::Break {
+                    value: Some(val), ..
+                } => {
+                    expect_number(val, "42");
+                }
+                other => panic!("Expected Break with value, got {other:?}"),
+            }
+        }
+        other => panic!("Expected While, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_break_with_string_value() {
+    let source = r#"while True { break "found" }"#;
+    let program = parse_ok(source);
+    let expr = unwrap_expr(&program.stmts[0]);
+    match expr {
+        Expr::While { body, .. } => match &body[0] {
+            Stmt::Break {
+                value: Some(Expr::String { value, .. }),
+                ..
+            } => {
+                assert_eq!(value, "found");
+            }
+            other => panic!("Expected Break with string value, got {other:?}"),
+        },
+        other => panic!("Expected While, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_break_followed_by_newline() {
+    // break on its own line should NOT consume the next line as its value
+    let source = "while True {\n  break\n  x = 1\n}";
+    let program = parse_ok(source);
+    let expr = unwrap_expr(&program.stmts[0]);
+    match expr {
+        Expr::While { body, .. } => {
+            assert_eq!(body.len(), 2);
+            match &body[0] {
+                Stmt::Break { value, .. } => assert!(value.is_none()),
+                other => panic!("Expected bare Break, got {other:?}"),
+            }
+        }
+        other => panic!("Expected While, got {other:?}"),
+    }
+}
+
+#[test]
 fn lambda_is_now_valid_identifier() {
     // `lambda` is no longer a keyword, so it can be used as a variable name
     let result = snail_parser::parse("lambda = 1");

@@ -3,6 +3,7 @@ use pyo3::types::PyList;
 use snail_ast::*;
 use snail_error::LowerError;
 
+use super::break_rewrite::rewrite_breaks_in_block;
 use super::constants::{SNAIL_LET_KEEP, SNAIL_LET_OK, SNAIL_LET_VALUE};
 use super::expr::{
     lower_assign_target, lower_delete_target, lower_expr, lower_expr_as_stmt,
@@ -76,9 +77,12 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                 )
                 .map_err(py_err_to_lower)
         }
-        Stmt::Break { span } => builder
+        Stmt::Break { value: None, span } => builder
             .call_node("Break", Vec::new(), span)
             .map_err(py_err_to_lower),
+        Stmt::Break { value: Some(_), .. } => Err(LowerError::new(
+            "break with value should have been rewritten by desugarer",
+        )),
         Stmt::Continue { span } => builder
             .call_node("Continue", Vec::new(), span)
             .map_err(py_err_to_lower),
@@ -250,6 +254,25 @@ pub(crate) fn lower_block_with_tail(
 fn lower_stmt_to_stmts(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<Vec<PyObject>, LowerError> {
     match stmt {
         Stmt::Expr { value, span, .. } => lower_expr_as_stmt(builder, value, span),
+        Stmt::Break {
+            value: Some(expr),
+            span,
+        } => {
+            // In non-capturing context, evaluate the expression for side effects then break
+            let mut stmts = Vec::new();
+            let value = lower_expr(builder, expr)?;
+            stmts.push(
+                builder
+                    .call_node("Expr", vec![value], span)
+                    .map_err(py_err_to_lower)?,
+            );
+            stmts.push(
+                builder
+                    .call_node("Break", Vec::new(), span)
+                    .map_err(py_err_to_lower)?,
+            );
+            Ok(stmts)
+        }
         _ => Ok(vec![lower_stmt(builder, stmt)?]),
     }
 }
@@ -270,7 +293,18 @@ pub(crate) fn lower_while_stmt(
             } else {
                 TailBehavior::None
             };
-            let body = lower_block_with_tail(builder, body, body_tail, span)?;
+            let rewritten_body;
+            let body_ref = if tail != TailBehavior::None {
+                rewritten_body = {
+                    let mut b = body.to_vec();
+                    rewrite_breaks_in_block(&mut b, "__snail_last_result", span);
+                    b
+                };
+                &rewritten_body[..]
+            } else {
+                body
+            };
+            let body = lower_block_with_tail(builder, body_ref, body_tail, span)?;
             let orelse = else_body
                 .as_ref()
                 .map(|items| lower_block_with_tail(builder, items, body_tail, span))
@@ -350,7 +384,18 @@ fn lower_while_let(
     loop_body.push(try_node);
 
     let test = build_let_guard_test(builder, guard, span)?;
-    let body = lower_block_with_tail(builder, body, body_tail, span)?;
+    let rewritten_body;
+    let body_ref = if tail != TailBehavior::None {
+        rewritten_body = {
+            let mut b = body.to_vec();
+            rewrite_breaks_in_block(&mut b, "__snail_last_result", span);
+            b
+        };
+        &rewritten_body[..]
+    } else {
+        body
+    };
+    let body = lower_block_with_tail(builder, body_ref, body_tail, span)?;
     let keep_false = assign_name(
         builder,
         SNAIL_LET_KEEP,

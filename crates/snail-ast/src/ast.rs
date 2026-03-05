@@ -38,6 +38,7 @@ pub enum Stmt {
         span: SourceSpan,
     },
     Break {
+        value: Option<Expr>,
         span: SourceSpan,
     },
     Continue {

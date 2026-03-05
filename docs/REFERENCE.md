@@ -449,6 +449,17 @@ while {
 }
 ```
 
+### Break with value
+`break expr` exits a loop early and provides a value when the loop is used as
+an expression. Bare `break` (no value) yields `None`:
+```snail
+x = while { break 42 }           # x == 42
+y = for i in range(10) {
+    if i == 5 { break i }
+}                                 # y == 5
+z = while { break }              # z is None
+```
+
 `if let` and `while let` bind destructured values in the condition, optionally
 followed by a guard after a semicolon:
 ```snail
