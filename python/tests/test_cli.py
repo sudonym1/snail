@@ -25,7 +25,8 @@ if importlib.util.find_spec("snail._native") is None:
     pytest.skip("snail extension not built", allow_module_level=True)
 
 snail = importlib.import_module("snail")
-main = importlib.import_module("snail.cli").main
+cli = importlib.import_module("snail.cli")
+main = cli.main
 
 README_SNIPPET_PREAMBLE = """
 def risky(*args, fail=False) { if fail { raise Exception(fail) } else { return args } }
@@ -48,6 +49,52 @@ def test_parse_only(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--debug", "x = 1"]) == 0
     captured = capsys.readouterr()
     assert captured.out.strip() == "x = 1"
+
+
+def test_short_debug_matches_debug(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-D", "x = 1"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "x = 1"
+
+
+def test_short_debug_can_be_grouped_with_no_print() -> None:
+    parsed = cli._parse_args(["-DP", "x = 1"])
+    assert parsed.debug is True
+    assert parsed.no_print is True
+
+
+def test_double_short_debug_selects_python_ast(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["-DD", "x = 1"]) == 0
+    captured = capsys.readouterr()
+    assert "Module" in captured.out
+    assert "Assign" in captured.out
+
+
+def test_triple_short_debug_selects_snail_ast(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["-DDD", "x = 1"]) == 0
+    captured = capsys.readouterr()
+    assert "Program" in captured.out
+    assert "Assign" in captured.out
+
+
+def test_quadruple_short_debug_selects_preprocessor(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["-DDDD", "x = 1\nprint(x)\n"]) == 0
+    captured = capsys.readouterr()
+    assert "❗" in captured.out
+
+
+def test_short_debug_rejects_too_many_layers(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["-DDDDD", "x = 1"]) == 2
+    captured = capsys.readouterr()
+    assert "-D may be repeated at most 4 times" in captured.err
 
 
 def test_debug_snail_ast_basic(capsys: pytest.CaptureFixture[str]) -> None:

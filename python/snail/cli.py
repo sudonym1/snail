@@ -9,8 +9,14 @@ from . import __build_info__, compile_ast, exec
 
 _USAGE = "snail [options] -f <file> [args]...\n       snail [options] <code> [args]..."
 _DESCRIPTION = "Snail programming language interpreter"
-_BOOLEAN_FLAGS = frozenset("axptPIvhW")
+_BOOLEAN_FLAGS = frozenset("DaxptPIvhW")
 _VALUE_FLAGS = frozenset("fbeF")
+_SHORT_DEBUG_LAYERS = (
+    "debug",
+    "debug_python_ast",
+    "debug_snail_ast",
+    "debug_snail_preprocessor",
+)
 
 
 def _display_filename(filename: str) -> str:
@@ -101,6 +107,7 @@ class _Args:
         self.debug_snail_ast = False
         self.debug_snail_preprocessor = False
         self.debug_python_ast = False
+        self.short_debug_depth = 0
         self.version = False
         self.help = False
         self.begin_code: list[str] = []
@@ -108,6 +115,18 @@ class _Args:
         self.field_separators: list[str] = []
         self.include_whitespace = False
         self.args: list[str] = []
+
+
+def _apply_short_debug_depth(args: _Args) -> None:
+    if args.short_debug_depth == 0:
+        return
+    if args.short_debug_depth > len(_SHORT_DEBUG_LAYERS):
+        max_depth = len(_SHORT_DEBUG_LAYERS)
+        raise ValueError(
+            f"-D may be repeated at most {max_depth} times "
+            f"(-{'D' * max_depth} selects the deepest debug layer)"
+        )
+    setattr(args, _SHORT_DEBUG_LAYERS[args.short_debug_depth - 1], True)
 
 
 def _print_help(file=None) -> None:
@@ -152,15 +171,6 @@ def _print_help(file=None) -> None:
         file=file,
     )
     print("  -I, --no-auto-import    disable auto-imports", file=file)
-    print(
-        "  --debug                 parse and compile, then print, do not run", file=file
-    )
-    print("  --debug-snail-ast       parse and print Snail AST, do not run", file=file)
-    print(
-        "  --debug-snail-preprocessor  show preprocessor output (stmt boundaries)",
-        file=file,
-    )
-    print("  --debug-python-ast      parse and print Python AST, do not run", file=file)
     print("  -v, --version           show version and exit", file=file)
     print("  -h, --help              show this help message and exit", file=file)
 
@@ -261,6 +271,10 @@ def _parse_args(argv: list[str]) -> _Args:
             args.no_auto_import = True
             idx += 1
             continue
+        if token == "-D":
+            args.short_debug_depth += 1
+            idx += 1
+            continue
         if token == "--debug":
             args.debug = True
             idx += 1
@@ -309,6 +323,7 @@ def _parse_args(argv: list[str]) -> _Args:
             idx += 2
             continue
         raise ValueError(f"unknown option: {token}")
+    _apply_short_debug_depth(args)
     return args
 
 
