@@ -1,7 +1,4 @@
 // Constants that need to be public for codegen
-pub const SNAIL_TRY_HELPER: &str = "__snail_compact_try";
-pub const SNAIL_TRY_NO_FALLBACK_HELPER: &str = "__snail_compact_try_no_fallback";
-pub const SNAIL_EXCEPTION_VAR: &str = "__snail_compact_exc";
 pub const SNAIL_SUBPROCESS_CAPTURE_CLASS: &str = "__SnailSubprocessCapture";
 pub const SNAIL_SUBPROCESS_STATUS_CLASS: &str = "__SnailSubprocessStatus";
 pub const SNAIL_REGEX_SEARCH: &str = "__snail_regex_search";

@@ -344,12 +344,6 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_expr_mode(left, source, mode)?;
             validate_exprs_mode(comparators, source, mode)?;
         }
-        Expr::TryExpr { expr, fallback, .. } => {
-            validate_expr_mode(expr, source, mode)?;
-            if let Some(fallback) = fallback {
-                validate_expr_mode(fallback, source, mode)?;
-            }
-        }
         Expr::Yield { value, .. } => {
             if let Some(value) = value {
                 validate_expr_mode(value, source, mode)?;

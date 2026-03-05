@@ -7,6 +7,57 @@ use snail_ast::{
 };
 use snail_parser::parse as parse_program;
 
+const COMPACT_TRY_EXCEPTION_VAR: &str = "__snail_compact_exc";
+const COMPACT_TRY_NO_FALLBACK_HELPER: &str = "__snail_compact_try_no_fallback";
+
+fn expect_compact_try(expr: &Expr) -> (&Expr, Option<&Expr>) {
+    match expr {
+        Expr::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            ..
+        } => {
+            assert!(else_body.is_none());
+            assert!(finally_body.is_none());
+            assert_eq!(body.len(), 1);
+            assert_eq!(handlers.len(), 1);
+
+            let body_expr = match &body[0] {
+                Stmt::Expr { value, .. } => value,
+                other => panic!("Expected compact try body expr, got {other:?}"),
+            };
+
+            let handler = &handlers[0];
+            assert!(matches!(
+                handler.type_name.as_ref(),
+                Some(Expr::Name { name, .. }) if name == "Exception"
+            ));
+            assert_eq!(handler.name.as_deref(), Some(COMPACT_TRY_EXCEPTION_VAR));
+            assert_eq!(handler.body.len(), 1);
+
+            let handler_expr = match &handler.body[0] {
+                Stmt::Expr { value, .. } => value,
+                other => panic!("Expected compact try handler expr, got {other:?}"),
+            };
+            let fallback = if matches!(
+                handler_expr,
+                Expr::Call { func, args, .. }
+                    if matches!(func.as_ref(), Expr::Name { name, .. } if name == COMPACT_TRY_NO_FALLBACK_HELPER)
+                        && matches!(args.as_slice(), [Argument::Positional { value: Expr::Name { name, .. }, .. }] if name == COMPACT_TRY_EXCEPTION_VAR)
+            ) {
+                None
+            } else {
+                Some(handler_expr)
+            };
+
+            (body_expr, fallback)
+        }
+        other => panic!("Expected compact try, got {other:?}"),
+    }
+}
+
 #[test]
 fn parses_basic_program() {
     let source = "x = 1\nif x {\n  y = x + 2\n}\n";
@@ -972,28 +1023,24 @@ fn parses_parenthesized_expressions() {
         other => panic!("Expected Paren expression, got {other:?}"),
     }
 
-    // (++x)? is valid: TryExpr around Paren around PrefixIncr
+    // (++x)? is valid: compact try around Paren around PrefixIncr
     let source = "(++x)?";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
-    match expect_expr_stmt(&program.stmts[0]) {
-        Expr::TryExpr { expr, fallback, .. } => {
-            assert!(fallback.is_none());
-            match expr.as_ref() {
-                Expr::Paren { expr: inner, .. } => match inner.as_ref() {
-                    Expr::PrefixIncr { op, target, .. } => {
-                        assert!(matches!(op, IncrOp::Increment));
-                        match target.as_ref() {
-                            AssignTarget::Name { name, .. } => assert_eq!(name, "x"),
-                            other => panic!("Expected name target, got {other:?}"),
-                        }
-                    }
-                    other => panic!("Expected PrefixIncr, got {other:?}"),
-                },
-                other => panic!("Expected Paren, got {other:?}"),
+    let (expr, fallback) = expect_compact_try(expect_expr_stmt(&program.stmts[0]));
+    assert!(fallback.is_none());
+    match expr {
+        Expr::Paren { expr: inner, .. } => match inner.as_ref() {
+            Expr::PrefixIncr { op, target, .. } => {
+                assert!(matches!(op, IncrOp::Increment));
+                match target.as_ref() {
+                    AssignTarget::Name { name, .. } => assert_eq!(name, "x"),
+                    other => panic!("Expected name target, got {other:?}"),
+                }
             }
-        }
-        other => panic!("Expected TryExpr, got {other:?}"),
+            other => panic!("Expected PrefixIncr, got {other:?}"),
+        },
+        other => panic!("Expected Paren, got {other:?}"),
     }
 }
 
@@ -1072,22 +1119,18 @@ fn parses_nested_parentheses_in_try_expr() {
     let source = "((x))?";
     let program = parse_ok(source);
     assert_eq!(program.stmts.len(), 1);
-    match expect_expr_stmt(&program.stmts[0]) {
-        Expr::TryExpr { expr, fallback, .. } => {
-            assert!(fallback.is_none());
-            match expr.as_ref() {
-                Expr::Paren { expr: inner, .. } => match inner.as_ref() {
-                    Expr::Paren {
-                        expr: innermost, ..
-                    } => {
-                        expect_name(innermost.as_ref(), "x");
-                    }
-                    other => panic!("Expected nested Paren, got {other:?}"),
-                },
-                other => panic!("Expected Paren, got {other:?}"),
+    let (expr, fallback) = expect_compact_try(expect_expr_stmt(&program.stmts[0]));
+    assert!(fallback.is_none());
+    match expr {
+        Expr::Paren { expr: inner, .. } => match inner.as_ref() {
+            Expr::Paren {
+                expr: innermost, ..
+            } => {
+                expect_name(innermost.as_ref(), "x");
             }
-        }
-        other => panic!("Expected TryExpr, got {other:?}"),
+            other => panic!("Expected nested Paren, got {other:?}"),
+        },
+        other => panic!("Expected Paren, got {other:?}"),
     }
 }
 

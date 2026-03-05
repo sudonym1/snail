@@ -211,11 +211,6 @@ pub enum Expr {
         comparators: Vec<Expr>,
         span: SourceSpan,
     },
-    TryExpr {
-        expr: Box<Expr>,
-        fallback: Option<Box<Expr>>,
-        span: SourceSpan,
-    },
     Yield {
         value: Option<Box<Expr>>,
         span: SourceSpan,

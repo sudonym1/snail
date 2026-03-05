@@ -1,6 +1,7 @@
 use pest::iterators::Pair;
 use snail_ast::{
-    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, Expr, IncrOp, UnaryOp,
+    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, ExceptHandler, Expr,
+    IncrOp, Stmt, UnaryOp,
 };
 use snail_error::ParseError;
 
@@ -15,6 +16,9 @@ use crate::stmt::{
     parse_except_clause, parse_parameters, parse_pattern_action, parse_stmt, parse_with_items,
 };
 use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
+
+const COMPACT_TRY_EXCEPTION_VAR: &str = "__snail_compact_exc";
+const COMPACT_TRY_NO_FALLBACK_HELPER: &str = "__snail_compact_try_no_fallback";
 
 pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     match pair.as_rule() {
@@ -551,31 +555,7 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                 };
             }
             Rule::try_suffix => {
-                if matches!(
-                    expr,
-                    Expr::AugAssign { .. } | Expr::PrefixIncr { .. } | Expr::PostfixIncr { .. }
-                ) {
-                    return Err(error_with_span(
-                        "compact try cannot wrap a binding expression",
-                        expr_span(&expr).clone(),
-                        source,
-                    ));
-                }
-                let mut suffix_inner = suffix.into_inner();
-                let fallback = suffix_inner
-                    .next()
-                    .map(|fallback_pair| parse_expr_pair(fallback_pair, source))
-                    .transpose()?;
-                let span = if let Some(ref fallback_expr) = fallback {
-                    merge_span(expr_span(&expr), expr_span(fallback_expr))
-                } else {
-                    merge_span(expr_span(&expr), &suffix_span)
-                };
-                expr = Expr::TryExpr {
-                    expr: Box::new(expr),
-                    fallback: fallback.map(Box::new),
-                    span,
-                };
+                expr = parse_compact_try_suffix(expr, suffix, source)?;
             }
             Rule::postfix_incr => {
                 let op = match suffix.as_str() {
@@ -609,6 +589,286 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
         }
     }
     Ok(expr)
+}
+
+pub(crate) fn parse_compact_try_suffix(
+    expr: Expr,
+    suffix: Pair<'_, Rule>,
+    source: &str,
+) -> Result<Expr, ParseError> {
+    if matches!(
+        expr,
+        Expr::AugAssign { .. } | Expr::PrefixIncr { .. } | Expr::PostfixIncr { .. }
+    ) {
+        return Err(error_with_span(
+            "compact try cannot wrap a binding expression",
+            expr_span(&expr).clone(),
+            source,
+        ));
+    }
+
+    let suffix_span = span_from_pair(&suffix, source);
+    let mut suffix_inner = suffix.into_inner();
+    let fallback = suffix_inner
+        .next()
+        .map(|fallback_pair| parse_expr_pair(fallback_pair, source))
+        .transpose()?
+        .map(replace_compact_try_exception_var);
+    let span = if let Some(ref fallback_expr) = fallback {
+        merge_span(expr_span(&expr), expr_span(fallback_expr))
+    } else {
+        merge_span(expr_span(&expr), &suffix_span)
+    };
+
+    let body_expr = unwrap_compound_parens(expr);
+    let body_span = expr_span(&body_expr).clone();
+    let body = vec![Stmt::Expr {
+        value: body_expr,
+        semicolon_terminated: false,
+        span: body_span.clone(),
+    }];
+    let handler_value = fallback.unwrap_or_else(|| Expr::Call {
+        func: Box::new(Expr::Name {
+            name: COMPACT_TRY_NO_FALLBACK_HELPER.to_string(),
+            span: span.clone(),
+        }),
+        args: vec![Argument::Positional {
+            value: Expr::Name {
+                name: COMPACT_TRY_EXCEPTION_VAR.to_string(),
+                span: span.clone(),
+            },
+            span: span.clone(),
+        }],
+        span: span.clone(),
+    });
+    let handler_body = vec![Stmt::Expr {
+        value: handler_value,
+        semicolon_terminated: false,
+        span: span.clone(),
+    }];
+
+    Ok(Expr::Try {
+        body,
+        handlers: vec![ExceptHandler {
+            type_name: Some(Expr::Name {
+                name: "Exception".to_string(),
+                span: span.clone(),
+            }),
+            name: Some(COMPACT_TRY_EXCEPTION_VAR.to_string()),
+            body: handler_body,
+            span: span.clone(),
+        }],
+        else_body: None,
+        finally_body: None,
+        span,
+    })
+}
+
+fn unwrap_compound_parens(expr: Expr) -> Expr {
+    match expr {
+        Expr::Paren { expr: inner, .. } if is_compound_expr(inner.as_ref()) => {
+            unwrap_compound_parens(*inner)
+        }
+        other => other,
+    }
+}
+
+fn is_compound_expr(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Block { .. }
+            | Expr::If { .. }
+            | Expr::While { .. }
+            | Expr::For { .. }
+            | Expr::Try { .. }
+            | Expr::With { .. }
+            | Expr::Awk { .. }
+            | Expr::Xargs { .. }
+    )
+}
+
+fn replace_compact_try_exception_var(expr: Expr) -> Expr {
+    match expr {
+        Expr::Name { name, span } if name == "$e" => Expr::Name {
+            name: COMPACT_TRY_EXCEPTION_VAR.to_string(),
+            span,
+        },
+        Expr::FString { parts, bytes, span } => Expr::FString {
+            parts: replace_compact_try_exception_var_in_fstring_parts(parts),
+            bytes,
+            span,
+        },
+        Expr::Unary { op, expr, span } => Expr::Unary {
+            op,
+            expr: Box::new(replace_compact_try_exception_var(*expr)),
+            span,
+        },
+        Expr::Binary {
+            left,
+            op,
+            right,
+            span,
+        } => Expr::Binary {
+            left: Box::new(replace_compact_try_exception_var(*left)),
+            op,
+            right: Box::new(replace_compact_try_exception_var(*right)),
+            span,
+        },
+        Expr::Compare {
+            left,
+            ops,
+            comparators,
+            span,
+        } => Expr::Compare {
+            left: Box::new(replace_compact_try_exception_var(*left)),
+            ops,
+            comparators: comparators
+                .into_iter()
+                .map(replace_compact_try_exception_var)
+                .collect(),
+            span,
+        },
+        Expr::Yield { value, span } => Expr::Yield {
+            value: value.map(|value| Box::new(replace_compact_try_exception_var(*value))),
+            span,
+        },
+        Expr::YieldFrom { expr, span } => Expr::YieldFrom {
+            expr: Box::new(replace_compact_try_exception_var(*expr)),
+            span,
+        },
+        Expr::Regex { pattern, span } => Expr::Regex {
+            pattern: replace_compact_try_exception_var_in_regex(pattern),
+            span,
+        },
+        Expr::RegexMatch {
+            value,
+            pattern,
+            span,
+        } => Expr::RegexMatch {
+            value: Box::new(replace_compact_try_exception_var(*value)),
+            pattern: replace_compact_try_exception_var_in_regex(pattern),
+            span,
+        },
+        Expr::Subprocess { kind, parts, span } => Expr::Subprocess {
+            kind,
+            parts: replace_compact_try_exception_var_in_fstring_parts(parts),
+            span,
+        },
+        Expr::Call { func, args, span } => Expr::Call {
+            func: Box::new(replace_compact_try_exception_var(*func)),
+            args: args
+                .into_iter()
+                .map(replace_compact_try_exception_var_in_arg)
+                .collect(),
+            span,
+        },
+        Expr::Attribute { value, attr, span } => Expr::Attribute {
+            value: Box::new(replace_compact_try_exception_var(*value)),
+            attr,
+            span,
+        },
+        Expr::Index { value, index, span } => Expr::Index {
+            value: Box::new(replace_compact_try_exception_var(*value)),
+            index: Box::new(replace_compact_try_exception_var(*index)),
+            span,
+        },
+        Expr::Paren { expr, span } => Expr::Paren {
+            expr: Box::new(replace_compact_try_exception_var(*expr)),
+            span,
+        },
+        Expr::List { elements, span } => Expr::List {
+            elements: elements
+                .into_iter()
+                .map(replace_compact_try_exception_var)
+                .collect(),
+            span,
+        },
+        Expr::Tuple { elements, span } => Expr::Tuple {
+            elements: elements
+                .into_iter()
+                .map(replace_compact_try_exception_var)
+                .collect(),
+            span,
+        },
+        Expr::Set { elements, span } => Expr::Set {
+            elements: elements
+                .into_iter()
+                .map(replace_compact_try_exception_var)
+                .collect(),
+            span,
+        },
+        Expr::Dict { entries, span } => Expr::Dict {
+            entries: entries
+                .into_iter()
+                .map(|(key, value)| {
+                    (
+                        replace_compact_try_exception_var(key),
+                        replace_compact_try_exception_var(value),
+                    )
+                })
+                .collect(),
+            span,
+        },
+        Expr::Slice { start, end, span } => Expr::Slice {
+            start: start.map(|start| Box::new(replace_compact_try_exception_var(*start))),
+            end: end.map(|end| Box::new(replace_compact_try_exception_var(*end))),
+            span,
+        },
+        other => other,
+    }
+}
+
+fn replace_compact_try_exception_var_in_arg(arg: Argument) -> Argument {
+    match arg {
+        Argument::Positional { value, span } => Argument::Positional {
+            value: replace_compact_try_exception_var(value),
+            span,
+        },
+        Argument::Keyword { name, value, span } => Argument::Keyword {
+            name,
+            value: replace_compact_try_exception_var(value),
+            span,
+        },
+        Argument::Star { value, span } => Argument::Star {
+            value: replace_compact_try_exception_var(value),
+            span,
+        },
+        Argument::KwStar { value, span } => Argument::KwStar {
+            value: replace_compact_try_exception_var(value),
+            span,
+        },
+    }
+}
+
+fn replace_compact_try_exception_var_in_fstring_parts(
+    parts: Vec<snail_ast::FStringPart>,
+) -> Vec<snail_ast::FStringPart> {
+    parts
+        .into_iter()
+        .map(|part| match part {
+            snail_ast::FStringPart::Text(text) => snail_ast::FStringPart::Text(text),
+            snail_ast::FStringPart::Expr(expr) => {
+                snail_ast::FStringPart::Expr(snail_ast::FStringExpr {
+                    expr: Box::new(replace_compact_try_exception_var(*expr.expr)),
+                    conversion: expr.conversion,
+                    format_spec: expr
+                        .format_spec
+                        .map(replace_compact_try_exception_var_in_fstring_parts),
+                })
+            }
+        })
+        .collect()
+}
+
+fn replace_compact_try_exception_var_in_regex(
+    pattern: snail_ast::RegexPattern,
+) -> snail_ast::RegexPattern {
+    match pattern {
+        snail_ast::RegexPattern::Literal(text) => snail_ast::RegexPattern::Literal(text),
+        snail_ast::RegexPattern::Interpolated(parts) => snail_ast::RegexPattern::Interpolated(
+            replace_compact_try_exception_var_in_fstring_parts(parts),
+        ),
+    }
 }
 
 pub(crate) fn apply_attr_index_suffix(

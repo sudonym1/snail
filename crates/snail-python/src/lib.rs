@@ -135,7 +135,7 @@ fn has_tail_expression(source: &str) -> bool {
                     value,
                     semicolon_terminated: false,
                     ..
-                }) => !is_compound_statement_expr(value),
+                }) => !is_compound_statement_expr(value) || is_compact_try_expr(value),
                 _ => false,
             }
         })
@@ -157,6 +157,28 @@ fn is_compound_statement_expr(expr: &Expr) -> bool {
             | Expr::With { .. }
             | Expr::Awk { .. }
             | Expr::Xargs { .. }
+    )
+}
+
+fn is_compact_try_expr(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Try {
+            body,
+            handlers,
+            else_body: None,
+            finally_body: None,
+            ..
+        } if body.len() == 1
+            && handlers.len() == 1
+            && matches!(&body[0], Stmt::Expr { .. })
+            && matches!(
+                handlers[0].type_name.as_ref(),
+                Some(Expr::Name { name, .. }) if name == "Exception"
+            )
+            && handlers[0].name.as_deref() == Some("__snail_compact_exc")
+            && handlers[0].body.len() == 1
+            && matches!(&handlers[0].body[0], Stmt::Expr { .. })
     )
 }
 

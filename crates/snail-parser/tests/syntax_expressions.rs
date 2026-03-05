@@ -5,6 +5,57 @@ use snail_ast::{
     BinaryOp, CompareOp, Condition, Expr, FStringPart, RegexPattern, Stmt, SubprocessKind, UnaryOp,
 };
 
+const COMPACT_TRY_EXCEPTION_VAR: &str = "__snail_compact_exc";
+const COMPACT_TRY_NO_FALLBACK_HELPER: &str = "__snail_compact_try_no_fallback";
+
+fn expect_compact_try(expr: &Expr) -> (&Expr, Option<&Expr>) {
+    match expr {
+        Expr::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            ..
+        } => {
+            assert!(else_body.is_none());
+            assert!(finally_body.is_none());
+            assert_eq!(body.len(), 1);
+            assert_eq!(handlers.len(), 1);
+
+            let body_expr = match &body[0] {
+                Stmt::Expr { value, .. } => value,
+                other => panic!("Expected compact try body expr, got {other:?}"),
+            };
+
+            let handler = &handlers[0];
+            assert!(matches!(
+                handler.type_name.as_ref(),
+                Some(Expr::Name { name, .. }) if name == "Exception"
+            ));
+            assert_eq!(handler.name.as_deref(), Some(COMPACT_TRY_EXCEPTION_VAR));
+            assert_eq!(handler.body.len(), 1);
+
+            let handler_expr = match &handler.body[0] {
+                Stmt::Expr { value, .. } => value,
+                other => panic!("Expected compact try handler expr, got {other:?}"),
+            };
+            let fallback = if matches!(
+                handler_expr,
+                Expr::Call { func, args, .. }
+                    if matches!(func.as_ref(), Expr::Name { name, .. } if name == COMPACT_TRY_NO_FALLBACK_HELPER)
+                        && matches!(args.as_slice(), [snail_ast::Argument::Positional { value: Expr::Name { name, .. }, .. }] if name == COMPACT_TRY_EXCEPTION_VAR)
+            ) {
+                None
+            } else {
+                Some(handler_expr)
+            };
+
+            (body_expr, fallback)
+        }
+        other => panic!("Expected compact try, got {other:?}"),
+    }
+}
+
 #[test]
 fn parses_if_statement() {
     let source = "if flag { 1 } else { 2 }";
@@ -83,30 +134,22 @@ fn parses_compact_exception_expression() {
     assert_eq!(program.stmts.len(), 2);
 
     let (_, value) = expect_assign(&program.stmts[0]);
-    match value {
-        Expr::TryExpr { expr, fallback, .. } => {
-            assert!(fallback.is_none());
-            match expr.as_ref() {
-                Expr::Call { func, .. } => expect_name(func.as_ref(), "risky"),
-                other => panic!("Expected risky() call, got {other:?}"),
-            }
-        }
-        other => panic!("Expected try expression, got {other:?}"),
+    let (expr, fallback) = expect_compact_try(value);
+    assert!(fallback.is_none());
+    match expr {
+        Expr::Call { func, .. } => expect_name(func.as_ref(), "risky"),
+        other => panic!("Expected risky() call, got {other:?}"),
     }
 
     let (_, value) = expect_assign(&program.stmts[1]);
-    match value {
-        Expr::TryExpr { expr, fallback, .. } => {
-            match expr.as_ref() {
-                Expr::Call { func, .. } => expect_name(func.as_ref(), "risky"),
-                other => panic!("Expected risky() call, got {other:?}"),
-            }
-            match fallback.as_deref() {
-                Some(Expr::Name { name, .. }) => assert_eq!(name, "$e"),
-                other => panic!("Expected $e fallback, got {other:?}"),
-            }
-        }
-        other => panic!("Expected try expression, got {other:?}"),
+    let (expr, fallback) = expect_compact_try(value);
+    match expr {
+        Expr::Call { func, .. } => expect_name(func.as_ref(), "risky"),
+        other => panic!("Expected risky() call, got {other:?}"),
+    }
+    match fallback {
+        Some(Expr::Name { name, .. }) => assert_eq!(name, COMPACT_TRY_EXCEPTION_VAR),
+        other => panic!("Expected exception fallback, got {other:?}"),
     }
 }
 
@@ -123,7 +166,7 @@ fn compact_try_binds_before_infix_and_accessors() {
             } => {
                 assert!(matches!(op, BinaryOp::Add));
                 assert!(matches!(left.as_ref(), Expr::Name { name, .. } if name == "a"));
-                assert!(matches!(right.as_ref(), Expr::TryExpr { .. }));
+                assert!(matches!(right.as_ref(), Expr::Try { .. }));
             }
             other => panic!("expected binary expression, got {other:?}"),
         },
@@ -137,7 +180,7 @@ fn compact_try_binds_before_infix_and_accessors() {
                 match value.as_ref() {
                     Expr::Attribute { value, attr, .. } => {
                         assert_eq!(attr, "attr");
-                        assert!(matches!(value.as_ref(), Expr::TryExpr { .. }));
+                        assert!(matches!(value.as_ref(), Expr::Try { .. }));
                     }
                     other => panic!("expected attribute on try result, got {other:?}"),
                 }
@@ -153,7 +196,7 @@ fn compact_try_binds_before_infix_and_accessors() {
                 left, op, right, ..
             } => {
                 assert!(matches!(op, BinaryOp::Add));
-                assert!(matches!(left.as_ref(), Expr::TryExpr { .. }));
+                assert!(matches!(left.as_ref(), Expr::Try { .. }));
                 assert!(matches!(right.as_ref(), Expr::Name { name, .. } if name == "other"));
             }
             other => panic!("expected binary expression, got {other:?}"),
@@ -173,15 +216,11 @@ fn compact_try_fallback_stops_before_addition() {
                 left, op, right, ..
             } => {
                 assert!(matches!(op, BinaryOp::Add));
-                match left.as_ref() {
-                    Expr::TryExpr { expr, fallback, .. } => {
-                        assert!(matches!(expr.as_ref(), Expr::Name { name, .. } if name == "a"));
-                        match fallback.as_deref() {
-                            Some(Expr::Number { value, .. }) => assert_eq!(value, "0"),
-                            other => panic!("expected numeric fallback, got {other:?}"),
-                        }
-                    }
-                    other => panic!("expected try expression on the left, got {other:?}"),
+                let (expr, fallback) = expect_compact_try(left.as_ref());
+                assert!(matches!(expr, Expr::Name { name, .. } if name == "a"));
+                match fallback {
+                    Some(Expr::Number { value, .. }) => assert_eq!(value, "0"),
+                    other => panic!("expected numeric fallback, got {other:?}"),
                 }
 
                 assert!(matches!(right.as_ref(), Expr::Number { value, .. } if value == "1"));
@@ -452,13 +491,9 @@ fn compact_try_on_compound_if() {
     let program = parse_ok("if True { 1 }?");
     assert_eq!(program.stmts.len(), 1);
 
-    match expect_expr_stmt(&program.stmts[0]) {
-        Expr::TryExpr { expr, fallback, .. } => {
-            assert!(fallback.is_none());
-            assert!(matches!(expr.as_ref(), Expr::If { .. }));
-        }
-        other => panic!("Expected TryExpr wrapping If, got {other:?}"),
-    }
+    let (expr, fallback) = expect_compact_try(expect_expr_stmt(&program.stmts[0]));
+    assert!(fallback.is_none());
+    assert!(matches!(expr, Expr::If { .. }));
 }
 
 #[test]
@@ -466,13 +501,9 @@ fn compact_try_on_compound_if_with_fallback() {
     let program = parse_ok("if True { 1 }:\"fallback\"?");
     assert_eq!(program.stmts.len(), 1);
 
-    match expect_expr_stmt(&program.stmts[0]) {
-        Expr::TryExpr { expr, fallback, .. } => {
-            assert!(matches!(expr.as_ref(), Expr::If { .. }));
-            assert!(matches!(fallback.as_deref(), Some(Expr::String { .. })));
-        }
-        other => panic!("Expected TryExpr with fallback, got {other:?}"),
-    }
+    let (expr, fallback) = expect_compact_try(expect_expr_stmt(&program.stmts[0]));
+    assert!(matches!(expr, Expr::If { .. }));
+    assert!(matches!(fallback, Some(Expr::String { .. })));
 }
 
 #[test]
@@ -480,11 +511,7 @@ fn compact_try_on_compound_block() {
     let program = parse_ok("{ raise Exception() }?");
     assert_eq!(program.stmts.len(), 1);
 
-    match expect_expr_stmt(&program.stmts[0]) {
-        Expr::TryExpr { expr, fallback, .. } => {
-            assert!(fallback.is_none());
-            assert!(matches!(expr.as_ref(), Expr::Block { .. }));
-        }
-        other => panic!("Expected TryExpr wrapping Block, got {other:?}"),
-    }
+    let (expr, fallback) = expect_compact_try(expect_expr_stmt(&program.stmts[0]));
+    assert!(fallback.is_none());
+    assert!(matches!(expr, Expr::Block { .. }));
 }

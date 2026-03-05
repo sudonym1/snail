@@ -708,57 +708,6 @@ pub(crate) fn lower_expr_with_exception(
                 lower_compare_chain(builder, left, ops, comparators, span, exception_name)
             }
         }
-        Expr::TryExpr {
-            expr,
-            fallback,
-            span,
-        } => {
-            let try_lambda = builder
-                .call_node(
-                    "Lambda",
-                    vec![
-                        empty_lambda_args(builder)?,
-                        lower_expr_with_exception(builder, expr, exception_name)?,
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)?;
-            let mut args = vec![try_lambda];
-            if let Some(fallback_expr) = fallback {
-                let fallback_lambda = builder
-                    .call_node(
-                        "Lambda",
-                        vec![
-                            lambda_args_with_param(builder, SNAIL_EXCEPTION_VAR)?,
-                            lower_expr_with_exception(
-                                builder,
-                                fallback_expr,
-                                Some(SNAIL_EXCEPTION_VAR),
-                            )?,
-                        ],
-                        span,
-                    )
-                    .map_err(py_err_to_lower)?;
-                args.push(fallback_lambda);
-            }
-            let func = name_expr(
-                builder,
-                SNAIL_TRY_HELPER,
-                span,
-                builder.load_ctx().map_err(py_err_to_lower)?,
-            )?;
-            builder
-                .call_node(
-                    "Call",
-                    vec![
-                        func,
-                        PyList::new_bound(builder.py(), args).into_py(builder.py()),
-                        PyList::empty_bound(builder.py()).into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)
-        }
         Expr::Yield { value, span } => {
             let value = value
                 .as_deref()
@@ -1471,12 +1420,6 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
                 count_placeholders(expr, info);
             }
         }
-        Expr::TryExpr { expr, fallback, .. } => {
-            count_placeholders(expr, info);
-            if let Some(fallback) = fallback {
-                count_placeholders(fallback, info);
-            }
-        }
         Expr::Yield { value, .. } => {
             if let Some(value) = value {
                 count_placeholders(value, info);
@@ -1559,10 +1502,38 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
         | Expr::For { .. }
         | Expr::Def { .. }
         | Expr::Class { .. }
-        | Expr::Try { .. }
         | Expr::With { .. }
         | Expr::Awk { .. }
         | Expr::Xargs { .. } => {}
+        Expr::Try {
+            body,
+            handlers,
+            else_body,
+            finally_body,
+            ..
+        } => {
+            count_placeholders_in_stmt_block(body, info);
+            for handler in handlers {
+                if let Some(type_name) = &handler.type_name {
+                    count_placeholders(type_name, info);
+                }
+                count_placeholders_in_stmt_block(&handler.body, info);
+            }
+            if let Some(else_body) = else_body {
+                count_placeholders_in_stmt_block(else_body, info);
+            }
+            if let Some(finally_body) = finally_body {
+                count_placeholders_in_stmt_block(finally_body, info);
+            }
+        }
+    }
+}
+
+fn count_placeholders_in_stmt_block(stmts: &[Stmt], info: &mut PlaceholderInfo) {
+    for stmt in stmts {
+        if let Stmt::Expr { value, .. } = stmt {
+            count_placeholders(value, info);
+        }
     }
 }
 
@@ -1693,17 +1664,6 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                 .iter()
                 .map(|expr| substitute_placeholder(expr, replacement))
                 .collect(),
-            span: span.clone(),
-        },
-        Expr::TryExpr {
-            expr,
-            fallback,
-            span,
-        } => Expr::TryExpr {
-            expr: Box::new(substitute_placeholder(expr, replacement)),
-            fallback: fallback
-                .as_ref()
-                .map(|expr| Box::new(substitute_placeholder(expr, replacement))),
             span: span.clone(),
         },
         Expr::Yield { value, span } => Expr::Yield {
@@ -1900,10 +1860,25 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             finally_body,
             span,
         } => Expr::Try {
-            body: body.clone(),
-            handlers: handlers.clone(),
-            else_body: else_body.clone(),
-            finally_body: finally_body.clone(),
+            body: substitute_placeholder_in_stmt_block(body, replacement),
+            handlers: handlers
+                .iter()
+                .map(|handler| ExceptHandler {
+                    type_name: handler
+                        .type_name
+                        .as_ref()
+                        .map(|expr| substitute_placeholder(expr, replacement)),
+                    name: handler.name.clone(),
+                    body: substitute_placeholder_in_stmt_block(&handler.body, replacement),
+                    span: handler.span.clone(),
+                })
+                .collect(),
+            else_body: else_body
+                .as_ref()
+                .map(|body| substitute_placeholder_in_stmt_block(body, replacement)),
+            finally_body: finally_body
+                .as_ref()
+                .map(|body| substitute_placeholder_in_stmt_block(body, replacement)),
             span: span.clone(),
         },
         Expr::With {
@@ -1974,6 +1949,24 @@ fn substitute_placeholder_in_assign_target(
     }
 }
 
+fn substitute_placeholder_in_stmt_block(stmts: &[Stmt], replacement: &Expr) -> Vec<Stmt> {
+    stmts
+        .iter()
+        .map(|stmt| match stmt {
+            Stmt::Expr {
+                value,
+                semicolon_terminated,
+                span,
+            } => Stmt::Expr {
+                value: substitute_placeholder(value, replacement),
+                semicolon_terminated: *semicolon_terminated,
+                span: span.clone(),
+            },
+            other => other.clone(),
+        })
+        .collect()
+}
+
 fn substitute_placeholder_in_regex(pattern: &RegexPattern, replacement: &Expr) -> RegexPattern {
     match pattern {
         RegexPattern::Literal(text) => RegexPattern::Literal(text.clone()),
@@ -2000,49 +1993,6 @@ fn substitute_placeholder_in_fstring_part(part: &FStringPart, replacement: &Expr
             }),
         }),
     }
-}
-
-fn empty_lambda_args(builder: &AstBuilder<'_>) -> Result<PyObject, LowerError> {
-    builder
-        .call_node_no_loc(
-            "arguments",
-            vec![
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                builder.py().None().into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                builder.py().None().into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-        )
-        .map_err(py_err_to_lower)
-}
-
-fn lambda_args_with_param(builder: &AstBuilder<'_>, name: &str) -> Result<PyObject, LowerError> {
-    let arg = builder
-        .call_node_no_loc(
-            "arg",
-            vec![
-                name.to_string().into_py(builder.py()),
-                builder.py().None().into_py(builder.py()),
-            ],
-        )
-        .map_err(py_err_to_lower)?;
-    builder
-        .call_node_no_loc(
-            "arguments",
-            vec![
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                PyList::new_bound(builder.py(), vec![arg]).into_py(builder.py()),
-                builder.py().None().into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                builder.py().None().into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-            ],
-        )
-        .map_err(py_err_to_lower)
 }
 
 fn dummy_span() -> SourceSpan {

@@ -164,12 +164,6 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
                 check_expr(expr, in_function)?;
             }
         }
-        Expr::TryExpr { expr, fallback, .. } => {
-            check_expr(expr, in_function)?;
-            if let Some(fallback) = fallback {
-                check_expr(fallback, in_function)?;
-            }
-        }
         Expr::Regex { pattern, .. } => check_regex_pattern(pattern, in_function)?,
         Expr::RegexMatch { value, pattern, .. } => {
             check_expr(value, in_function)?;

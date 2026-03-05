@@ -576,17 +576,6 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             }
             *span = shift_span(span, offset, source);
         }
-        Expr::TryExpr {
-            expr,
-            fallback,
-            span,
-        } => {
-            shift_expr_spans(expr, offset, source);
-            if let Some(fallback) = fallback {
-                shift_expr_spans(fallback, offset, source);
-            }
-            *span = shift_span(span, offset, source);
-        }
         Expr::Yield { value, span } => {
             if let Some(value) = value {
                 shift_expr_spans(value, offset, source);

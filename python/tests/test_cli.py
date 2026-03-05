@@ -1914,7 +1914,6 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
     runtime.install_helpers(globals_dict)
 
     expected_keys = {
-        "__snail_compact_try",
         "__snail_compact_try_no_fallback",
         "__snail_regex_search",
         "__snail_regex_compile",
@@ -1944,7 +1943,6 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
     assert set(globals_dict) == expected_keys
 
     lazy_wrapper_names = [
-        "__snail_compact_try",
         "__snail_compact_try_no_fallback",
         "__snail_regex_search",
         "__snail_regex_compile",
@@ -3767,4 +3765,3 @@ def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
     """])
     assert result == 0
     assert captured.out.strip() == "4"
-

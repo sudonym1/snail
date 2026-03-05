@@ -6,8 +6,10 @@ use snail_ast::{
 use snail_error::ParseError;
 
 use crate::Rule;
-use crate::expr::{apply_attr_index_suffix, assign_target_from_expr, parse_expr_pair};
-use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
+use crate::expr::{
+    apply_attr_index_suffix, assign_target_from_expr, parse_compact_try_suffix, parse_expr_pair,
+};
+use crate::util::{error_with_span, span_from_pair};
 
 pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut stmts = Vec::new();
@@ -634,22 +636,7 @@ fn parse_compound_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, 
 
     // Check for optional try_suffix
     if let Some(try_suffix) = inner.next() {
-        let suffix_span = span_from_pair(&try_suffix, source);
-        let mut suffix_inner = try_suffix.into_inner();
-        let fallback = suffix_inner
-            .next()
-            .map(|fb_pair| parse_expr_pair(fb_pair, source))
-            .transpose()?;
-        let try_span = if let Some(ref fb) = fallback {
-            merge_span(&span, expr_span(fb))
-        } else {
-            merge_span(&span, &suffix_span)
-        };
-        value = Expr::TryExpr {
-            expr: Box::new(value),
-            fallback: fallback.map(Box::new),
-            span: try_span,
-        };
+        value = parse_compact_try_suffix(value, try_suffix, source)?;
     }
 
     let semicolon_terminated = check_trailing_semicolon(source, span.end.offset);
