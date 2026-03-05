@@ -11,3 +11,10 @@ def compact_try(expr_fn, fallback_fn=None):
                 return fallback_member()
             return None
         return fallback_fn(exc)
+
+
+def compact_try_no_fallback(exc):
+    fallback_member = getattr(exc, "__fallback__", None)
+    if callable(fallback_member):
+        return fallback_member()
+    return None

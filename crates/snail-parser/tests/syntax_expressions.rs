@@ -446,3 +446,45 @@ fn parses_numeric_attribute_access() {
         other => panic!("Expected attribute access, got {other:?}"),
     }
 }
+
+#[test]
+fn compact_try_on_compound_if() {
+    let program = parse_ok("if True { 1 }?");
+    assert_eq!(program.stmts.len(), 1);
+
+    match expect_expr_stmt(&program.stmts[0]) {
+        Expr::TryExpr { expr, fallback, .. } => {
+            assert!(fallback.is_none());
+            assert!(matches!(expr.as_ref(), Expr::If { .. }));
+        }
+        other => panic!("Expected TryExpr wrapping If, got {other:?}"),
+    }
+}
+
+#[test]
+fn compact_try_on_compound_if_with_fallback() {
+    let program = parse_ok("if True { 1 }:\"fallback\"?");
+    assert_eq!(program.stmts.len(), 1);
+
+    match expect_expr_stmt(&program.stmts[0]) {
+        Expr::TryExpr { expr, fallback, .. } => {
+            assert!(matches!(expr.as_ref(), Expr::If { .. }));
+            assert!(matches!(fallback.as_deref(), Some(Expr::String { .. })));
+        }
+        other => panic!("Expected TryExpr with fallback, got {other:?}"),
+    }
+}
+
+#[test]
+fn compact_try_on_compound_block() {
+    let program = parse_ok("{ raise Exception() }?");
+    assert_eq!(program.stmts.len(), 1);
+
+    match expect_expr_stmt(&program.stmts[0]) {
+        Expr::TryExpr { expr, fallback, .. } => {
+            assert!(fallback.is_none());
+            assert!(matches!(expr.as_ref(), Expr::Block { .. }));
+        }
+        other => panic!("Expected TryExpr wrapping Block, got {other:?}"),
+    }
+}

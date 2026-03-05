@@ -7,7 +7,7 @@ program = { SOI ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ EOI }
 // unless they're the last statement.
 stmt_list = { (stmt_item | segment_break)* ~ final_stmt? }
 stmt_item = _{ compound_expr_stmt ~ stmt_sep* | simple_stmt ~ stmt_sep+ | expr_stmt ~ stmt_sep+ }
-final_stmt = _{ simple_stmt | expr_stmt }
+final_stmt = _{ simple_stmt | compound_expr_stmt | expr_stmt }
 stmt_sep = _{ ";" | "\x1E" }
 segment_break = { "\x1F" ~ stmt_sep* }
 
@@ -16,7 +16,7 @@ stmt = _{ simple_stmt | expr_stmt }
 // Compound expression statement: wraps expr_stmt for expressions that start
 // with compound keywords (if/while/for/class/try/with/awk/xargs) or
 // bare blocks. These don't require trailing separators.
-compound_expr_stmt = { compound_expr }
+compound_expr_stmt = { compound_expr ~ try_suffix? }
 compound_expr = _{ if_expr | while_expr | for_expr | class_expr | try_expr | with_expr | awk_expr | xargs_expr | block }
 
 simple_stmt = _{

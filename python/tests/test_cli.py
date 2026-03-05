@@ -527,6 +527,67 @@ def test_compact_try_default_none(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "True"
 
 
+def test_compact_try_compound_no_fallback(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-P", '(if True { raise Exception("err") })?']) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_compact_try_compound_with_fallback(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-P", 'print((if True { raise Exception("err") }):"caught"?)']) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "caught"
+
+
+def test_compact_try_block_no_fallback(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-P", "print({ raise Exception() }?)"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "None"
+
+
+def test_compact_try_bare_compound_no_parens(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-P", "print(if True { raise Exception() }?)"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "None"
+
+
+def test_compact_try_compound_no_exception(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["-P", "print((if True { 42 } else { 0 })?)"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "42"
+
+
+def test_compact_try_compound_assignment(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'x = (if True { raise Exception() }):"fallback"?; print(x)'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "fallback"
+
+
+def test_compact_try_compound_dollar_e(capsys: pytest.CaptureFixture[str]) -> None:
+    script = 'print((if True { raise Exception("oops") }):$e.args[0]?)'
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "oops"
+
+
+def test_compact_try_compound_dunder_fallback(capsys: pytest.CaptureFixture[str]) -> None:
+    script = "\n".join(
+        [
+            "def fallback_handler() { return 'dunder' }",
+            "def risky() {",
+            "    err = Exception('boom')",
+            "    err.__fallback__ = fallback_handler",
+            "    raise err",
+            "}",
+            "print((if True { risky() })?)",
+        ]
+    )
+    assert main(["-P", script]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "dunder"
+
+
 def test_generator_yield(capsys: pytest.CaptureFixture[str]) -> None:
     script = "\n".join(
         [
@@ -1854,6 +1915,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
 
     expected_keys = {
         "__snail_compact_try",
+        "__snail_compact_try_no_fallback",
         "__snail_regex_search",
         "__snail_regex_compile",
         "__SnailSubprocessCapture",
@@ -1883,6 +1945,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
 
     lazy_wrapper_names = [
         "__snail_compact_try",
+        "__snail_compact_try_no_fallback",
         "__snail_regex_search",
         "__snail_regex_compile",
         "__SnailSubprocessCapture",
@@ -3697,3 +3760,11 @@ def test_break_with_value_auto_print(capsys: pytest.CaptureFixture[str]) -> None
     result, captured = run_cli(capsys, ["while { break 42 }"])
     assert result == 0
     assert captured.out.strip() == "42"
+
+def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["""
+                                        def { try { raise Exception() } except { for i in range(10) { if i==4 { break i} } }}()
+    """])
+    assert result == 0
+    assert captured.out.strip() == "4"
+

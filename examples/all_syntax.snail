@@ -340,6 +340,21 @@ tight_arg = boom():$e?.args[0]
 tight_name = boom():$e?.__class__.__name__
 tight_fallback_boundary = boom():0? + 1
 
+# Compact try with compound expressions (if, block, etc.)
+compound_try_none = (if True { raise Exception("err") })?
+assert compound_try_none is None
+compound_try_fb = (if True { raise Exception("err") }):"caught"?
+assert compound_try_fb == "caught"
+compound_try_ok = (if True { 42 } else { 0 })?
+assert compound_try_ok == 42
+block_try = { raise Exception() }?
+assert block_try is None
+bare_compound_try = if True { raise Exception() }?
+assert bare_compound_try is None
+compound_try_dollar_e = (if True { raise Exception("oops") }):$e.args[0]?
+assert compound_try_dollar_e == "oops"
+print("compound try", compound_try_none, compound_try_fb, compound_try_ok, block_try, bare_compound_try, compound_try_dollar_e)
+
 # ---- Regex literals and matching ----
 text = "abc123"
 regex_match = text in /abc(\d+)/

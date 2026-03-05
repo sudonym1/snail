@@ -49,6 +49,7 @@ _awk_split_cache: dict[tuple[str, bool], re.Pattern[str]] = {}
 
 _GETTER_REGISTRY: dict[str, tuple[str, str, bool]] = {
     "_get_compact_try": (".compact_try", "compact_try", False),
+    "_get_compact_try_no_fallback": (".compact_try", "compact_try_no_fallback", False),
     "_get_regex_search": (".regex", "regex_search", False),
     "_get_regex_compile": (".regex", "regex_compile", False),
     "_get_subprocess_capture": (".subprocess", "SubprocessCapture", False),
@@ -68,6 +69,7 @@ _GETTER_REGISTRY: dict[str, tuple[str, str, bool]] = {
 
 _LAZY_WRAPPER_REGISTRY: dict[str, str] = {
     "_lazy_compact_try": "_get_compact_try",
+    "_lazy_compact_try_no_fallback": "_get_compact_try_no_fallback",
     "_lazy_regex_search": "_get_regex_search",
     "_lazy_regex_compile": "_get_regex_compile",
     "_lazy_subprocess_capture": "_get_subprocess_capture",
@@ -84,6 +86,7 @@ _LAZY_WRAPPER_REGISTRY: dict[str, str] = {
 
 _INSTALL_LAZY_HELPER_REGISTRY: dict[str, str] = {
     "__snail_compact_try": "_lazy_compact_try",
+    "__snail_compact_try_no_fallback": "_lazy_compact_try_no_fallback",
     "__snail_regex_search": "_lazy_regex_search",
     "__snail_regex_compile": "_lazy_regex_compile",
     "__SnailSubprocessCapture": "_lazy_subprocess_capture",
