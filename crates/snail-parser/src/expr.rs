@@ -34,12 +34,12 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         | Rule::product
         | Rule::unary
         | Rule::power
-        | Rule::primary
+        | Rule::postfix
         | Rule::atom
         | Rule::try_fallback
-        | Rule::try_fallback_unary
-        | Rule::try_fallback_power
-        | Rule::try_fallback_primary => parse_expr_rule(pair, source),
+        | Rule::fallback_unary
+        | Rule::fallback_power
+        | Rule::fallback_postfix => parse_expr_rule(pair, source),
         Rule::literal => parse_literal(pair, source),
         Rule::exception_var => Ok(Expr::Name {
             name: pair.as_str().to_string(),
@@ -106,12 +106,11 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
         Rule::product => parse_product(pair, source),
         Rule::unary => parse_unary(pair, source),
         Rule::power => parse_power(pair, source),
-        Rule::primary => parse_primary(pair, source),
+        Rule::postfix | Rule::fallback_postfix => parse_postfix(pair, source),
         Rule::atom => parse_atom(pair, source),
         Rule::try_fallback => parse_expr_rule(pair.into_inner().next().unwrap(), source),
-        Rule::try_fallback_unary => parse_unary(pair, source),
-        Rule::try_fallback_power => parse_power(pair, source),
-        Rule::try_fallback_primary => parse_primary(pair, source),
+        Rule::fallback_unary => parse_unary(pair, source),
+        Rule::fallback_power => parse_power(pair, source),
         Rule::paren_expr => parse_paren_expr(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
         _ => Err(error_with_span(
@@ -527,24 +526,25 @@ fn parse_power(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     Ok(expr)
 }
 
-fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+fn parse_postfix(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
     let atom_pair = inner
         .next()
-        .ok_or_else(|| error_with_span("missing primary", pair_span, source))?;
-    let mut expr = parse_expr_pair(atom_pair, source)?;
-    let mut postfix_seen = false;
+        .ok_or_else(|| error_with_span("missing postfix", pair_span, source))?;
+    let expr = parse_expr_pair(atom_pair, source)?;
+    apply_postfix_ops(expr, inner, source)
+}
+
+pub(crate) fn apply_postfix_ops(
+    mut expr: Expr,
+    pairs: pest::iterators::Pairs<'_, Rule>,
+    source: &str,
+) -> Result<Expr, ParseError> {
     let mut last_was_try = false;
-    for suffix in inner {
+    let mut last_was_postfix_incr = false;
+    for suffix in pairs {
         let suffix_span = span_from_pair(&suffix, source);
-        if postfix_seen {
-            return Err(error_with_span(
-                "postfix increment/decrement must be the final suffix",
-                suffix_span,
-                source,
-            ));
-        }
         match suffix.as_rule() {
             Rule::call => {
                 let args = parse_call(suffix, source)?;
@@ -555,6 +555,7 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                     span,
                 };
                 last_was_try = false;
+                last_was_postfix_incr = false;
             }
             Rule::try_suffix => {
                 if last_was_try {
@@ -566,8 +567,16 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                 }
                 expr = parse_compact_try_suffix(expr, suffix, source)?;
                 last_was_try = true;
+                last_was_postfix_incr = false;
             }
             Rule::postfix_incr => {
+                if last_was_postfix_incr {
+                    return Err(error_with_span(
+                        "cannot apply postfix increment/decrement twice in a row",
+                        suffix_span,
+                        source,
+                    ));
+                }
                 let op = match suffix.as_str() {
                     "++" => IncrOp::Increment,
                     "--" => IncrOp::Decrement,
@@ -591,11 +600,13 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                     target: Box::new(target),
                     span,
                 };
-                postfix_seen = true;
+                last_was_try = false;
+                last_was_postfix_incr = true;
             }
             _ => {
                 expr = apply_attr_index_suffix(expr, suffix, source)?;
                 last_was_try = false;
+                last_was_postfix_incr = false;
             }
         }
     }
@@ -607,10 +618,7 @@ pub(crate) fn parse_compact_try_suffix(
     suffix: Pair<'_, Rule>,
     source: &str,
 ) -> Result<Expr, ParseError> {
-    if matches!(
-        expr,
-        Expr::AugAssign { .. } | Expr::PrefixIncr { .. } | Expr::PostfixIncr { .. }
-    ) {
+    if matches!(expr, Expr::AugAssign { .. }) {
         return Err(error_with_span(
             "compact try cannot wrap a binding expression",
             expr_span(&expr).clone(),
@@ -1084,11 +1092,12 @@ fn restricted_assign_target_from_expr(
     message: &str,
 ) -> Result<AssignTarget, ParseError> {
     let span = expr_span(&expr).clone();
-    let target = assign_target_from_expr(expr, source)?;
-    match target {
-        AssignTarget::Name { .. } | AssignTarget::Attribute { .. } | AssignTarget::Index { .. } => {
-            Ok(target)
-        }
+    match assign_target_from_expr(expr, source) {
+        Ok(
+            target @ (AssignTarget::Name { .. }
+            | AssignTarget::Attribute { .. }
+            | AssignTarget::Index { .. }),
+        ) => Ok(target),
         _ => Err(error_with_span(message, span, source)),
     }
 }

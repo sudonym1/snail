@@ -515,3 +515,38 @@ fn compact_try_on_compound_block() {
     assert!(fallback.is_none());
     assert!(matches!(expr, Expr::Block { .. }));
 }
+
+#[test]
+fn compound_expr_with_method_call() {
+    // Compound expressions now support the full postfix chain
+    let program = parse_ok("if True { x }?.method()");
+    assert_eq!(program.stmts.len(), 1);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Call { func, .. } => match func.as_ref() {
+            Expr::Attribute { value, attr, .. } => {
+                assert_eq!(attr, "method");
+                let (body_expr, fallback) = expect_compact_try(value.as_ref());
+                assert!(fallback.is_none());
+                assert!(matches!(body_expr, Expr::If { .. }));
+            }
+            other => panic!("Expected Attribute, got {other:?}"),
+        },
+        other => panic!("Expected Call, got {other:?}"),
+    }
+
+    // Compound expression with attribute access (no try)
+    let program = parse_ok("{ [1,2,3] }.pop()");
+    assert_eq!(program.stmts.len(), 1);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Call { func, .. } => match func.as_ref() {
+            Expr::Attribute { value, attr, .. } => {
+                assert_eq!(attr, "pop");
+                assert!(matches!(value.as_ref(), Expr::Block { .. }));
+            }
+            other => panic!("Expected Attribute, got {other:?}"),
+        },
+        other => panic!("Expected Call, got {other:?}"),
+    }
+}

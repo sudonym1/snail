@@ -16,7 +16,7 @@ stmt = _{ simple_stmt | expr_stmt }
 // Compound expression statement: wraps expr_stmt for expressions that start
 // with compound keywords (if/while/for/class/try/with/awk/xargs) or
 // bare blocks. These don't require trailing separators.
-compound_expr_stmt = { compound_expr ~ try_suffix? }
+compound_expr_stmt = { compound_expr ~ postfix_op* }
 compound_expr = _{ if_expr | while_expr | for_expr | class_expr | try_expr | with_expr | awk_expr | xargs_expr | block }
 
 simple_stmt = _{
@@ -133,12 +133,12 @@ aug_op = { "+=" | "-=" | "**=" | "*=" | "//=" | "/=" | "%=" }
 
 // Compact try operator: expr? or expr:fallback?
 try_suffix = { try_fallback? ~ "?" }
-try_fallback = { ":" ~ try_fallback_unary }
+try_fallback = { ":" ~ fallback_unary }
 
-// Fallback expression grammar (mirrors unary/power/primary but without try_suffix)
-try_fallback_unary = { ((prefix_incr | unary_op))* ~ try_fallback_power }
-try_fallback_power = { try_fallback_primary ~ (pow_op ~ try_fallback_primary)* }
-try_fallback_primary = { atom ~ (call | attribute | index | postfix_incr)* }
+// Fallback expression grammar (mirrors unary/power/postfix but without try_suffix)
+fallback_unary = { ((prefix_incr | unary_op))* ~ fallback_power }
+fallback_power = { fallback_postfix ~ (pow_op ~ fallback_postfix)* }
+fallback_postfix = { atom ~ postfix_base_op* }
 
 // Boolean operators
 or_expr = { and_expr ~ ("or" ~ and_expr)* }
@@ -165,11 +165,13 @@ mul_op = { "//" | "*" | "/" | "%" }
 unary = { (prefix_incr | unary_op)* ~ power }
 unary_op = { "+" | "-" }
 prefix_incr = { "++" | "--" }
-power = { primary ~ (pow_op ~ primary)* }
+power = { postfix ~ (pow_op ~ postfix)* }
 pow_op = { "**" }
 
-// Primary expressions: atoms with postfix operations
-primary = { atom ~ (call | attribute | index | try_suffix | postfix_incr)* }
+// Postfix expressions: atoms with postfix operations
+postfix = { atom ~ postfix_op* }
+postfix_op = _{ call | attribute | index | try_suffix | postfix_incr }
+postfix_base_op = _{ call | attribute | index | postfix_incr }
 postfix_incr = { "++" | "--" }
 
 // Function calls with positional, keyword, *args, **kwargs

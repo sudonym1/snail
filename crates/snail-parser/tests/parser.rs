@@ -1103,7 +1103,6 @@ fn parser_rejects_prefix_incr_on_try_expr() {
 
 #[test]
 fn parser_rejects_compact_try_on_binding_expressions() {
-    parse_err("x++?");
     parse_err("y:0? *= 3");
     parse_err("x? += 1");
 
@@ -1112,6 +1111,57 @@ fn parser_rejects_compact_try_on_binding_expressions() {
 
     let program = parse_ok("x += y:0?");
     assert_eq!(program.stmts.len(), 1);
+}
+
+#[test]
+fn postfix_incr_with_compact_try() {
+    // x++? is valid: try wrapping the postfix increment
+    let program = parse_ok("x++?");
+    assert_eq!(program.stmts.len(), 1);
+    let (body_expr, fallback) = expect_compact_try(expect_expr_stmt(&program.stmts[0]));
+    assert!(fallback.is_none());
+    match body_expr {
+        Expr::PostfixIncr { op, target, .. } => {
+            assert!(matches!(op, IncrOp::Increment));
+            assert!(matches!(target.as_ref(), AssignTarget::Name { name, .. } if name == "x"));
+        }
+        other => panic!("Expected PostfixIncr, got {other:?}"),
+    }
+}
+
+#[test]
+fn compound_expr_with_full_postfix() {
+    // if True { [1,2,3] }.pop() — compound expr with attribute + call postfix
+    let program = parse_ok("if True { [1,2,3] }.pop()");
+    assert_eq!(program.stmts.len(), 1);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Call { func, .. } => match func.as_ref() {
+            Expr::Attribute { value, attr, .. } => {
+                assert_eq!(attr, "pop");
+                assert!(matches!(value.as_ref(), Expr::If { .. }));
+            }
+            other => panic!("Expected Attribute, got {other:?}"),
+        },
+        other => panic!("Expected Call, got {other:?}"),
+    }
+
+    // if True { x }?.method() — compound expr with try + attribute + call
+    let program = parse_ok("if True { x }?.method()");
+    assert_eq!(program.stmts.len(), 1);
+    let expr = expect_expr_stmt(&program.stmts[0]);
+    match expr {
+        Expr::Call { func, .. } => match func.as_ref() {
+            Expr::Attribute { value, attr, .. } => {
+                assert_eq!(attr, "method");
+                let (body_expr, fallback) = expect_compact_try(value.as_ref());
+                assert!(fallback.is_none());
+                assert!(matches!(body_expr, Expr::If { .. }));
+            }
+            other => panic!("Expected Attribute, got {other:?}"),
+        },
+        other => panic!("Expected Call, got {other:?}"),
+    }
 }
 
 #[test]

@@ -355,6 +355,21 @@ compound_try_dollar_e = (if True { raise Exception("oops") }):$e.args[0]?
 assert compound_try_dollar_e == "oops"
 print("compound try", compound_try_none, compound_try_fb, compound_try_ok, block_try, bare_compound_try, compound_try_dollar_e)
 
+# Compound expressions with full postfix chain (attribute, call, index after })
+compound_method = if True { [1, 2, 3] }.pop()
+assert compound_method == 3
+block_attr = { "hello" }.upper()
+assert block_attr == "HELLO"
+compound_try_method = if True { "hello" }?.upper()
+assert compound_try_method == "HELLO"
+
+# Postfix increment with compact try
+incr_x = 0
+incr_result = incr_x++?
+assert incr_result == 0
+assert incr_x == 1
+print("compound postfix", compound_method, block_attr, compound_try_method, incr_result)
+
 # ---- Regex literals and matching ----
 text = "abc123"
 regex_match = text in /abc(\d+)/

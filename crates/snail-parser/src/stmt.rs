@@ -7,7 +7,7 @@ use snail_error::ParseError;
 
 use crate::Rule;
 use crate::expr::{
-    apply_attr_index_suffix, assign_target_from_expr, parse_compact_try_suffix, parse_expr_pair,
+    apply_attr_index_suffix, apply_postfix_ops, assign_target_from_expr, parse_expr_pair,
 };
 use crate::util::{error_with_span, span_from_pair};
 
@@ -634,10 +634,8 @@ fn parse_compound_expr_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, 
         .ok_or_else(|| error_with_span("missing expression", span.clone(), source))?;
     let mut value = parse_expr_pair(expr_pair, source)?;
 
-    // Check for optional try_suffix
-    if let Some(try_suffix) = inner.next() {
-        value = parse_compact_try_suffix(value, try_suffix, source)?;
-    }
+    // Apply full postfix chain (call, attribute, index, try_suffix, postfix_incr)
+    value = apply_postfix_ops(value, inner, source)?;
 
     let semicolon_terminated = check_trailing_semicolon(source, span.end.offset);
 
