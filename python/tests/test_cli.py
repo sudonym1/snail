@@ -3656,6 +3656,7 @@ def test_try_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "caught"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="/dev/null not available on Windows")
 def test_with_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
     """With statement at program tail prints its body's value."""
     result, captured = run_cli(capsys, ['with open("/dev/null") as f { "ok" }'])
