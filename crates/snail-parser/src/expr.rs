@@ -535,6 +535,7 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
         .ok_or_else(|| error_with_span("missing primary", pair_span, source))?;
     let mut expr = parse_expr_pair(atom_pair, source)?;
     let mut postfix_seen = false;
+    let mut last_was_try = false;
     for suffix in inner {
         let suffix_span = span_from_pair(&suffix, source);
         if postfix_seen {
@@ -553,9 +554,18 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
                     args,
                     span,
                 };
+                last_was_try = false;
             }
             Rule::try_suffix => {
+                if last_was_try {
+                    return Err(error_with_span(
+                        "cannot apply `?` twice in a row",
+                        suffix_span,
+                        source,
+                    ));
+                }
                 expr = parse_compact_try_suffix(expr, suffix, source)?;
+                last_was_try = true;
             }
             Rule::postfix_incr => {
                 let op = match suffix.as_str() {
@@ -585,6 +595,7 @@ fn parse_primary(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
             }
             _ => {
                 expr = apply_attr_index_suffix(expr, suffix, source)?;
+                last_was_try = false;
             }
         }
     }

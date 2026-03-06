@@ -1141,6 +1141,19 @@ fn parser_rejects_compact_try_on_attr_and_index_aug_assign() {
 }
 
 #[test]
+fn parser_rejects_double_try() {
+    // consecutive ?? is never valid
+    parse_err("x??");
+    parse_err("call()??");
+    parse_err("x:0??");
+    parse_err("(if x { y })??");
+
+    // but ? separated by accessors is fine
+    parse_ok("x?.y?");
+    parse_ok("call()?.attr?");
+}
+
+#[test]
 fn parses_list_and_dict_literals_and_comprehensions() {
     let source = "nums = [1, 2, 3]\npairs = %{\"a\": 1, \"b\": 2}\nempty = %{}\nevens = [n for n in nums if n % 2 == 0]\nlookup = %{n: n * 2 for n in nums if n > 1}\n";
     let program = parse_ok(source);
