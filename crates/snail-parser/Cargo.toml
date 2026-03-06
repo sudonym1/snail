@@ -8,3 +8,6 @@ snail-ast = { path = "../snail-ast" }
 snail-error = { path = "../snail-error" }
 pest = "2.7"
 pest_derive = "2.7"
+
+[dev-dependencies]
+proptest = "1.6"
