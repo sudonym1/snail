@@ -2575,33 +2575,12 @@ pub(crate) fn lower_tail_expr(
     let value = lower_expr(builder, expr)?;
     match tail {
         TailBehavior::AutoPrint => build_auto_print_block(builder, value, span),
-        TailBehavior::CaptureOnly => {
-            // Wrap value in __snail_force() to resolve lazy proxy objects
-            // (e.g. $text, $fd in xargs mode) inside try/except scope.
-            let force_fn = name_expr(
-                builder,
-                SNAIL_FORCE_HELPER,
-                span,
-                builder.load_ctx().map_err(py_err_to_lower)?,
-            )?;
-            let forced = builder
-                .call_node(
-                    "Call",
-                    vec![
-                        force_fn,
-                        PyList::new_bound(builder.py(), vec![value]).into_py(builder.py()),
-                        PyList::empty_bound(builder.py()).into_py(builder.py()),
-                    ],
-                    span,
-                )
-                .map_err(py_err_to_lower)?;
-            Ok(vec![assign_name(
-                builder,
-                "__snail_last_result",
-                forced,
-                span,
-            )?])
-        }
+        TailBehavior::CaptureOnly => Ok(vec![assign_name(
+            builder,
+            "__snail_last_result",
+            value,
+            span,
+        )?]),
         TailBehavior::ImplicitReturn => {
             let return_stmt = builder
                 .call_node("Return", vec![value], span)
