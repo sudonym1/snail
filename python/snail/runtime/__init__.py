@@ -264,6 +264,15 @@ def __snail_normalize_sources(*sources):
     return list(source)
 
 
+def __snail_force(value):
+    """Resolve LazyProxy objects to their actual values (no-op for non-proxy)."""
+    from .lazy_proxy import LazyProxy
+
+    if isinstance(value, LazyProxy):
+        return value._proxy_target()
+    return value
+
+
 def __snail_auto_print(value):
     if value is None:
         return
@@ -291,6 +300,7 @@ def install_helpers(globals_dict: dict) -> None:
     globals_dict["__snail_normalize_sources"] = __snail_normalize_sources
     globals_dict["__snail_stdin_args"] = __snail_stdin_args
     globals_dict["__snail_auto_print"] = __snail_auto_print
+    globals_dict["__snail_force"] = __snail_force
 
     for helper_name, getter_name in _INSTALL_EAGER_HELPER_REGISTRY.items():
         globals_dict[helper_name] = _GETTERS[getter_name]()

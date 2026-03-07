@@ -1980,6 +1980,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_normalize_sources",
         "__snail_stdin_args",
         "__snail_auto_print",
+        "__snail_force",
         "__snail_env",
         "js",
         "path",
@@ -3813,3 +3814,60 @@ def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
     """])
     assert result == 0
     assert captured.out.strip() == "4"
+
+
+def test_xargs_compact_try_missing_file_text(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Compact try on $text for missing file should not raise."""
+    missing = tmp_path / "missing.txt"
+    set_stdin(monkeypatch, f"{missing}\n")
+    result = main(["--xargs", "$text?"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_xargs_compact_try_missing_file_text_with_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Compact try with fallback on $text for missing file should print fallback."""
+    missing = tmp_path / "missing.txt"
+    set_stdin(monkeypatch, f"{missing}\n")
+    result = main(["--xargs", '$text:"fallback"?'])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "fallback"
+
+
+def test_xargs_try_except_missing_file_text(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Explicit try/except on $text for missing file should catch."""
+    missing = tmp_path / "missing.txt"
+    set_stdin(monkeypatch, f"{missing}\n")
+    result = main(["--xargs", 'try { $text } except Exception as e { "caught" }'])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "caught"
+
+
+def test_xargs_compact_try_existing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Compact try on $text for existing file should print contents."""
+    f = tmp_path / "exists.txt"
+    f.write_text("hello")
+    set_stdin(monkeypatch, f"{f}\n")
+    result = main(["--xargs", "$text?"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "hello"
