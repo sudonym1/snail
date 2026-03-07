@@ -425,6 +425,33 @@ pub(crate) fn lower_expr_with_exception(
                 ));
             }
             if let Some(py_name) = injected_py_name(name) {
+                // Wrap $text and $fd in __snail_force() to eagerly resolve
+                // LazyProxy objects, so that compact try can catch I/O errors.
+                if name == SNAIL_XARGS_TEXT || name == SNAIL_XARGS_FD {
+                    let func = name_expr(
+                        builder,
+                        SNAIL_FORCE_HELPER,
+                        span,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    )?;
+                    let inner = name_expr(
+                        builder,
+                        py_name,
+                        span,
+                        builder.load_ctx().map_err(py_err_to_lower)?,
+                    )?;
+                    return builder
+                        .call_node(
+                            "Call",
+                            vec![
+                                func,
+                                PyList::new_bound(builder.py(), vec![inner]).into_py(builder.py()),
+                                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                            ],
+                            span,
+                        )
+                        .map_err(py_err_to_lower);
+                }
                 return name_expr(
                     builder,
                     py_name,

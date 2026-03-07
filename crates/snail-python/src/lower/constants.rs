@@ -19,6 +19,7 @@ pub(crate) const SNAIL_LET_KEEP: &str = "__snail_let_keep";
 pub(crate) const SNAIL_COMPARE_LEFT: &str = "__snail_compare_left";
 pub(crate) const SNAIL_COMPARE_RIGHT: &str = "__snail_compare_right";
 pub(crate) const SNAIL_INCR_TMP: &str = "__snail_incr_tmp";
+pub(crate) const SNAIL_FORCE_HELPER: &str = "__snail_force";
 
 // Awk-related constants (public within crate)
 pub(crate) const SNAIL_AWK_NR: &str = "$n";

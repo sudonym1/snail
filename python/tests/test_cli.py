@@ -1981,6 +1981,7 @@ def test_runtime_helpers_installed_in_exec_globals() -> None:
         "__snail_stdin_args",
         "__snail_auto_print",
         "__snail_env",
+        "__snail_force",
         "js",
         "path",
         "ts",
@@ -2611,6 +2612,63 @@ def test_xargs_mode_missing_file_text_access(
     set_stdin(monkeypatch, f"{missing}\n")
     with pytest.raises(FileNotFoundError):
         main(["--xargs", "print($text)"])
+
+
+def test_xargs_mode_text_compact_try_missing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """$text:'fallback'? catches FileNotFoundError on missing files."""
+    missing = tmp_path / "missing.txt"
+    set_stdin(monkeypatch, f"{missing}\n")
+    result = main(["--xargs", '$text:"whoops"?'])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "whoops" in captured.out
+
+
+def test_xargs_mode_fd_compact_try_missing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """$fd:'fallback'? catches FileNotFoundError on missing files."""
+    missing = tmp_path / "missing.txt"
+    set_stdin(monkeypatch, f"{missing}\n")
+    result = main(["--xargs", '$fd:"error"?'])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "error" in captured.out
+
+
+def test_xargs_mode_src_missing_file_still_prints_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """$src on a missing file still prints the path (no I/O)."""
+    missing = tmp_path / "missing.txt"
+    set_stdin(monkeypatch, f"{missing}\n")
+    result = main(["--xargs", "$src"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert str(missing) in captured.out
+
+
+def test_xargs_mode_text_existing_file_still_works(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """$text on an existing file still returns file content."""
+    f = tmp_path / "hello.txt"
+    f.write_text("hello world")
+    set_stdin(monkeypatch, f"{f}\n")
+    result = main(["--xargs", "$text"])
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "hello world" in captured.out
 
 
 def test_xargs_mode_text_content(

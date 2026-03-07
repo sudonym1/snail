@@ -57,6 +57,7 @@ _GETTER_REGISTRY: dict[str, tuple[str, str, bool]] = {
     "_get_js": (".structured_accessor", "js", False),
     "_get_lazy_text_class": (".lazy_text", "LazyText", False),
     "_get_lazy_file_class": (".lazy_file", "LazyFile", False),
+    "_get_force": (".force", "force", False),
     "_get_env_map": (".env", "EnvMap", True),
     "_get_incr_attr": (".augmented", "__snail_incr_attr", False),
     "_get_incr_index": (".augmented", "__snail_incr_index", False),
@@ -99,6 +100,7 @@ _INSTALL_LAZY_HELPER_REGISTRY: dict[str, str] = {
 }
 
 _INSTALL_EAGER_HELPER_REGISTRY: dict[str, str] = {
+    "__snail_force": "_get_force",
     "__snail_env": "_get_env_map",
     "__SnailLazyText": "_get_lazy_text_class",
     "__SnailLazyFile": "_get_lazy_file_class",
