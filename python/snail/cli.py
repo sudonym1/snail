@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import sys
 from types import TracebackType
-from typing import Any, Iterable, Optional, cast
 
 from . import __build_info__, compile_ast, exec
 
@@ -85,7 +84,7 @@ def _install_trimmed_excepthook() -> None:
         except Exception:
             colorize = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
         try:
-            formatted = cast(Iterable[str], cast(Any, tb_exc).format(colorize=colorize))
+            formatted = tb_exc.format(colorize=colorize)  # type: ignore[call-arg]
         except TypeError:
             formatted = tb_exc.format()
         for line in formatted:
@@ -96,7 +95,7 @@ def _install_trimmed_excepthook() -> None:
 
 class _Args:
     def __init__(self) -> None:
-        self.file: Optional[str] = None
+        self.file: str | None = None
         self.awk = False
         self.xargs = False
         self.test = False
@@ -327,7 +326,7 @@ def _parse_args(argv: list[str]) -> _Args:
     return args
 
 
-def _format_version(version: str, build_info: Optional[dict[str, object]]) -> str:
+def _format_version(version: str, build_info: dict[str, object] | None) -> str:
     display_version = version if version.startswith("v") else f"v{version}"
     if not build_info:
         return display_version
@@ -367,7 +366,7 @@ def _print_preprocessor_debug(preprocessed: str) -> None:
     print(preprocessed.replace("\x1e", "❗\n"), end="")
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     if argv is None:
         _install_trimmed_excepthook()
         argv = sys.argv[1:]

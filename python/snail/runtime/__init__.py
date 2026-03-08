@@ -5,13 +5,12 @@ import importlib
 import os
 import re
 import sys
-from typing import Any, Callable, Optional
 
 __all__ = ["install_helpers", "AutoImportDict", "AUTO_IMPORT_NAMES"]
 
 # Names that can be auto-imported when first referenced.
 # Maps name -> (module, attribute) where attribute is None for whole-module imports.
-AUTO_IMPORT_NAMES: dict[str, tuple[str, Optional[str]]] = {
+AUTO_IMPORT_NAMES: dict[str, tuple[str, str | None]] = {
     # Whole module imports: import X
     "sys": ("sys", None),
     "os": ("os", None),
@@ -42,9 +41,9 @@ class AutoImportDict(dict):
         raise KeyError(key)
 
 
-_GETTER_CACHE: dict[str, Any] = {}
-_GETTERS: dict[str, Callable[[], Any]] = {}
-_LAZY_WRAPPERS: dict[str, Callable[..., Any]] = {}
+_GETTER_CACHE: dict = {}
+_GETTERS: dict = {}
+_LAZY_WRAPPERS: dict = {}
 _awk_split_cache: dict[tuple[str, bool], re.Pattern[str]] = {}
 
 _GETTER_REGISTRY: dict[str, tuple[str, str, bool]] = {
@@ -107,15 +106,15 @@ _INSTALL_EAGER_HELPER_REGISTRY: dict[str, str] = {
 }
 
 
-def _load_helper(module_name: str, attr_name: str) -> Any:
+def _load_helper(module_name: str, attr_name: str) -> object:
     module = importlib.import_module(module_name, package=__name__)
     return getattr(module, attr_name)
 
 
 def _make_cached_getter(
     getter_name: str, module_name: str, attr_name: str, *, instantiate: bool
-) -> Callable[[], Any]:
-    def getter() -> Any:
+):
+    def getter():
         value = _GETTER_CACHE.get(getter_name)
         if value is None:
             loaded = _load_helper(module_name, attr_name)
@@ -128,10 +127,10 @@ def _make_cached_getter(
     return getter
 
 
-def _make_lazy_wrapper(wrapper_name: str, getter_name: str) -> Callable[..., Any]:
+def _make_lazy_wrapper(wrapper_name: str, getter_name: str):
     getter = _GETTERS[getter_name]
 
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def wrapper(*args, **kwargs):
         return getter()(*args, **kwargs)
 
     wrapper.__name__ = wrapper_name
@@ -154,7 +153,7 @@ for _wrapper_name, _getter_name in _LAZY_WRAPPER_REGISTRY.items():
 
 
 def __snail_awk_split_internal(
-    line: str, separators: Optional[str], include_whitespace: bool
+    line: str, separators: str | None, include_whitespace: bool
 ):
     if not separators:
         return line.split()
@@ -177,7 +176,7 @@ def __snail_awk_split_internal(
     return regex.split(stripped)
 
 
-def __snail_awk_split(line: str, separators: Optional[str], include_whitespace: bool):
+def __snail_awk_split(line: str, separators: str | None, include_whitespace: bool):
     fields = __snail_awk_split_internal(line, separators, include_whitespace)
     return [f for f in fields if f]
 

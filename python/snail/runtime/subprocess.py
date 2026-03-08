@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Any, cast
 
 
 class SnailExitStatus(int):
     """Subprocess exit status with shell-like truthiness."""
 
     def __new__(cls, rc: int) -> "SnailExitStatus":
-        return cast("SnailExitStatus", super().__new__(cls, rc))
+        return super().__new__(cls, rc)
 
     def __bool__(self) -> bool:
         return int(self) == 0
@@ -36,8 +35,7 @@ def _run_subprocess(cmd: str, input_data=None, *, capture: bool):
     if input_data is not None:
         kwargs["input"] = input_data
 
-    # mypy cannot resolve subprocess.run overloads from dynamic kwargs.
-    return subprocess.run(cmd, **cast(Any, kwargs))
+    return subprocess.run(cmd, **kwargs)  # type: ignore[call-overload]
 
 
 class SubprocessCapture:
