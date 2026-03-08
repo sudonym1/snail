@@ -90,12 +90,13 @@ fn lower_awk_loop(
                     builder.py(),
                     vec![
                         builder
-                            .call_node_no_loc(
+                            .call_node(
                                 "alias",
                                 vec![
                                     "sys".to_string().into_py(builder.py()),
                                     builder.py().None().into_py(builder.py()),
                                 ],
+                                span,
                             )
                             .map_err(py_err_to_lower)?,
                     ],
@@ -222,7 +223,7 @@ fn lower_awk_file_loop_body(
         .map_err(py_err_to_lower)?;
 
     let with_item = builder
-        .call_node_no_loc("withitem", vec![open_source_call, tuple_target])
+        .call_node("withitem", vec![open_source_call, tuple_target], span)
         .map_err(py_err_to_lower)?;
 
     // Build the line loop body

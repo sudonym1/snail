@@ -132,7 +132,9 @@ pub(crate) fn lower_stmt(builder: &AstBuilder<'_>, stmt: &Stmt) -> Result<PyObje
                         .map(|item| lower_import_name(builder, item))
                         .collect::<Result<Vec<_>, _>>()?
                 }
-                ImportFromItems::Star { .. } => vec![lower_import_star(builder)?],
+                ImportFromItems::Star { span: star_span } => {
+                    vec![lower_import_star(builder, star_span)?]
+                }
             };
             let module_name = module
                 .as_ref()
@@ -450,6 +452,7 @@ pub(crate) fn lower_parameters(
     builder: &AstBuilder<'_>,
     params: &[Parameter],
     exception_name: Option<&str>,
+    def_span: &SourceSpan,
 ) -> Result<PyObject, LowerError> {
     let mut args = Vec::new();
     let mut defaults = Vec::new();
@@ -461,15 +464,16 @@ pub(crate) fn lower_parameters(
             Parameter::Regular {
                 name,
                 default,
-                span: _,
+                span,
             } => {
                 let arg = builder
-                    .call_node_no_loc(
+                    .call_node(
                         "arg",
                         vec![
                             name.to_string().into_py(builder.py()),
                             builder.py().None().into_py(builder.py()),
                         ],
+                        span,
                     )
                     .map_err(py_err_to_lower)?;
                 args.push(arg);
@@ -481,26 +485,28 @@ pub(crate) fn lower_parameters(
                     )?);
                 }
             }
-            Parameter::VarArgs { name, .. } => {
+            Parameter::VarArgs { name, span } => {
                 let arg = builder
-                    .call_node_no_loc(
+                    .call_node(
                         "arg",
                         vec![
                             name.to_string().into_py(builder.py()),
                             builder.py().None().into_py(builder.py()),
                         ],
+                        span,
                     )
                     .map_err(py_err_to_lower)?;
                 vararg = Some(arg);
             }
-            Parameter::KwArgs { name, .. } => {
+            Parameter::KwArgs { name, span } => {
                 let arg = builder
-                    .call_node_no_loc(
+                    .call_node(
                         "arg",
                         vec![
                             name.to_string().into_py(builder.py()),
                             builder.py().None().into_py(builder.py()),
                         ],
+                        span,
                     )
                     .map_err(py_err_to_lower)?;
                 kwarg = Some(arg);
@@ -509,7 +515,7 @@ pub(crate) fn lower_parameters(
     }
 
     builder
-        .call_node_no_loc(
+        .call_node(
             "arguments",
             vec![
                 PyList::empty_bound(builder.py()).into_py(builder.py()),
@@ -520,6 +526,7 @@ pub(crate) fn lower_parameters(
                 kwarg.unwrap_or_else(|| builder.py().None().into_py(builder.py())),
                 PyList::new_bound(builder.py(), defaults).into_py(builder.py()),
             ],
+            def_span,
         )
         .map_err(py_err_to_lower)
 }
@@ -571,7 +578,7 @@ pub(crate) fn lower_with_item(
         .transpose()?
         .unwrap_or_else(|| builder.py().None().into_py(builder.py()));
     builder
-        .call_node_no_loc("withitem", vec![context_expr, optional_vars])
+        .call_node("withitem", vec![context_expr, optional_vars], &item.span)
         .map_err(py_err_to_lower)
 }
 
@@ -583,13 +590,17 @@ fn lower_import_name(builder: &AstBuilder<'_>, item: &ImportItem) -> Result<PyOb
         .map(|alias| alias.to_string().into_py(builder.py()))
         .unwrap_or_else(|| builder.py().None().into_py(builder.py()));
     builder
-        .call_node_no_loc("alias", vec![name.into_py(builder.py()), asname])
+        .call_node(
+            "alias",
+            vec![name.into_py(builder.py()), asname],
+            &item.span,
+        )
         .map_err(py_err_to_lower)
 }
 
-fn lower_import_star(builder: &AstBuilder<'_>) -> Result<PyObject, LowerError> {
+fn lower_import_star(builder: &AstBuilder<'_>, span: &SourceSpan) -> Result<PyObject, LowerError> {
     let asname = builder.py().None().into_py(builder.py());
     builder
-        .call_node_no_loc("alias", vec!["*".into_py(builder.py()), asname])
+        .call_node("alias", vec!["*".into_py(builder.py()), asname], span)
         .map_err(py_err_to_lower)
 }

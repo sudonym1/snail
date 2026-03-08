@@ -47,7 +47,7 @@ fn lower_xargs_loop(
     let lazy_file_call = build_lazy_file_call(builder, span)?;
 
     let with_item = builder
-        .call_node_no_loc(
+        .call_node(
             "withitem",
             vec![
                 lazy_file_call,
@@ -58,6 +58,7 @@ fn lower_xargs_loop(
                     builder.store_ctx().map_err(py_err_to_lower)?,
                 )?,
             ],
+            span,
         )
         .map_err(py_err_to_lower)?;
 

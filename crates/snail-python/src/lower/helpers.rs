@@ -5,25 +5,28 @@ use snail_error::LowerError;
 
 use super::constants::{SNAIL_LET_OK, SNAIL_LET_VALUE};
 use super::expr::{lower_assign_target, lower_expr};
-use super::py_ast::{AstBuilder, py_err_to_lower, set_location};
+use super::py_ast::{AstBuilder, py_err_to_lower};
 
-fn parse_literal_expr(
+fn eval_literal(
     builder: &AstBuilder<'_>,
     source: &str,
     span: &SourceSpan,
 ) -> Result<PyObject, LowerError> {
-    let expr = builder
+    let builtins = builder
         .py()
-        .import_bound("ast")
-        .and_then(|ast| ast.getattr("parse"))
-        .and_then(|parse| parse.call1((source,)))
-        .and_then(|module| module.getattr("body"))
-        .and_then(|body| body.get_item(0))
-        .and_then(|expr_stmt| expr_stmt.getattr("value"));
-
-    let expr = expr.map_err(py_err_to_lower)?;
-    set_location(&expr, span).map_err(py_err_to_lower)?;
-    Ok(expr.into_py(builder.py()))
+        .import_bound("builtins")
+        .map_err(py_err_to_lower)?;
+    let code = builtins
+        .getattr("compile")
+        .and_then(|compile| compile.call1((source, "", "eval")))
+        .map_err(py_err_to_lower)?;
+    let value = builtins
+        .getattr("eval")
+        .and_then(|eval| eval.call1((code,)))
+        .map_err(py_err_to_lower)?;
+    builder
+        .call_node("Constant", vec![value.into_py(builder.py())], span)
+        .map_err(py_err_to_lower)
 }
 
 pub(crate) fn assign_name(
@@ -82,7 +85,7 @@ pub(crate) fn string_expr(
         (false, StringDelimiter::TripleSingle) => format!("'''{}'''", value),
         (false, StringDelimiter::TripleDouble) => format!("\"\"\"{}\"\"\"", value),
     };
-    parse_literal_expr(builder, &rendered, span)
+    eval_literal(builder, &rendered, span)
 }
 
 pub(crate) fn byte_string_expr(
@@ -102,7 +105,7 @@ pub(crate) fn byte_string_expr(
         (false, StringDelimiter::TripleSingle) => format!("b'''{}'''", value),
         (false, StringDelimiter::TripleDouble) => format!("b\"\"\"{}\"\"\"", value),
     };
-    parse_literal_expr(builder, &rendered, span)
+    eval_literal(builder, &rendered, span)
 }
 
 pub(crate) fn number_expr(
@@ -110,7 +113,7 @@ pub(crate) fn number_expr(
     value: &str,
     span: &SourceSpan,
 ) -> Result<PyObject, LowerError> {
-    parse_literal_expr(builder, value, span)
+    eval_literal(builder, value, span)
 }
 
 pub(crate) fn regex_pattern_expr(

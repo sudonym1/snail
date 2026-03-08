@@ -17,7 +17,7 @@ impl<'py> AstBuilder<'py> {
         let needs_index_wrapper = major == 3 && minor < 9;
         Ok(Self {
             py,
-            ast: py.import_bound("ast")?,
+            ast: py.import_bound("_ast")?,
             needs_index_wrapper,
         })
     }
@@ -63,12 +63,6 @@ impl<'py> AstBuilder<'py> {
         let tuple = PyTuple::new_bound(self.py, args);
         let node = self.ast.getattr(name)?.call1(tuple)?;
         set_location(&node, span)?;
-        Ok(node.into_py(self.py))
-    }
-
-    pub fn call_node_no_loc(&self, name: &str, args: Vec<PyObject>) -> PyResult<PyObject> {
-        let tuple = PyTuple::new_bound(self.py, args);
-        let node = self.ast.getattr(name)?.call1(tuple)?;
         Ok(node.into_py(self.py))
     }
 

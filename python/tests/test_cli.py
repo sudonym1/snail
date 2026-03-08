@@ -3865,6 +3865,22 @@ def test_break_with_value_auto_print(capsys: pytest.CaptureFixture[str]) -> None
     assert result == 0
     assert captured.out.strip() == "42"
 
+def test_ast_module_not_imported_at_runtime() -> None:
+    """Ensure the ast module is not imported during normal execution."""
+    result = subprocess.run(
+        [
+            sys.executable, "-c",
+            "from snail.cli import main; main([\"'ast' not in __import__('sys').modules\"])",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "True", (
+        f"ast module was imported during snail execution: {result.stderr}"
+    )
+
+
 def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["""
                                         def { try { raise Exception() } except { for i in range(10) { if i==4 { break i} } }}()

@@ -196,7 +196,7 @@ fn lower_regex_pattern_expr(
     match pattern {
         RegexPattern::Literal(text) => regex_pattern_expr(builder, text, span),
         RegexPattern::Interpolated(parts) => {
-            let values = lower_fstring_parts(builder, parts, exception_name)?;
+            let values = lower_fstring_parts(builder, parts, span, exception_name)?;
             builder
                 .call_node(
                     "JoinedStr",
@@ -350,6 +350,7 @@ fn lower_compare_chain(
 fn lower_fstring_parts(
     builder: &AstBuilder<'_>,
     parts: &[FStringPart],
+    span: &SourceSpan,
     exception_name: Option<&str>,
 ) -> Result<Vec<PyObject>, LowerError> {
     let mut lowered = Vec::with_capacity(parts.len());
@@ -357,11 +358,7 @@ fn lower_fstring_parts(
         match part {
             FStringPart::Text(text) => {
                 let const_node = builder
-                    .call_node(
-                        "Constant",
-                        vec![text.clone().into_py(builder.py())],
-                        &dummy_span(),
-                    )
+                    .call_node("Constant", vec![text.clone().into_py(builder.py())], span)
                     .map_err(py_err_to_lower)?;
                 lowered.push(const_node);
             }
@@ -370,23 +367,19 @@ fn lower_fstring_parts(
                 let conversion = fstring_conversion(expr.conversion).into_py(builder.py());
                 let format_spec = match &expr.format_spec {
                     Some(parts) => {
-                        let values = lower_fstring_parts(builder, parts, exception_name)?;
+                        let values = lower_fstring_parts(builder, parts, span, exception_name)?;
                         builder
                             .call_node(
                                 "JoinedStr",
                                 vec![PyList::new_bound(builder.py(), values).into_py(builder.py())],
-                                &dummy_span(),
+                                span,
                             )
                             .map_err(py_err_to_lower)?
                     }
                     None => builder.py().None().into_py(builder.py()),
                 };
                 let formatted = builder
-                    .call_node(
-                        "FormattedValue",
-                        vec![value, conversion, format_spec],
-                        &dummy_span(),
-                    )
+                    .call_node("FormattedValue", vec![value, conversion, format_spec], span)
                     .map_err(py_err_to_lower)?;
                 lowered.push(formatted);
             }
@@ -515,7 +508,7 @@ pub(crate) fn lower_expr_with_exception(
             }
         }
         Expr::FString { parts, bytes, span } => {
-            let values = lower_fstring_parts(builder, parts, exception_name)?;
+            let values = lower_fstring_parts(builder, parts, span, exception_name)?;
             let joined = builder
                 .call_node(
                     "JoinedStr",
@@ -957,7 +950,7 @@ pub(crate) fn lower_expr_with_exception(
                 lowered_ifs.push(lower_expr_with_exception(builder, cond, exception_name)?);
             }
             let comprehension = builder
-                .call_node_no_loc(
+                .call_node(
                     "comprehension",
                     vec![
                         target,
@@ -965,6 +958,7 @@ pub(crate) fn lower_expr_with_exception(
                         PyList::new_bound(builder.py(), lowered_ifs).into_py(builder.py()),
                         0u8.into_py(builder.py()),
                     ],
+                    span,
                 )
                 .map_err(py_err_to_lower)?;
             builder
@@ -1000,7 +994,7 @@ pub(crate) fn lower_expr_with_exception(
                 lowered_ifs.push(lower_expr_with_exception(builder, cond, exception_name)?);
             }
             let comprehension = builder
-                .call_node_no_loc(
+                .call_node(
                     "comprehension",
                     vec![
                         target,
@@ -1008,6 +1002,7 @@ pub(crate) fn lower_expr_with_exception(
                         PyList::new_bound(builder.py(), lowered_ifs).into_py(builder.py()),
                         0u8.into_py(builder.py()),
                     ],
+                    span,
                 )
                 .map_err(py_err_to_lower)?;
             builder
@@ -1309,7 +1304,7 @@ fn lower_subprocess_object(
     span: &SourceSpan,
     exception_name: Option<&str>,
 ) -> Result<PyObject, LowerError> {
-    let values = lower_fstring_parts(builder, parts, exception_name)?;
+    let values = lower_fstring_parts(builder, parts, span, exception_name)?;
     let command = builder
         .call_node(
             "JoinedStr",
@@ -1352,33 +1347,37 @@ pub(super) fn lower_call_arguments(
             Argument::Positional { value, .. } => {
                 positional.push(lower_expr_with_exception(builder, value, exception_name)?);
             }
-            Argument::Keyword { name, value, .. } => {
+            Argument::Keyword {
+                name, value, span, ..
+            } => {
                 let value = lower_expr_with_exception(builder, value, exception_name)?;
                 let keyword = builder
-                    .call_node_no_loc(
+                    .call_node(
                         "keyword",
                         vec![name.to_string().into_py(builder.py()), value],
+                        span,
                     )
                     .map_err(py_err_to_lower)?;
                 keywords.push(keyword);
             }
-            Argument::Star { value, .. } => {
+            Argument::Star { value, span, .. } => {
                 let value = lower_expr_with_exception(builder, value, exception_name)?;
                 let starred = builder
                     .call_node(
                         "Starred",
                         vec![value, builder.load_ctx().map_err(py_err_to_lower)?],
-                        &dummy_span(),
+                        span,
                     )
                     .map_err(py_err_to_lower)?;
                 positional.push(starred);
             }
-            Argument::KwStar { value, .. } => {
+            Argument::KwStar { value, span, .. } => {
                 let value = lower_expr_with_exception(builder, value, exception_name)?;
                 let keyword = builder
-                    .call_node_no_loc(
+                    .call_node(
                         "keyword",
                         vec![builder.py().None().into_py(builder.py()), value],
+                        span,
                     )
                     .map_err(py_err_to_lower)?;
                 keywords.push(keyword);
@@ -2022,21 +2021,6 @@ fn substitute_placeholder_in_fstring_part(part: &FStringPart, replacement: &Expr
     }
 }
 
-fn dummy_span() -> SourceSpan {
-    SourceSpan {
-        start: SourcePos {
-            offset: 0,
-            line: 0,
-            column: 0,
-        },
-        end: SourcePos {
-            offset: 0,
-            line: 0,
-            column: 0,
-        },
-    }
-}
-
 fn lower_for_stmt(
     builder: &AstBuilder<'_>,
     target: &AssignTarget,
@@ -2097,7 +2081,7 @@ fn lower_def_stmt(
     body: &[Stmt],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
-    let args = lower_parameters(builder, params, None)?;
+    let args = lower_parameters(builder, params, None, span)?;
     let body = lower_block_with_implicit_return(builder, body, span)?;
     let decorator_list = PyList::empty_bound(builder.py()).into_py(builder.py());
     let func_node = builder

@@ -81,16 +81,10 @@ fn compile_source(
     if profile {
         log_profile("compile_snail_source", compile_start.elapsed());
     }
-    let ast_start = Instant::now();
-    let ast = py.import_bound("ast")?;
-    let fixed = ast
-        .getattr("fix_missing_locations")?
-        .call1((module.clone_ref(py),))?;
     if profile {
-        log_profile("fix_missing_locations", ast_start.elapsed());
         log_profile("compile_source_total", total_start.elapsed());
     }
-    Ok(fixed.into_py(py))
+    Ok(module)
 }
 
 fn prepare_globals<'py>(
