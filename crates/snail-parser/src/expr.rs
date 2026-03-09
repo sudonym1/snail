@@ -1292,13 +1292,28 @@ fn parse_class_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
         .ok_or_else(|| error_with_span("missing class name", span.clone(), source))?
         .as_str()
         .to_string();
-    let body = parse_block(
-        inner
+    let next = inner
+        .next()
+        .ok_or_else(|| error_with_span("missing class block", span.clone(), source))?;
+    let (bases, body_pair) = if next.as_rule() == Rule::class_bases {
+        let bases = next
+            .into_inner()
+            .map(|p| parse_expr_pair(p, source))
+            .collect::<Result<Vec<_>, _>>()?;
+        let bp = inner
             .next()
-            .ok_or_else(|| error_with_span("missing class block", span.clone(), source))?,
-        source,
-    )?;
-    Ok(Expr::Class { name, body, span })
+            .ok_or_else(|| error_with_span("missing class block", span.clone(), source))?;
+        (bases, bp)
+    } else {
+        (Vec::new(), next)
+    };
+    let body = parse_block(body_pair, source)?;
+    Ok(Expr::Class {
+        name,
+        bases,
+        body,
+        span,
+    })
 }
 
 fn parse_try_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {

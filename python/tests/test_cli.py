@@ -3880,6 +3880,94 @@ def test_ast_module_not_imported_at_runtime() -> None:
         f"ast module was imported during snail execution: {result.stderr}"
     )
 
+# ---- Class inheritance tests ----
+
+def test_class_single_inheritance(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["""
+class Animal {
+    def __init__(self, name) { self.name = name }
+    def speak(self) { return "..." }
+}
+class Dog(Animal) {
+    def speak(self) { return self.name + " says woof" }
+}
+d = Dog("Rex")
+print(d.speak())
+print(isinstance(d, Animal))
+    """])
+    assert result == 0
+    lines = captured.out.strip().splitlines()
+    assert lines[0] == "Rex says woof"
+    assert lines[1] == "True"
+
+def test_class_multiple_inheritance(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["""
+class A {
+    def greet(self) { return "hello" }
+}
+class B {
+    def farewell(self) { return "bye" }
+}
+class C(A, B) {
+    pass
+}
+c = C()
+print(c.greet(), c.farewell())
+    """])
+    assert result == 0
+    assert captured.out.strip() == "hello bye"
+
+def test_class_super_call(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["""
+class Base {
+    def __init__(self, x) { self.x = x }
+}
+class Child(Base) {
+    def __init__(self, x, y) {
+        super().__init__(x)
+        self.y = y
+    }
+}
+c = Child(1, 2)
+print(c.x, c.y)
+    """])
+    assert result == 0
+    assert captured.out.strip() == "1 2"
+
+def test_class_empty_parens(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["""
+class Foo() {
+    def bar(self) { return 42 }
+}
+print(Foo().bar())
+    """])
+    assert result == 0
+    assert captured.out.strip() == "42"
+
+def test_class_no_bases_backward_compat(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["""
+class Foo {
+    def bar(self) { return 99 }
+}
+print(Foo().bar())
+    """])
+    assert result == 0
+    assert captured.out.strip() == "99"
+
+def test_class_compact_try_base(capsys: pytest.CaptureFixture[str]) -> None:
+    """Compact try as a base class expression."""
+    result, captured = run_cli(capsys, ["""
+class Fallback {
+    def val(self) { return "fallback" }
+}
+def get_base() { raise Exception("nope") }
+class Foo(get_base():Fallback?) {
+    pass
+}
+print(Foo().val())
+    """])
+    assert result == 0
+    assert captured.out.strip() == "fallback"
 
 def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["""

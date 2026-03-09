@@ -424,6 +424,27 @@ counter = Counter(10)
 value = counter.inc(5)
 ```
 
+### Inheritance
+Specify base classes in parentheses after the class name:
+```snail
+class Animal {
+    def __init__(self, name) { self.name = name }
+    def speak(self) { return "..." }
+}
+class Dog(Animal) {
+    def speak(self) { return self.name + " says woof" }
+}
+class C(A, B) { pass }           # multiple inheritance
+class Foo() { pass }              # empty parens (same as no bases)
+class Foo(mod.Bar, Baz,) { pass } # dotted names, trailing comma ok
+```
+
+Parentheses are optional — `class Foo { }` continues to work. Base expressions
+are full expressions, so function calls and compact try work:
+```snail
+class Foo(get_base():FallbackBase?) { pass }
+```
+
 ## Control flow
 `if`/`elif`/`else` blocks, `for`/`while` loops, and loop `else` clauses behave
 like Python. `break` and `continue` are valid inside `try` blocks. Examples:

@@ -45,7 +45,8 @@ let_guard = { ";" ~ expr }
 
 // Function and class definitions (now expressions)
 def_expr = { "def" ~ (identifier ~ parameters? | parameters)? ~ block }
-class_expr = { "class" ~ identifier ~ block }
+class_expr = { "class" ~ identifier ~ class_bases? ~ block }
+class_bases = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ","? ~ ")" }
 
 // Exception handling (now expression): try/except/else/finally
 try_expr = { "try" ~ block ~ (try_except_tail | try_finally_tail) }
