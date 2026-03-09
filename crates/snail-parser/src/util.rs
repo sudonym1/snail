@@ -167,6 +167,7 @@ pub fn expr_span(expr: &snail_ast::Expr) -> &SourceSpan {
         | snail_ast::Expr::Dict { span, .. }
         | snail_ast::Expr::ListComp { span, .. }
         | snail_ast::Expr::DictComp { span, .. }
+        | snail_ast::Expr::GeneratorExpr { span, .. }
         | snail_ast::Expr::Slice { span, .. }
         | snail_ast::Expr::Block { span, .. }
         | snail_ast::Expr::If { span, .. }

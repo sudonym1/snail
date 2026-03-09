@@ -1017,6 +1017,48 @@ pub(crate) fn lower_expr_with_exception(
                 )
                 .map_err(py_err_to_lower)
         }
+        Expr::GeneratorExpr {
+            element,
+            target,
+            iter,
+            ifs,
+            span,
+        } => {
+            let element = lower_expr_with_exception(builder, element, exception_name)?;
+            let target = name_expr(
+                builder,
+                target,
+                span,
+                builder.store_ctx().map_err(py_err_to_lower)?,
+            )?;
+            let iter = lower_expr_with_exception(builder, iter, exception_name)?;
+            let mut lowered_ifs = Vec::with_capacity(ifs.len());
+            for cond in ifs {
+                lowered_ifs.push(lower_expr_with_exception(builder, cond, exception_name)?);
+            }
+            let comprehension = builder
+                .call_node(
+                    "comprehension",
+                    vec![
+                        target,
+                        iter,
+                        PyList::new_bound(builder.py(), lowered_ifs).into_py(builder.py()),
+                        0u8.into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)?;
+            builder
+                .call_node(
+                    "GeneratorExp",
+                    vec![
+                        element,
+                        PyList::new_bound(builder.py(), vec![comprehension]).into_py(builder.py()),
+                    ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
         Expr::Slice { start, end, span } => {
             let start = start
                 .as_deref()
@@ -1500,6 +1542,9 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
         }
         Expr::ListComp {
             element, iter, ifs, ..
+        }
+        | Expr::GeneratorExpr {
+            element, iter, ifs, ..
         } => {
             count_placeholders(element, info);
             count_placeholders(iter, info);
@@ -1791,6 +1836,22 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             ifs,
             span,
         } => Expr::ListComp {
+            element: Box::new(substitute_placeholder(element, replacement)),
+            target: target.clone(),
+            iter: Box::new(substitute_placeholder(iter, replacement)),
+            ifs: ifs
+                .iter()
+                .map(|expr| substitute_placeholder(expr, replacement))
+                .collect(),
+            span: span.clone(),
+        },
+        Expr::GeneratorExpr {
+            element,
+            target,
+            iter,
+            ifs,
+            span,
+        } => Expr::GeneratorExpr {
             element: Box::new(substitute_placeholder(element, replacement)),
             target: target.clone(),
             iter: Box::new(substitute_placeholder(iter, replacement)),

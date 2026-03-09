@@ -2428,3 +2428,85 @@ fn parses_class_function_call_as_base() {
         other => panic!("Expected class, got {other:?}"),
     }
 }
+
+#[test]
+fn parses_standalone_generator_expr() {
+    let source = "g = (x for x in nums)";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::GeneratorExpr {
+            element,
+            target,
+            iter,
+            ifs,
+            ..
+        } => {
+            expect_name(element.as_ref(), "x");
+            assert_eq!(target, "x");
+            expect_name(iter.as_ref(), "nums");
+            assert!(ifs.is_empty());
+        }
+        other => panic!("Expected generator expr, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_generator_expr_with_filter() {
+    let source = "g = (x for x in nums if x > 0)";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::GeneratorExpr { ifs, .. } => {
+            assert_eq!(ifs.len(), 1);
+        }
+        other => panic!("Expected generator expr with filter, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_generator_as_sole_call_arg() {
+    let source = "sum(x for x in nums)";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Call { args, .. } => {
+            assert_eq!(args.len(), 1);
+            match &args[0] {
+                Argument::Positional { value, .. } => {
+                    assert!(matches!(value, Expr::GeneratorExpr { .. }));
+                }
+                other => panic!("Expected positional arg, got {other:?}"),
+            }
+        }
+        other => panic!("Expected call, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_explicit_generator_among_args() {
+    let source = "func((x for x in nums), y)";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Call { args, .. } => {
+            assert_eq!(args.len(), 2);
+            match &args[0] {
+                Argument::Positional { value, .. } => {
+                    assert!(matches!(value, Expr::GeneratorExpr { .. }));
+                }
+                other => panic!("Expected positional genexpr arg, got {other:?}"),
+            }
+        }
+        other => panic!("Expected call, got {other:?}"),
+    }
+}
+
+#[test]
+fn paren_and_tuple_still_parse_correctly() {
+    // (x) is still Paren, not GeneratorExpr
+    let source = "a = (x)\nb = (x,)";
+    let program = parse_ok(source);
+    let (_, v1) = expect_assign(&program.stmts[0]);
+    assert!(matches!(v1, Expr::Paren { .. }));
+    let (_, v2) = expect_assign(&program.stmts[1]);
+    assert!(matches!(v2, Expr::Tuple { .. }));
+}

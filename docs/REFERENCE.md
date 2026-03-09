@@ -491,10 +491,13 @@ if let [user, domain] = pair; domain {
 
 ## Comprehensions
 List comprehensions match Python's structure, and dict comprehensions use the
-same `key: value` form inside `%{...}`:
+same `key: value` form inside `%{...}`. Generator expressions use parentheses
+and can be passed directly as a function's sole argument without extra parens:
 ```snail
 evens = [n for n in nums if n % 2 == 0]
 lookup = %{n: n * 2 for n in nums if n > 1}
+total = sum(x for x in nums)
+doubled = list((x * 2 for x in nums))
 ```
 
 ## Strings

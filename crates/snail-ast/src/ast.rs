@@ -296,6 +296,13 @@ pub enum Expr {
         ifs: Vec<Expr>,
         span: SourceSpan,
     },
+    GeneratorExpr {
+        element: Box<Expr>,
+        target: String,
+        iter: Box<Expr>,
+        ifs: Vec<Expr>,
+        span: SourceSpan,
+    },
     Block {
         stmts: Vec<Stmt>,
         span: SourceSpan,

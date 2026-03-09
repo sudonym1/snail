@@ -210,6 +210,9 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
         }
         Expr::ListComp {
             element, iter, ifs, ..
+        }
+        | Expr::GeneratorExpr {
+            element, iter, ifs, ..
         } => {
             check_expr(element, in_function)?;
             check_expr(iter, in_function)?;

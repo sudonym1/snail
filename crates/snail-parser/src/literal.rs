@@ -171,6 +171,38 @@ pub fn parse_comp_for(
     Ok((target, iter, ifs))
 }
 
+pub fn parse_generator_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let element =
+        parse_required_comp_expr(&mut inner, &span, source, "missing generator expr element")?;
+    let (target, iter, ifs) =
+        parse_required_comp_for(&mut inner, &span, source, "missing generator expr for")?;
+    Ok(Expr::GeneratorExpr {
+        element: Box::new(element),
+        target,
+        iter: Box::new(iter),
+        ifs,
+        span,
+    })
+}
+
+pub fn parse_call_genexpr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut inner = pair.into_inner();
+    let element =
+        parse_required_comp_expr(&mut inner, &span, source, "missing call genexpr element")?;
+    let (target, iter, ifs) =
+        parse_required_comp_for(&mut inner, &span, source, "missing call genexpr for")?;
+    Ok(Expr::GeneratorExpr {
+        element: Box::new(element),
+        target,
+        iter: Box::new(iter),
+        ifs,
+        span,
+    })
+}
+
 pub fn parse_regex_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
     let text = pair.as_str();

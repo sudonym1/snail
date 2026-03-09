@@ -904,6 +904,22 @@ impl Desugarer {
                     .collect(),
                 span: span.clone(),
             },
+            Expr::GeneratorExpr {
+                element,
+                target,
+                iter,
+                ifs,
+                span,
+            } => Expr::GeneratorExpr {
+                element: Box::new(self.desugar_expr(element, prelude)),
+                target: target.clone(),
+                iter: Box::new(self.desugar_expr(iter, prelude)),
+                ifs: ifs
+                    .iter()
+                    .map(|expr| self.desugar_expr(expr, prelude))
+                    .collect(),
+                span: span.clone(),
+            },
             Expr::Block { stmts, span } => Expr::Block {
                 stmts: self.desugar_block(stmts),
                 span: span.clone(),

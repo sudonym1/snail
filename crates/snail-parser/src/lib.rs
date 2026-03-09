@@ -388,6 +388,9 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
         }
         Expr::ListComp {
             element, iter, ifs, ..
+        }
+        | Expr::GeneratorExpr {
+            element, iter, ifs, ..
         } => {
             validate_expr_mode(element, source, mode)?;
             validate_expr_mode(iter, source, mode)?;
