@@ -2428,3 +2428,87 @@ fn parses_class_function_call_as_base() {
         other => panic!("Expected class, got {other:?}"),
     }
 }
+
+// ---- Decorator tests ----
+
+#[test]
+fn parses_single_decorator_on_def() {
+    let source = "@my_decorator\ndef foo() { 1 }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def {
+            name, decorators, ..
+        } => {
+            assert_eq!(name, &Some("foo".to_string()));
+            assert_eq!(decorators.len(), 1);
+            expect_name(&decorators[0], "my_decorator");
+        }
+        other => panic!("Expected decorated def, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_single_decorator_on_class() {
+    let source = "@my_decorator\nclass Foo { pass }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Class {
+            name, decorators, ..
+        } => {
+            assert_eq!(name, "Foo");
+            assert_eq!(decorators.len(), 1);
+            expect_name(&decorators[0], "my_decorator");
+        }
+        other => panic!("Expected decorated class, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_multiple_decorators() {
+    let source = "@dec1\n@dec2\ndef foo() { 1 }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { decorators, .. } => {
+            assert_eq!(decorators.len(), 2);
+            expect_name(&decorators[0], "dec1");
+            expect_name(&decorators[1], "dec2");
+        }
+        other => panic!("Expected decorated def, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_decorator_with_arguments() {
+    let source = "@app.route(\"/\")\ndef index() { 1 }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { decorators, .. } => {
+            assert_eq!(decorators.len(), 1);
+            match &decorators[0] {
+                Expr::Call { func, .. } => {
+                    assert!(matches!(func.as_ref(), Expr::Attribute { .. }));
+                }
+                other => panic!("Expected Call decorator, got {other:?}"),
+            }
+        }
+        other => panic!("Expected decorated def, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_decorator_with_call_expression() {
+    let source = "@decorator()\ndef foo() { 1 }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { decorators, .. } => {
+            assert_eq!(decorators.len(), 1);
+            assert!(matches!(&decorators[0], Expr::Call { .. }));
+        }
+        other => panic!("Expected decorated def, got {other:?}"),
+    }
+}

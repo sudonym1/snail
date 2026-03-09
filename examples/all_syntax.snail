@@ -46,6 +46,81 @@ class SimpleCtx {
     }
 }
 
+# ---- Decorators ----
+def double_result(func) {
+    def wrapper(*args, **kwargs) {
+        return func(*args, **kwargs) * 2
+    }
+    return wrapper
+}
+
+@double_result
+def compute_sum(a, b) { a + b }
+assert compute_sum(1, 2) == 6
+
+# Decorator with arguments
+def multiply_by(n) {
+    def decorator(func) {
+        def wrapper(*args, **kwargs) {
+            return func(*args, **kwargs) * n
+        }
+        return wrapper
+    }
+    return decorator
+}
+
+@multiply_by(3)
+def triple_add(a, b) { a + b }
+assert triple_add(1, 2) == 9
+
+# Multiple stacked decorators
+order = []
+def dec_a(func) {
+    def wrapper(*args, **kwargs) {
+        order.append("a")
+        return func(*args, **kwargs)
+    }
+    return wrapper
+}
+def dec_b(func) {
+    def wrapper(*args, **kwargs) {
+        order.append("b")
+        return func(*args, **kwargs)
+    }
+    return wrapper
+}
+
+@dec_a
+@dec_b
+def decorated_fn() { return "ok" }
+decorated_fn()
+assert order == ["a", "b"]
+
+# Decorator on class
+def add_method(cls) {
+    cls.added = def(self) { return "added" }
+    return cls
+}
+
+@add_method
+class Decorated {
+    pass
+}
+assert Decorated().added() == "added"
+
+# @staticmethod and @classmethod
+class WithStatic {
+    @staticmethod
+    def static_m() { return "static" }
+
+    @classmethod
+    def class_m(cls) { return cls.__name__ }
+}
+assert WithStatic.static_m() == "static"
+assert WithStatic.class_m() == "WithStatic"
+
+print("decorators ok")
+
 # ---- Class inheritance ----
 class Animal {
     def __init__(self, name) { self.name = name }
