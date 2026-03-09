@@ -177,7 +177,10 @@ fn validate_param_mode(
                 validate_expr_mode(default, source, mode)?;
             }
         }
-        Parameter::VarArgs { .. } | Parameter::KwArgs { .. } => {}
+        Parameter::VarArgs { .. }
+        | Parameter::KwArgs { .. }
+        | Parameter::PosonlySep { .. }
+        | Parameter::KwonlySep { .. } => {}
     }
     Ok(())
 }

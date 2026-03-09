@@ -80,13 +80,15 @@ with_expr = { "with" ~ with_items ~ block }
 with_items = { with_item ~ ("," ~ with_item)* }
 with_item = { expr ~ ("as" ~ assign_target)? }
 
-// Function parameters: regular, *args, **kwargs
+// Function parameters: regular, *args, **kwargs, /, *
 parameters = { "(" ~ param_list? ~ ")" }
 param_list = { parameter ~ ("," ~ parameter)* ~ ","? }
-parameter = _{ regular_param | star_param | kw_param }
+parameter = _{ regular_param | star_param | kw_param | posonly_sep | kwonly_sep }
 regular_param = { identifier ~ ("=" ~ expr)? }
 star_param = { "*" ~ identifier }
 kw_param = { "**" ~ identifier }
+posonly_sep = { "/" }
+kwonly_sep = { "*" }
 
 // Simple statements
 return_stmt = { "return" ~ expr? }

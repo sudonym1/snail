@@ -4120,3 +4120,45 @@ print("ok")
 '''
     assert main([code]) == 0
     assert "ok" in capsys.readouterr().out
+
+
+def test_positional_only_params(capsys: pytest.CaptureFixture[str]) -> None:
+    code = 'def f(a, b, /, c) { return (a, b, c) }\nprint(f(1, 2, c=3))'
+    assert main(["-P", code]) == 0
+    assert "(1, 2, 3)" in capsys.readouterr().out
+
+
+def test_positional_only_rejects_keyword() -> None:
+    code = 'def f(a, /) { return a }\nf(a=1)'
+    with pytest.raises(TypeError, match="positional-only"):
+        main(["-P", code])
+
+
+def test_keyword_only_params(capsys: pytest.CaptureFixture[str]) -> None:
+    code = 'def f(a, *, b) { return (a, b) }\nprint(f(1, b=2))'
+    assert main(["-P", code]) == 0
+    assert "(1, 2)" in capsys.readouterr().out
+
+
+def test_keyword_only_rejects_positional() -> None:
+    code = 'def f(a, *, b) { return (a, b) }\nf(1, 2)'
+    with pytest.raises(TypeError, match="positional argument"):
+        main(["-P", code])
+
+
+def test_combined_posonly_kwonly(capsys: pytest.CaptureFixture[str]) -> None:
+    code = 'def f(a, /, b, *, c) { return (a, b, c) }\nprint(f(1, 2, c=3))'
+    assert main(["-P", code]) == 0
+    assert "(1, 2, 3)" in capsys.readouterr().out
+
+
+def test_posonly_with_defaults(capsys: pytest.CaptureFixture[str]) -> None:
+    code = 'def f(a, b=10, /, c=20) { return (a, b, c) }\nprint(f(1))'
+    assert main(["-P", code]) == 0
+    assert "(1, 10, 20)" in capsys.readouterr().out
+
+
+def test_star_args_makes_following_kwonly(capsys: pytest.CaptureFixture[str]) -> None:
+    code = 'def f(a, *args, b) { return (a, args, b) }\nprint(f(1, 2, 3, b=4))'
+    assert main(["-P", code]) == 0
+    assert "(1, (2, 3), 4)" in capsys.readouterr().out

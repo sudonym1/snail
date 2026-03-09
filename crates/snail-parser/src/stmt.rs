@@ -695,7 +695,12 @@ fn parse_param_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Parameter>
     for inner in pair.into_inner() {
         if matches!(
             inner.as_rule(),
-            Rule::parameter | Rule::regular_param | Rule::star_param | Rule::kw_param
+            Rule::parameter
+                | Rule::regular_param
+                | Rule::star_param
+                | Rule::kw_param
+                | Rule::posonly_sep
+                | Rule::kwonly_sep
         ) {
             params.push(parse_parameter(inner, source)?);
         }
@@ -748,6 +753,8 @@ fn parse_parameter(pair: Pair<'_, Rule>, source: &str) -> Result<Parameter, Pars
                 .to_string();
             Ok(Parameter::KwArgs { name, span })
         }
+        Rule::posonly_sep => Ok(Parameter::PosonlySep { span }),
+        Rule::kwonly_sep => Ok(Parameter::KwonlySep { span }),
         _ => Err(error_with_span(
             format!("unsupported parameter: {:?}", pair.as_rule()),
             span,

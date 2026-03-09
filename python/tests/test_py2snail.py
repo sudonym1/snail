@@ -431,8 +431,8 @@ class TestUnsupported:
             translate("a @= b\n")
 
     def test_positional_only_params(self) -> None:
-        with pytest.raises(Py2SnailError, match="positional-only"):
-            translate("def f(a, /, b):\n    pass\n")
+        result = translate("def f(a, /, b):\n    pass\n")
+        assert "a, /, b" in result
 
     @pytest.mark.skipif(sys.version_info < (3, 12), reason="type statement requires 3.12+")
     def test_type_alias(self) -> None:

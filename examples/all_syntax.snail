@@ -201,6 +201,19 @@ def add_suppressed(a, b) {
 print("implicit return", add(1, 2))
 print("implicit return suppressed", add_suppressed(1, 2))
 
+# Positional-only and keyword-only parameter separators
+def posonly(a, b, /, c) { return (a, b, c) }
+assert posonly(1, 2, c=3) == (1, 2, 3)
+
+def kwonly(a, *, b) { return (a, b) }
+assert kwonly(1, b=2) == (1, 2)
+
+def both(a, /, b, *, c) { return (a, b, c) }
+assert both(1, 2, c=3) == (1, 2, 3)
+assert both(1, b=2, c=3) == (1, 2, 3)
+
+print("param separators ok")
+
 # Default args, *args, **kwargs
 # (note: space after * is allowed in Snail)
 def join_all(head, tail=0, * rest, **extras) {

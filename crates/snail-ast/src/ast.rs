@@ -449,6 +449,12 @@ pub enum Parameter {
         name: String,
         span: SourceSpan,
     },
+    PosonlySep {
+        span: SourceSpan,
+    },
+    KwonlySep {
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

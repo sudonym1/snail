@@ -734,15 +734,9 @@ class SnailUnparser(ast.NodeVisitor):
     def _format_args(self, args: ast.arguments) -> str:
         """Format function arguments, stripping type annotations."""
         parts: list[str] = []
-        # positional-only args (before /)
+        # positional-only args (before /) and regular args
         posonlyargs = getattr(args, "posonlyargs", [])
-        if posonlyargs:
-            raise Py2SnailError(
-                "positional-only parameters (/) are not supported by Snail"
-            )
-
-        # defaults alignment: defaults are right-aligned to args
-        all_positional = list(args.args)
+        all_positional = list(posonlyargs) + list(args.args)
         num_defaults = len(args.defaults)
         default_offset = len(all_positional) - num_defaults
 
@@ -752,6 +746,9 @@ class SnailUnparser(ast.NodeVisitor):
             if di >= 0 and di < len(args.defaults):
                 s += f"={self._expr(args.defaults[di])}"
             parts.append(s)
+            # Insert / separator after the last positional-only arg
+            if posonlyargs and i == len(posonlyargs) - 1:
+                parts.append("/")
 
         if args.vararg:
             parts.append(f"*{_mangle(args.vararg.arg)}")

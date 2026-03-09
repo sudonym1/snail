@@ -454,10 +454,26 @@ pub(crate) fn lower_parameters(
     exception_name: Option<&str>,
     def_span: &SourceSpan,
 ) -> Result<PyObject, LowerError> {
+    // State machine for partitioning params into Python AST buckets.
+    // Positional → (after /) Normal → (after * or *args) KeywordOnly
+    #[derive(PartialEq)]
+    enum State {
+        Positional,
+        Normal,
+        KeywordOnly,
+    }
+
+    let mut state = State::Positional;
+    let mut posonlyargs = Vec::new();
+    let mut posonly_defaults = Vec::new();
     let mut args = Vec::new();
     let mut defaults = Vec::new();
     let mut vararg = None;
+    let mut kwonlyargs = Vec::new();
+    let mut kw_defaults: Vec<PyObject> = Vec::new();
     let mut kwarg = None;
+    let mut seen_posonly_sep = false;
+    let mut seen_kwonly_sep = false;
 
     for param in params {
         match param {
@@ -476,16 +492,30 @@ pub(crate) fn lower_parameters(
                         span,
                     )
                     .map_err(py_err_to_lower)?;
-                args.push(arg);
-                if let Some(default_expr) = default {
-                    defaults.push(lower_expr_with_exception(
-                        builder,
-                        default_expr,
-                        exception_name,
-                    )?);
+                let lowered_default = default
+                    .as_ref()
+                    .map(|d| lower_expr_with_exception(builder, d, exception_name))
+                    .transpose()?;
+                match state {
+                    State::Positional | State::Normal => {
+                        args.push(arg);
+                        if let Some(d) = lowered_default {
+                            defaults.push(d);
+                        }
+                    }
+                    State::KeywordOnly => {
+                        kwonlyargs.push(arg);
+                        kw_defaults.push(
+                            lowered_default
+                                .unwrap_or_else(|| builder.py().None().into_py(builder.py())),
+                        );
+                    }
                 }
             }
             Parameter::VarArgs { name, span } => {
+                if state == State::KeywordOnly {
+                    return Err(LowerError::new("* or *args cannot appear after *args"));
+                }
                 let arg = builder
                     .call_node(
                         "arg",
@@ -496,6 +526,7 @@ pub(crate) fn lower_parameters(
                         span,
                     )
                     .map_err(py_err_to_lower)?;
+                state = State::KeywordOnly;
                 vararg = Some(arg);
             }
             Parameter::KwArgs { name, span } => {
@@ -511,20 +542,51 @@ pub(crate) fn lower_parameters(
                     .map_err(py_err_to_lower)?;
                 kwarg = Some(arg);
             }
+            Parameter::PosonlySep { .. } => {
+                if seen_posonly_sep {
+                    return Err(LowerError::new("duplicate / separator"));
+                }
+                if state == State::KeywordOnly {
+                    return Err(LowerError::new("/ must appear before * or *args"));
+                }
+                seen_posonly_sep = true;
+                // Move all args collected so far to posonlyargs
+                posonlyargs.append(&mut args);
+                posonly_defaults.append(&mut defaults);
+                state = State::Normal;
+            }
+            Parameter::KwonlySep { .. } => {
+                if seen_kwonly_sep {
+                    return Err(LowerError::new("duplicate * separator"));
+                }
+                if vararg.is_some() {
+                    return Err(LowerError::new("bare * cannot appear with *args"));
+                }
+                if state == State::KeywordOnly {
+                    return Err(LowerError::new("duplicate * separator"));
+                }
+                seen_kwonly_sep = true;
+                state = State::KeywordOnly;
+            }
         }
     }
+
+    // Merge posonly_defaults into defaults: Python right-aligns defaults
+    // across posonlyargs + args
+    let mut all_defaults = posonly_defaults;
+    all_defaults.append(&mut defaults);
 
     builder
         .call_node(
             "arguments",
             vec![
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::new_bound(builder.py(), posonlyargs).into_py(builder.py()),
                 PyList::new_bound(builder.py(), args).into_py(builder.py()),
                 vararg.unwrap_or_else(|| builder.py().None().into_py(builder.py())),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::new_bound(builder.py(), kwonlyargs).into_py(builder.py()),
+                PyList::new_bound(builder.py(), kw_defaults).into_py(builder.py()),
                 kwarg.unwrap_or_else(|| builder.py().None().into_py(builder.py())),
-                PyList::new_bound(builder.py(), defaults).into_py(builder.py()),
+                PyList::new_bound(builder.py(), all_defaults).into_py(builder.py()),
             ],
             def_span,
         )

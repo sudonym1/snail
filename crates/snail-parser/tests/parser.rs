@@ -2693,3 +2693,66 @@ fn parses_decorator_with_call_expression() {
         other => panic!("Expected decorated def, got {other:?}"),
     }
 }
+
+#[test]
+fn parses_posonly_separator() {
+    let source = "def foo(a, b, /, c) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { params, .. } => {
+            assert_eq!(params.len(), 4);
+            assert!(matches!(&params[0], Parameter::Regular { name, .. } if name == "a"));
+            assert!(matches!(&params[1], Parameter::Regular { name, .. } if name == "b"));
+            assert!(matches!(&params[2], Parameter::PosonlySep { .. }));
+            assert!(matches!(&params[3], Parameter::Regular { name, .. } if name == "c"));
+        }
+        other => panic!("Expected def, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_kwonly_separator() {
+    let source = "def foo(a, *, b) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { params, .. } => {
+            assert_eq!(params.len(), 3);
+            assert!(matches!(&params[0], Parameter::Regular { name, .. } if name == "a"));
+            assert!(matches!(&params[1], Parameter::KwonlySep { .. }));
+            assert!(matches!(&params[2], Parameter::Regular { name, .. } if name == "b"));
+        }
+        other => panic!("Expected def, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_both_separators() {
+    let source = "def foo(a, /, b, *, c) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { params, .. } => {
+            assert_eq!(params.len(), 5);
+            assert!(matches!(&params[0], Parameter::Regular { name, .. } if name == "a"));
+            assert!(matches!(&params[1], Parameter::PosonlySep { .. }));
+            assert!(matches!(&params[2], Parameter::Regular { name, .. } if name == "b"));
+            assert!(matches!(&params[3], Parameter::KwonlySep { .. }));
+            assert!(matches!(&params[4], Parameter::Regular { name, .. } if name == "c"));
+        }
+        other => panic!("Expected def, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_star_args_with_kwonly() {
+    let source = "def foo(a, *args, b) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Def { params, .. } => {
+            assert_eq!(params.len(), 3);
+            assert!(matches!(&params[0], Parameter::Regular { name, .. } if name == "a"));
+            assert!(matches!(&params[1], Parameter::VarArgs { name, .. } if name == "args"));
+            assert!(matches!(&params[2], Parameter::Regular { name, .. } if name == "b"));
+        }
+        other => panic!("Expected def, got {other:?}"),
+    }
+}

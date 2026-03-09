@@ -524,6 +524,8 @@ impl Desugarer {
                     name: name.clone(),
                     span: span.clone(),
                 },
+                Parameter::PosonlySep { span } => Parameter::PosonlySep { span: span.clone() },
+                Parameter::KwonlySep { span } => Parameter::KwonlySep { span: span.clone() },
             })
             .collect()
     }
