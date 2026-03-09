@@ -612,6 +612,13 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             ifs,
             span,
             ..
+        }
+        | Expr::GeneratorExpr {
+            element,
+            iter,
+            ifs,
+            span,
+            ..
         } => {
             shift_expr_spans(element, offset, source);
             shift_expr_spans(iter, offset, source);
@@ -634,6 +641,10 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             for cond in ifs {
                 shift_expr_spans(cond, offset, source);
             }
+            *span = shift_span(span, offset, source);
+        }
+        Expr::Starred { value, span } => {
+            shift_expr_spans(value, offset, source);
             *span = shift_span(span, offset, source);
         }
         Expr::Block { span, .. }

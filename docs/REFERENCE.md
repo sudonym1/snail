@@ -308,6 +308,10 @@ Explicit semicolons always separate statements regardless of these rules.
   `%{"a": 1}`, and sets `#{1, 2}`. The empty dict literal is `%{}` and the
   empty set literal is `#{}`.
   `{...}` is always a block, not a literal.
+- Starred unpacking (`*expr`) is supported in list, tuple, and set literals:
+  `[*a, b]`, `(*a, b)`, `#{*a, *b}`.
+- Double-starred unpacking (`**expr`) is supported in dict literals:
+  `%{**defaults, "key": val}`.
 
 ## Pipeline operator
 Snail repurposes the `|` operator for generic data pipelining through
@@ -491,10 +495,13 @@ if let [user, domain] = pair; domain {
 
 ## Comprehensions
 List comprehensions match Python's structure, and dict comprehensions use the
-same `key: value` form inside `%{...}`:
+same `key: value` form inside `%{...}`. Generator expressions use parentheses
+and can be passed directly as a function's sole argument without extra parens:
 ```snail
 evens = [n for n in nums if n % 2 == 0]
 lookup = %{n: n * 2 for n in nums if n > 1}
+total = sum(x for x in nums)
+doubled = list((x * 2 for x in nums))
 ```
 
 ## Strings

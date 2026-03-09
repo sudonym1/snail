@@ -176,7 +176,8 @@ postfix_base_op = _{ call | attribute | index | postfix_incr }
 postfix_incr = { "++" | "--" }
 
 // Function calls with positional, keyword, *args, **kwargs
-call = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ")" }
+call_genexpr = { expr ~ comp_for }
+call = { "(" ~ (call_genexpr | (argument ~ ("," ~ argument)*)?) ~ ")" }
 argument = { kw_argument | star_argument | expr }
 kw_argument = { identifier ~ "=" ~ expr }
 star_argument = _{ kw_star_arg | star_arg }
@@ -208,6 +209,7 @@ atom = _{
   | set_literal
   | dict_comp
   | dict_literal
+  | generator_expr
   | tuple_literal
   | paren_expr
   | block
@@ -242,15 +244,20 @@ structured_query_body = @{ structured_query_part* }
 structured_query_part = _{ "[" ~ structured_query_body ~ "]" | (!"[" ~ !"]" ~ ANY) }
 
 // Collection literals and comprehensions
+collection_element = _{ star_element | expr }
+star_element = { "*" ~ expr }
+dict_item = _{ dict_unpack | dict_entry }
+dict_unpack = { "**" ~ expr }
+generator_expr = { "(" ~ expr ~ comp_for ~ ")" }
 tuple_literal = {
   "(" ~ ")"
-  | "(" ~ expr ~ "," ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")"
+  | "(" ~ collection_element ~ "," ~ (collection_element ~ ("," ~ collection_element)* ~ ","?)? ~ ")"
 }
 list_comp = { "[" ~ expr ~ comp_for ~ "]" }
-list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
-set_literal = { "#{" ~ (expr ~ ("," ~ expr)*)? ~ "}" }
+list_literal = { "[" ~ (collection_element ~ ("," ~ collection_element)*)? ~ "]" }
+set_literal = { "#{" ~ (collection_element ~ ("," ~ collection_element)*)? ~ "}" }
 dict_comp = { "%{" ~ expr ~ ":" ~ expr ~ comp_for ~ "}" }
-dict_literal = { "%{" ~ (dict_entry ~ ("," ~ dict_entry)*)? ~ "}" }
+dict_literal = { "%{" ~ (dict_item ~ ("," ~ dict_item)*)? ~ "}" }
 dict_entry = { expr ~ ":" ~ expr }
 
 // Comprehension clauses

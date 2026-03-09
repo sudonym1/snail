@@ -1,4 +1,4 @@
-use snail_ast::*;
+use snail_ast::{DictEntry, *};
 use snail_error::LowerError;
 
 pub(crate) fn validate_yield_usage_program(program: &Program) -> Result<(), LowerError> {
@@ -189,15 +189,25 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
             check_expr(index, in_function)?;
         }
         Expr::Paren { expr, .. } => check_expr(expr, in_function)?,
+        Expr::Starred { value, .. } => {
+            check_expr(value, in_function)?;
+        }
         Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
             for expr in elements {
                 check_expr(expr, in_function)?;
             }
         }
         Expr::Dict { entries, .. } => {
-            for (key, value) in entries {
-                check_expr(key, in_function)?;
-                check_expr(value, in_function)?;
+            for entry in entries {
+                match entry {
+                    DictEntry::KeyValue { key, value, .. } => {
+                        check_expr(key, in_function)?;
+                        check_expr(value, in_function)?;
+                    }
+                    DictEntry::Unpack { value, .. } => {
+                        check_expr(value, in_function)?;
+                    }
+                }
             }
         }
         Expr::Slice { start, end, .. } => {
@@ -209,6 +219,9 @@ fn check_expr(expr: &Expr, in_function: bool) -> Result<(), LowerError> {
             }
         }
         Expr::ListComp {
+            element, iter, ifs, ..
+        }
+        | Expr::GeneratorExpr {
             element, iter, ifs, ..
         } => {
             check_expr(element, in_function)?;

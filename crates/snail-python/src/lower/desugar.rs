@@ -1,4 +1,4 @@
-use snail_ast::*;
+use snail_ast::{DictEntry, *};
 
 use super::break_rewrite::rewrite_breaks_in_block;
 
@@ -852,11 +852,16 @@ impl Desugarer {
             Expr::Dict { entries, span } => Expr::Dict {
                 entries: entries
                     .iter()
-                    .map(|(key, value)| {
-                        (
-                            self.desugar_expr(key, prelude),
-                            self.desugar_expr(value, prelude),
-                        )
+                    .map(|entry| match entry {
+                        DictEntry::KeyValue { key, value, span } => DictEntry::KeyValue {
+                            key: self.desugar_expr(key, prelude),
+                            value: self.desugar_expr(value, prelude),
+                            span: span.clone(),
+                        },
+                        DictEntry::Unpack { value, span } => DictEntry::Unpack {
+                            value: self.desugar_expr(value, prelude),
+                            span: span.clone(),
+                        },
                     })
                     .collect(),
                 span: span.clone(),
@@ -896,6 +901,22 @@ impl Desugarer {
             } => Expr::DictComp {
                 key: Box::new(self.desugar_expr(key, prelude)),
                 value: Box::new(self.desugar_expr(value, prelude)),
+                target: target.clone(),
+                iter: Box::new(self.desugar_expr(iter, prelude)),
+                ifs: ifs
+                    .iter()
+                    .map(|expr| self.desugar_expr(expr, prelude))
+                    .collect(),
+                span: span.clone(),
+            },
+            Expr::GeneratorExpr {
+                element,
+                target,
+                iter,
+                ifs,
+                span,
+            } => Expr::GeneratorExpr {
+                element: Box::new(self.desugar_expr(element, prelude)),
                 target: target.clone(),
                 iter: Box::new(self.desugar_expr(iter, prelude)),
                 ifs: ifs
@@ -1057,6 +1078,10 @@ impl Desugarer {
                     span: span.clone(),
                 }
             }
+            Expr::Starred { value, span } => Expr::Starred {
+                value: Box::new(self.desugar_expr(value, prelude)),
+                span: span.clone(),
+            },
             Expr::Awk {
                 sources,
                 body,

@@ -3969,6 +3969,41 @@ print(Foo().val())
     assert result == 0
     assert captured.out.strip() == "fallback"
 
+def test_generator_expr_sum(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["sum(x for x in [1,2,3])"])
+    assert result == 0
+    assert captured.out.strip() == "6"
+
+def test_generator_expr_list(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["list((x * 2 for x in [1,2,3]))"])
+    assert result == 0
+    assert captured.out.strip() == "[2, 4, 6]"
+
+def test_generator_expr_any(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["any(x > 2 for x in [1,2,3])"])
+    assert result == 0
+    assert captured.out.strip() == "True"
+
+def test_starred_in_list(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["a = [1, 2]; print([*a, 3])"])
+    assert result == 0
+    assert captured.out.strip() == "[1, 2, 3]"
+
+def test_starred_in_tuple(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["a = (1,); print((*a, 2, 3))"])
+    assert result == 0
+    assert captured.out.strip() == "(1, 2, 3)"
+
+def test_starred_in_set(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["a = #{1}; b = #{2}; print(#{*a, *b})"])
+    assert result == 0
+    assert captured.out.strip() == "{1, 2}"
+
+def test_dict_unpacking(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, [r'a = %{"x": 1}; print(%{**a, "y": 2})'])
+    assert result == 0
+    assert captured.out.strip() == "{'x': 1, 'y': 2}"
+
 def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["""
                                         def { try { raise Exception() } except { for i in range(10) { if i==4 { break i} } }}()

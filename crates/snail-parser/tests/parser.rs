@@ -2,8 +2,8 @@ mod common;
 
 use common::*;
 use snail_ast::{
-    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, Expr, ImportFromItems,
-    IncrOp, Parameter, Stmt, StringDelimiter,
+    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, DictEntry, Expr,
+    ImportFromItems, IncrOp, Parameter, Stmt, StringDelimiter,
 };
 use snail_parser::parse as parse_program;
 
@@ -1224,10 +1224,20 @@ fn parses_list_and_dict_literals_and_comprehensions() {
     match value {
         Expr::Dict { entries, .. } => {
             assert_eq!(entries.len(), 2);
-            expect_string(&entries[0].0, "a", false, StringDelimiter::Double);
-            expect_number(&entries[0].1, "1");
-            expect_string(&entries[1].0, "b", false, StringDelimiter::Double);
-            expect_number(&entries[1].1, "2");
+            match &entries[0] {
+                DictEntry::KeyValue { key, value, .. } => {
+                    expect_string(key, "a", false, StringDelimiter::Double);
+                    expect_number(value, "1");
+                }
+                other => panic!("Expected KeyValue, got {other:?}"),
+            }
+            match &entries[1] {
+                DictEntry::KeyValue { key, value, .. } => {
+                    expect_string(key, "b", false, StringDelimiter::Double);
+                    expect_number(value, "2");
+                }
+                other => panic!("Expected KeyValue, got {other:?}"),
+            }
         }
         other => panic!("Expected dict literal, got {other:?}"),
     }
@@ -2427,4 +2437,175 @@ fn parses_class_function_call_as_base() {
         }
         other => panic!("Expected class, got {other:?}"),
     }
+}
+
+#[test]
+fn parses_standalone_generator_expr() {
+    let source = "g = (x for x in nums)";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::GeneratorExpr {
+            element,
+            target,
+            iter,
+            ifs,
+            ..
+        } => {
+            expect_name(element.as_ref(), "x");
+            assert_eq!(target, "x");
+            expect_name(iter.as_ref(), "nums");
+            assert!(ifs.is_empty());
+        }
+        other => panic!("Expected generator expr, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_generator_expr_with_filter() {
+    let source = "g = (x for x in nums if x > 0)";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::GeneratorExpr { ifs, .. } => {
+            assert_eq!(ifs.len(), 1);
+        }
+        other => panic!("Expected generator expr with filter, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_generator_as_sole_call_arg() {
+    let source = "sum(x for x in nums)";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Call { args, .. } => {
+            assert_eq!(args.len(), 1);
+            match &args[0] {
+                Argument::Positional { value, .. } => {
+                    assert!(matches!(value, Expr::GeneratorExpr { .. }));
+                }
+                other => panic!("Expected positional arg, got {other:?}"),
+            }
+        }
+        other => panic!("Expected call, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_explicit_generator_among_args() {
+    let source = "func((x for x in nums), y)";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Call { args, .. } => {
+            assert_eq!(args.len(), 2);
+            match &args[0] {
+                Argument::Positional { value, .. } => {
+                    assert!(matches!(value, Expr::GeneratorExpr { .. }));
+                }
+                other => panic!("Expected positional genexpr arg, got {other:?}"),
+            }
+        }
+        other => panic!("Expected call, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_starred_in_list() {
+    let source = "x = [*a, b, *c]";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::List { elements, .. } => {
+            assert_eq!(elements.len(), 3);
+            assert!(matches!(&elements[0], Expr::Starred { .. }));
+            expect_name(&elements[1], "b");
+            assert!(matches!(&elements[2], Expr::Starred { .. }));
+        }
+        other => panic!("Expected list, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_starred_in_tuple() {
+    let source = "x = (*a, b)";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Tuple { elements, .. } => {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(&elements[0], Expr::Starred { .. }));
+            expect_name(&elements[1], "b");
+        }
+        other => panic!("Expected tuple, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_starred_in_set() {
+    let source = "x = #{*a, *b}";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Set { elements, .. } => {
+            assert_eq!(elements.len(), 2);
+            assert!(matches!(&elements[0], Expr::Starred { .. }));
+            assert!(matches!(&elements[1], Expr::Starred { .. }));
+        }
+        other => panic!("Expected set, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_dict_unpack() {
+    let source = r#"x = %{**a, "key": val}"#;
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Dict { entries, .. } => {
+            assert_eq!(entries.len(), 2);
+            assert!(matches!(&entries[0], DictEntry::Unpack { .. }));
+            assert!(matches!(&entries[1], DictEntry::KeyValue { .. }));
+        }
+        other => panic!("Expected dict, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_single_starred_in_list() {
+    let source = "x = [*a]";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::List { elements, .. } => {
+            assert_eq!(elements.len(), 1);
+            assert!(matches!(&elements[0], Expr::Starred { .. }));
+        }
+        other => panic!("Expected list, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_single_dict_unpack() {
+    let source = "x = %{**a}";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Dict { entries, .. } => {
+            assert_eq!(entries.len(), 1);
+            assert!(matches!(&entries[0], DictEntry::Unpack { .. }));
+        }
+        other => panic!("Expected dict, got {other:?}"),
+    }
+}
+
+#[test]
+fn paren_and_tuple_still_parse_correctly() {
+    // (x) is still Paren, not GeneratorExpr
+    let source = "a = (x)\nb = (x,)";
+    let program = parse_ok(source);
+    let (_, v1) = expect_assign(&program.stmts[0]);
+    assert!(matches!(v1, Expr::Paren { .. }));
+    let (_, v2) = expect_assign(&program.stmts[1]);
+    assert!(matches!(v2, Expr::Tuple { .. }));
 }

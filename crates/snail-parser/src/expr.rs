@@ -1,15 +1,15 @@
 use pest::iterators::Pair;
 use snail_ast::{
-    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, ExceptHandler, Expr,
-    IncrOp, Stmt, UnaryOp,
+    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, DictEntry, ExceptHandler,
+    Expr, IncrOp, Stmt, UnaryOp,
 };
 use snail_error::ParseError;
 
 use crate::Rule;
 use crate::literal::{
-    parse_dict_comp, parse_dict_literal, parse_list_comp, parse_list_literal, parse_literal,
-    parse_regex_literal, parse_set_literal, parse_slice, parse_structured_accessor,
-    parse_subprocess, parse_tuple_literal,
+    parse_call_genexpr, parse_dict_comp, parse_dict_literal, parse_generator_expr, parse_list_comp,
+    parse_list_literal, parse_literal, parse_regex_literal, parse_set_literal, parse_slice,
+    parse_structured_accessor, parse_subprocess, parse_tuple_literal,
 };
 use crate::stmt::{
     parse_assign_target_list, parse_assign_target_ref_expr, parse_block, parse_condition,
@@ -70,6 +70,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::tuple_literal => parse_tuple_literal(pair, source),
         Rule::list_comp => parse_list_comp(pair, source),
         Rule::dict_comp => parse_dict_comp(pair, source),
+        Rule::generator_expr => parse_generator_expr(pair, source),
         Rule::regex => parse_regex_literal(pair, source),
         Rule::subprocess => parse_subprocess(pair, source),
         Rule::structured_accessor => parse_structured_accessor(pair, source),
@@ -816,14 +817,23 @@ fn replace_compact_try_exception_var(expr: Expr) -> Expr {
                 .collect(),
             span,
         },
+        Expr::Starred { value, span } => Expr::Starred {
+            value: Box::new(replace_compact_try_exception_var(*value)),
+            span,
+        },
         Expr::Dict { entries, span } => Expr::Dict {
             entries: entries
                 .into_iter()
-                .map(|(key, value)| {
-                    (
-                        replace_compact_try_exception_var(key),
-                        replace_compact_try_exception_var(value),
-                    )
+                .map(|entry| match entry {
+                    DictEntry::KeyValue { key, value, span } => DictEntry::KeyValue {
+                        key: replace_compact_try_exception_var(key),
+                        value: replace_compact_try_exception_var(value),
+                        span,
+                    },
+                    DictEntry::Unpack { value, span } => DictEntry::Unpack {
+                        value: replace_compact_try_exception_var(value),
+                        span,
+                    },
                 })
                 .collect(),
             span,
@@ -935,8 +945,16 @@ pub(crate) fn apply_attr_index_suffix(
 fn parse_call(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Argument>, ParseError> {
     let mut args = Vec::new();
     for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::argument {
-            args.push(parse_argument(inner, source)?);
+        match inner.as_rule() {
+            Rule::argument => {
+                args.push(parse_argument(inner, source)?);
+            }
+            Rule::call_genexpr => {
+                let span = span_from_pair(&inner, source);
+                let value = parse_call_genexpr(inner, source)?;
+                args.push(Argument::Positional { value, span });
+            }
+            _ => {}
         }
     }
     Ok(args)
