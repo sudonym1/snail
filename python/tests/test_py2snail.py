@@ -325,13 +325,82 @@ class TestMiscStatements:
 
 
 class TestDecorators:
-    def test_function_decorator_unsupported(self) -> None:
-        with pytest.raises(Py2SnailError, match="decorator"):
-            translate("@staticmethod\ndef f():\n    pass\n")
+    def test_function_decorator(self) -> None:
+        result = translate("@staticmethod\ndef f():\n    pass\n")
+        assert "@staticmethod" in result
+        assert "def f() {" in result
 
-    def test_class_decorator_unsupported(self) -> None:
-        with pytest.raises(Py2SnailError, match="decorator"):
-            translate("@decorator\nclass Foo:\n    pass\n")
+    def test_class_decorator(self) -> None:
+        result = translate("@decorator\nclass Foo:\n    pass\n")
+        assert "@decorator" in result
+        assert "class Foo {" in result
+
+    def test_multiple_decorators(self) -> None:
+        result = translate("@dec_a\n@dec_b\ndef f():\n    pass\n")
+        assert "@dec_a" in result
+        assert "@dec_b" in result
+
+    def test_decorator_with_args(self) -> None:
+        result = translate("@wrapper(42)\ndef f():\n    pass\n")
+        assert "@wrapper(42)" in result
+
+    def test_decorator_attribute(self) -> None:
+        result = translate("@module.decorator\ndef f():\n    pass\n")
+        assert "@module.decorator" in result
+
+    def test_decorator_roundtrip(self) -> None:
+        _roundtrip(
+            "def double(fn):\n"
+            "    def wrapper(*args, **kwargs):\n"
+            "        return fn(*args, **kwargs) * 2\n"
+            "    return wrapper\n"
+            "@double\n"
+            "def add(a, b):\n"
+            "    return a + b\n"
+            "print(add(3, 4))\n"
+        )
+
+    def test_decorator_with_args_roundtrip(self) -> None:
+        _roundtrip(
+            "def multiply_by(n):\n"
+            "    def decorator(fn):\n"
+            "        def wrapper(*args, **kwargs):\n"
+            "            return fn(*args, **kwargs) * n\n"
+            "        return wrapper\n"
+            "    return decorator\n"
+            "@multiply_by(3)\n"
+            "def add(a, b):\n"
+            "    return a + b\n"
+            "print(add(1, 2))\n"
+        )
+
+    def test_class_decorator_roundtrip(self) -> None:
+        _roundtrip(
+            "def add_greet(cls):\n"
+            "    cls.greet = lambda self: 'hello'\n"
+            "    return cls\n"
+            "@add_greet\n"
+            "class Foo:\n"
+            "    pass\n"
+            "print(Foo().greet())\n"
+        )
+
+    def test_multiple_decorators_roundtrip(self) -> None:
+        _roundtrip(
+            "def dec_a(fn):\n"
+            "    def wrapper(*args, **kwargs):\n"
+            "        return 'a' + fn(*args, **kwargs)\n"
+            "    return wrapper\n"
+            "def dec_b(fn):\n"
+            "    def wrapper(*args, **kwargs):\n"
+            "        return 'b' + fn(*args, **kwargs)\n"
+            "    return wrapper\n"
+            "@dec_a\n"
+            "@dec_b\n"
+            "def f():\n"
+            "    return 'x'\n"
+            "print(f())\n"
+        )
 
 
 class TestStarArgs:

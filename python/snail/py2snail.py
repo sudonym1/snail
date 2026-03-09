@@ -12,8 +12,7 @@ Unsupported Python features (raise Py2SnailError)
 - except* / exception groups (Python 3.11+)
 - type aliases: type X = ... (Python 3.12+)
 - global and nonlocal statements
-- Decorators: @decorator on functions and classes
-- Class inheritance: class Foo(Bar) and metaclasses
+- Class metaclasses: class Foo(metaclass=Bar)
 - Positional-only parameter separator: def f(a, /, b)
 - Matrix multiply operator: a @ b, a @= b
 - Dict unpacking in dict literals: {**a, **b}
@@ -223,9 +222,12 @@ class SnailUnparser(ast.NodeVisitor):
         for stmt in node.body:
             self.visit(stmt)
 
+    def _emit_decorators(self, decorator_list: list[ast.expr]) -> None:
+        for dec in decorator_list:
+            self._line(f"@{self._expr(dec)}")
+
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        if node.decorator_list:
-            raise Py2SnailError("decorators are not supported by Snail")
+        self._emit_decorators(node.decorator_list)
         args = self._format_args(node.args)
         self._write(f"{self._i()}def {_mangle(node.name)}({args})")
         self._block(node.body)
@@ -236,8 +238,7 @@ class SnailUnparser(ast.NodeVisitor):
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         if node.keywords:
             raise Py2SnailError("metaclasses are not supported by Snail")
-        if node.decorator_list:
-            raise Py2SnailError("decorators are not supported by Snail")
+        self._emit_decorators(node.decorator_list)
         bases = ""
         if node.bases:
             bases = "(" + ", ".join(self._expr(b) for b in node.bases) + ")"
