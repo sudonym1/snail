@@ -538,6 +538,10 @@ def risky_fallback() {
 prefer_lambda = risky_fallback():"lambda"?
 dunder_only = risky_fallback()?
 
+# ---- Assignment to subscript on function call result ----
+globals()["dynamic_var"] = 99
+globals()["dynamic_var"] += 1
+
 # ---- Environment variables ----
 os.environ["SNAIL_DEMO"] = "ok"
 env_attr = $env.SNAIL_DEMO

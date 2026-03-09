@@ -2756,3 +2756,67 @@ fn parses_star_args_with_kwonly() {
         other => panic!("Expected def, got {other:?}"),
     }
 }
+
+#[test]
+fn parses_assign_to_call_result_subscript() {
+    let source = r#"globals()["foo"] = 1"#;
+    let program = parse_ok(source);
+    match &program.stmts[0] {
+        Stmt::Assign { targets, value, .. } => {
+            assert_eq!(targets.len(), 1);
+            match &targets[0] {
+                AssignTarget::Index {
+                    value: target_val,
+                    index,
+                    ..
+                } => {
+                    assert!(matches!(target_val.as_ref(), Expr::Call { .. }));
+                    assert!(matches!(index.as_ref(), Expr::String { .. }));
+                }
+                other => panic!("Expected Index target, got {other:?}"),
+            }
+            expect_number(value, "1");
+        }
+        other => panic!("Expected assignment, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_assign_to_method_call_result_subscript() {
+    let source = r#"obj.method()["key"] = value"#;
+    let program = parse_ok(source);
+    match &program.stmts[0] {
+        Stmt::Assign { targets, .. } => {
+            assert_eq!(targets.len(), 1);
+            match &targets[0] {
+                AssignTarget::Index {
+                    value: target_val, ..
+                } => {
+                    assert!(matches!(target_val.as_ref(), Expr::Call { .. }));
+                }
+                other => panic!("Expected Index target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected assignment, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_aug_assign_to_call_result_subscript() {
+    let source = r#"globals()["foo"] += 1"#;
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::AugAssign { target, op, .. } => {
+            assert!(matches!(op, AugAssignOp::Add));
+            match target.as_ref() {
+                AssignTarget::Index {
+                    value: target_val, ..
+                } => {
+                    assert!(matches!(target_val.as_ref(), Expr::Call { .. }));
+                }
+                other => panic!("Expected Index target, got {other:?}"),
+            }
+        }
+        other => panic!("Expected aug assign, got {other:?}"),
+    }
+}

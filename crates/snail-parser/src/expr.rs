@@ -943,7 +943,7 @@ pub(crate) fn apply_attr_index_suffix(
     }
 }
 
-fn parse_call(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Argument>, ParseError> {
+pub(crate) fn parse_call(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Argument>, ParseError> {
     let mut args = Vec::new();
     for inner in pair.into_inner() {
         match inner.as_rule() {

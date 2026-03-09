@@ -4162,3 +4162,15 @@ def test_star_args_makes_following_kwonly(capsys: pytest.CaptureFixture[str]) ->
     code = 'def f(a, *args, b) { return (a, args, b) }\nprint(f(1, 2, 3, b=4))'
     assert main(["-P", code]) == 0
     assert "(1, (2, 3), 4)" in capsys.readouterr().out
+
+
+def test_assign_to_call_result_subscript(capsys: pytest.CaptureFixture[str]) -> None:
+    code = 'globals()["foo"] = 42\nprint(foo)'
+    assert main(["-P", code]) == 0
+    assert "42" in capsys.readouterr().out
+
+
+def test_aug_assign_to_call_result_subscript(capsys: pytest.CaptureFixture[str]) -> None:
+    code = 'globals()["foo"] = 10\nglobals()["foo"] += 5\nprint(foo)'
+    assert main(["-P", code]) == 0
+    assert "15" in capsys.readouterr().out
