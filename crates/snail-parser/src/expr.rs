@@ -15,7 +15,7 @@ use crate::stmt::{
     parse_assign_target_list, parse_assign_target_ref_expr, parse_block, parse_condition,
     parse_except_clause, parse_parameters, parse_pattern_action, parse_stmt, parse_with_items,
 };
-use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
+use crate::util::{error_with_span, expr_span, is_keyword_rule, merge_span, span_from_pair};
 
 const COMPACT_TRY_EXCEPTION_VAR: &str = "__snail_compact_exc";
 const COMPACT_TRY_NO_FALLBACK_HELPER: &str = "__snail_compact_try_no_fallback";
@@ -125,15 +125,18 @@ fn parse_expr_rule(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErro
 
 fn parse_yield_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let Some(first) = inner.next() else {
         return Ok(Expr::Yield { value: None, span });
     };
     match first.as_rule() {
         Rule::yield_from => {
-            let expr_pair = first.into_inner().next().ok_or_else(|| {
-                error_with_span("missing yield from expression", span.clone(), source)
-            })?;
+            let expr_pair = first
+                .into_inner()
+                .find(|p| !is_keyword_rule(p.as_rule()))
+                .ok_or_else(|| {
+                    error_with_span("missing yield from expression", span.clone(), source)
+                })?;
             let expr = parse_expr_pair(expr_pair, source)?;
             Ok(Expr::YieldFrom {
                 expr: Box::new(expr),
@@ -192,7 +195,7 @@ fn parse_aug_assign_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Par
 
 fn fold_left_binary(pair: Pair<'_, Rule>, source: &str, op: BinaryOp) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let first = inner
         .next()
         .ok_or_else(|| error_with_span("missing expression", pair_span, source))?;
@@ -215,7 +218,7 @@ fn parse_not_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError
     let mut inner = pair.into_inner().peekable();
     if inner
         .peek()
-        .is_some_and(|next| next.as_rule() == Rule::not_op)
+        .is_some_and(|next| next.as_rule() == Rule::kw_not)
     {
         let op_pair = inner.next().unwrap();
         let operand_pair = inner.next().ok_or_else(|| {
@@ -255,17 +258,15 @@ fn parse_comparison(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
             Rule::comp_op => {
                 let sub: Vec<_> = op_pair.clone().into_inner().collect();
                 match sub.as_slice() {
-                    [kw] if kw.as_rule() == Rule::comp_kw_in => CompareOp::In,
-                    [kw] if kw.as_rule() == Rule::comp_kw_is => CompareOp::Is,
+                    [kw] if kw.as_rule() == Rule::kw_in => CompareOp::In,
+                    [kw] if kw.as_rule() == Rule::kw_is => CompareOp::Is,
                     [not_kw, in_kw]
-                        if not_kw.as_rule() == Rule::comp_kw_not
-                            && in_kw.as_rule() == Rule::comp_kw_in =>
+                        if not_kw.as_rule() == Rule::kw_not && in_kw.as_rule() == Rule::kw_in =>
                     {
                         CompareOp::NotIn
                     }
                     [is_kw, not_kw]
-                        if is_kw.as_rule() == Rule::comp_kw_is
-                            && not_kw.as_rule() == Rule::comp_kw_not =>
+                        if is_kw.as_rule() == Rule::kw_is && not_kw.as_rule() == Rule::kw_not =>
                     {
                         CompareOp::IsNot
                     }
@@ -1152,7 +1153,7 @@ fn parse_block_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
 
 fn parse_if_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let cond_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing if condition", span.clone(), source))?;
@@ -1194,7 +1195,7 @@ fn parse_if_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError>
 
 fn parse_while_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let first = inner
         .next()
         .ok_or_else(|| error_with_span("missing while body", span.clone(), source))?;
@@ -1230,7 +1231,7 @@ fn parse_while_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
 
 fn parse_for_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let target_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing for target", span.clone(), source))?;
@@ -1262,7 +1263,7 @@ fn parse_for_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError
 
 fn parse_def_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let first = inner
         .next()
         .ok_or_else(|| error_with_span("missing def block", span.clone(), source))?;
@@ -1307,7 +1308,7 @@ fn parse_def_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError
 
 fn parse_class_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let name = inner
         .next()
         .ok_or_else(|| error_with_span("missing class name", span.clone(), source))?
@@ -1396,7 +1397,7 @@ fn parse_decorated_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Pars
 
 fn parse_try_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let body_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing try block", span.clone(), source))?;
@@ -1411,14 +1412,17 @@ fn parse_try_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError
             Rule::else_clause => {
                 let block = next
                     .into_inner()
-                    .next()
+                    .find(|p| !is_keyword_rule(p.as_rule()))
                     .ok_or_else(|| error_with_span("missing else block", span.clone(), source))?;
                 else_body = Some(parse_block(block, source)?);
             }
             Rule::finally_clause => {
-                let block = next.into_inner().next().ok_or_else(|| {
-                    error_with_span("missing finally block", span.clone(), source)
-                })?;
+                let block = next
+                    .into_inner()
+                    .find(|p| !is_keyword_rule(p.as_rule()))
+                    .ok_or_else(|| {
+                        error_with_span("missing finally block", span.clone(), source)
+                    })?;
                 finally_body = Some(parse_block(block, source)?);
             }
             _ => {}

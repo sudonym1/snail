@@ -4,6 +4,45 @@ use snail_error::ParseError;
 
 use crate::Rule;
 
+pub fn is_keyword_rule(rule: Rule) -> bool {
+    matches!(
+        rule,
+        Rule::kw_if
+            | Rule::kw_else
+            | Rule::kw_elif
+            | Rule::kw_while
+            | Rule::kw_for
+            | Rule::kw_in
+            | Rule::kw_def
+            | Rule::kw_class
+            | Rule::kw_return
+            | Rule::kw_break
+            | Rule::kw_continue
+            | Rule::kw_pass
+            | Rule::kw_raise
+            | Rule::kw_try
+            | Rule::kw_except
+            | Rule::kw_finally
+            | Rule::kw_with
+            | Rule::kw_assert
+            | Rule::kw_del
+            | Rule::kw_and
+            | Rule::kw_or
+            | Rule::kw_not
+            | Rule::kw_import
+            | Rule::kw_from
+            | Rule::kw_as
+            | Rule::kw_yield
+            | Rule::kw_let
+            | Rule::kw_awk
+            | Rule::kw_xargs
+            | Rule::kw_true
+            | Rule::kw_false
+            | Rule::kw_none
+            | Rule::kw_is
+    )
+}
+
 pub fn full_span(source: &str) -> SourceSpan {
     let end_offset = source.len();
     let (end_line, end_col) = line_col_from_offset(source, end_offset);

@@ -10,7 +10,7 @@ use crate::expr::{
     apply_attr_index_suffix, apply_postfix_ops, assign_target_from_expr, parse_call,
     parse_expr_pair,
 };
-use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
+use crate::util::{error_with_span, expr_span, is_keyword_rule, merge_span, span_from_pair};
 
 pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut stmts = Vec::new();
@@ -36,7 +36,7 @@ pub fn parse_stmt(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError
             let span = span_from_pair(&pair, source);
             let value = pair
                 .into_inner()
-                .next()
+                .find(|p| !is_keyword_rule(p.as_rule()))
                 .map(|p| parse_expr_pair(p, source))
                 .transpose()?;
             Ok(Stmt::Break { value, span })
@@ -91,7 +91,7 @@ pub(crate) fn parse_condition(pair: Pair<'_, Rule>, source: &str) -> Result<Cond
 
 fn parse_let_condition(pair: Pair<'_, Rule>, source: &str) -> Result<Condition, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let target_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing let target", span.clone(), source))?;
@@ -120,7 +120,7 @@ fn parse_let_condition(pair: Pair<'_, Rule>, source: &str) -> Result<Condition, 
 
 fn parse_return(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let value = inner
         .next()
         .map(|value_pair| parse_expr_pair(value_pair, source))
@@ -130,7 +130,7 @@ fn parse_return(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> 
 
 fn parse_raise(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let value = inner
         .next()
         .map(|value_pair| parse_expr_pair(value_pair, source))
@@ -151,7 +151,7 @@ fn parse_raise(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
 
 fn parse_assert(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let test_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing assert condition", span.clone(), source))?;
@@ -170,7 +170,7 @@ fn parse_assert(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> 
 fn parse_del(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut targets = Vec::new();
-    for inner in pair.into_inner() {
+    for inner in pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule())) {
         targets.push(parse_assign_target(inner, source)?);
     }
     if targets.is_empty() {
@@ -194,7 +194,7 @@ pub(crate) fn parse_with_items(
 
 pub(crate) fn parse_with_item(pair: Pair<'_, Rule>, source: &str) -> Result<WithItem, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let context_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing with context", span.clone(), source))?;
@@ -215,7 +215,10 @@ pub(crate) fn parse_except_clause(
     source: &str,
 ) -> Result<ExceptHandler, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner().peekable();
+    let mut inner = pair
+        .into_inner()
+        .filter(|p| !is_keyword_rule(p.as_rule()))
+        .peekable();
     let mut type_name = None;
     let mut name = None;
     let mut body = None;
@@ -278,7 +281,7 @@ pub(crate) fn parse_except_clause(
 
 fn parse_import_from(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let module_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing module name", span.clone(), source))?;
@@ -297,7 +300,7 @@ fn parse_import_from(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseEr
 
 fn parse_import_names(pair: Pair<'_, Rule>, source: &str) -> Result<Stmt, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let items_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing import items", span.clone(), source))?;
@@ -384,7 +387,7 @@ fn parse_import_items(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<ImportIt
 
 fn parse_import_item(pair: Pair<'_, Rule>, source: &str) -> Result<ImportItem, ParseError> {
     let span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let name = parse_dotted_name(
         inner
             .next()

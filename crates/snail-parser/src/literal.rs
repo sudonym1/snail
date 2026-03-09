@@ -7,7 +7,7 @@ use crate::string::{
     join_fstring_text, normalize_fstring_parts, parse_fstring_parts, parse_string_or_fstring,
     unescape_regex_text,
 };
-use crate::util::{error_with_span, span_from_pair};
+use crate::util::{error_with_span, is_keyword_rule, span_from_pair};
 
 pub fn parse_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
     let pair_span = span_from_pair(&pair, source);
@@ -177,7 +177,7 @@ pub fn parse_comp_for(
     source: &str,
 ) -> Result<(String, Expr, Vec<Expr>), ParseError> {
     let pair_span = span_from_pair(&pair, source);
-    let mut inner = pair.into_inner();
+    let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let target_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing comp target", pair_span.clone(), source))?;
@@ -189,10 +189,12 @@ pub fn parse_comp_for(
     let mut ifs = Vec::new();
     for next in inner {
         if next.as_rule() == Rule::comp_if {
-            let mut if_inner = next.into_inner();
-            let cond = if_inner.next().ok_or_else(|| {
-                error_with_span("missing comp if condition", pair_span.clone(), source)
-            })?;
+            let cond = next
+                .into_inner()
+                .find(|p| !is_keyword_rule(p.as_rule()))
+                .ok_or_else(|| {
+                    error_with_span("missing comp if condition", pair_span.clone(), source)
+                })?;
             ifs.push(crate::expr::parse_expr_pair(cond, source)?);
         }
     }

@@ -2820,3 +2820,34 @@ fn parses_aug_assign_to_call_result_subscript() {
         other => panic!("Expected aug assign, got {other:?}"),
     }
 }
+
+#[test]
+fn keyword_boundary_prevents_glued_keywords() {
+    // Keywords glued to identifiers are now treated as identifiers, not keyword+arg.
+    // "importsys" is identifier "importsys", not "import sys"
+    let program = parse_ok("importsys");
+    assert_eq!(program.stmts.len(), 1);
+    expect_name(unwrap_expr(&program.stmts[0]), "importsys");
+
+    // "returnx" is identifier "returnx", not "return x"
+    let program = parse_ok("returnx");
+    assert_eq!(program.stmts.len(), 1);
+    expect_name(unwrap_expr(&program.stmts[0]), "returnx");
+
+    // These fail because the compound structure can't form without keyword boundaries
+    assert!(parse_program("ifTrue { print(1) }").is_err());
+    assert!(parse_program("whileTrue { break }").is_err());
+    assert!(parse_program("forx in [1,2,3] { print(x) }").is_err());
+    assert!(parse_program("fromcollections import deque").is_err());
+}
+
+#[test]
+fn keyword_prefix_identifiers_work() {
+    // Identifiers that START with a keyword but aren't keywords
+    assert!(parse_program("breakpoint()").is_ok());
+    assert!(parse_program("returning = 1").is_ok());
+    assert!(parse_program("import_thing = 1").is_ok());
+    assert!(parse_program("nothing = True").is_ok());
+    assert!(parse_program("formatting = 1").is_ok());
+    assert!(parse_program("assertion = 1").is_ok());
+}

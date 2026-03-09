@@ -35,17 +35,17 @@ simple_stmt = _{
 block = { "{" ~ stmt_sep* ~ stmt_list? ~ stmt_sep* ~ "}" }
 
 // Control flow (now expressions): if/elif/else, while/else, for/else
-if_expr = { "if" ~ if_cond ~ block ~ (stmt_sep* ~ "elif" ~ if_cond ~ block)* ~ (stmt_sep* ~ "else" ~ block)? }
-while_expr = { "while" ~ (while_cond ~ block ~ (stmt_sep* ~ "else" ~ block)? | block) }
-for_expr = { "for" ~ assign_target_list ~ "in" ~ expr ~ block ~ (stmt_sep* ~ "else" ~ block)? }
+if_expr = { kw_if ~ if_cond ~ block ~ (stmt_sep* ~ kw_elif ~ if_cond ~ block)* ~ (stmt_sep* ~ kw_else ~ block)? }
+while_expr = { kw_while ~ (while_cond ~ block ~ (stmt_sep* ~ kw_else ~ block)? | block) }
+for_expr = { kw_for ~ assign_target_list ~ kw_in ~ expr ~ block ~ (stmt_sep* ~ kw_else ~ block)? }
 if_cond = { let_cond | expr }
 while_cond = { let_cond | expr }
-let_cond = { "let" ~ assign_target_list ~ "=" ~ expr ~ let_guard? }
+let_cond = { kw_let ~ assign_target_list ~ "=" ~ expr ~ let_guard? }
 let_guard = { ";" ~ expr }
 
 // Function and class definitions (now expressions)
-def_expr = { "def" ~ (identifier ~ parameters? | parameters)? ~ block }
-class_expr = { "class" ~ identifier ~ class_bases? ~ block }
+def_expr = { kw_def ~ (identifier ~ parameters? | parameters)? ~ block }
+class_expr = { kw_class ~ identifier ~ class_bases? ~ block }
 class_bases = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ","? ~ ")" }
 
 // Decorated definitions
@@ -53,16 +53,16 @@ decorated_expr = { decorator+ ~ (def_expr | class_expr) }
 decorator = { "@" ~ expr ~ stmt_sep* }
 
 // Exception handling (now expression): try/except/else/finally
-try_expr = { "try" ~ block ~ (try_except_tail | try_finally_tail) }
+try_expr = { kw_try ~ block ~ (try_except_tail | try_finally_tail) }
 try_except_tail = _{ (stmt_sep* ~ except_clause)+ ~ (stmt_sep* ~ else_clause)? ~ (stmt_sep* ~ finally_clause)? }
 try_finally_tail = _{ stmt_sep* ~ finally_clause }
-except_clause = { "except" ~ (except_type ~ ("as" ~ identifier)?)? ~ block }
+except_clause = { kw_except ~ (except_type ~ (kw_as ~ identifier)?)? ~ block }
 except_type = { identifier ~ ("." ~ identifier)* }
-else_clause = { "else" ~ block }
-finally_clause = { "finally" ~ block }
+else_clause = { kw_else ~ block }
+finally_clause = { kw_finally ~ block }
 
 // Awk block (now expression): iterate lines from a source
-awk_expr = { "awk" ~ awk_source? ~ "{" ~ stmt_sep* ~ awk_body? ~ stmt_sep* ~ "}" }
+awk_expr = { kw_awk ~ awk_source? ~ "{" ~ stmt_sep* ~ awk_body? ~ stmt_sep* ~ "}" }
 awk_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
 awk_body = { awk_entry ~ (stmt_sep+ ~ awk_entry)* ~ stmt_sep* }
 awk_entry = _{ pattern_action | stmt }
@@ -72,13 +72,13 @@ pattern_action = { block | pattern_action_pattern ~ block? }
 pattern_action_pattern = { expr }
 
 // Xargs block (now expression): iterate files from a source
-xargs_expr = { "xargs" ~ xargs_source? ~ block }
+xargs_expr = { kw_xargs ~ xargs_source? ~ block }
 xargs_source = { "(" ~ (argument ~ ("," ~ argument)*)? ~ ","? ~ ")" }
 
 // Context managers (now expression)
-with_expr = { "with" ~ with_items ~ block }
+with_expr = { kw_with ~ with_items ~ block }
 with_items = { with_item ~ ("," ~ with_item)* }
-with_item = { expr ~ ("as" ~ assign_target)? }
+with_item = { expr ~ (kw_as ~ assign_target)? }
 
 // Function parameters: regular, *args, **kwargs, /, *
 parameters = { "(" ~ param_list? ~ ")" }
@@ -91,18 +91,18 @@ posonly_sep = { "/" }
 kwonly_sep = { "*" }
 
 // Simple statements
-return_stmt = { "return" ~ expr? }
-raise_stmt = { "raise" ~ expr? ~ ("from" ~ expr)? }
-assert_stmt = { "assert" ~ expr ~ ("," ~ expr)? }
-del_stmt = { "del" ~ assign_target ~ ("," ~ assign_target)* }
-break_stmt = { "break" ~ expr? }
-continue_stmt = { "continue" }
-pass_stmt = { "pass" }
+return_stmt = { kw_return ~ expr? }
+raise_stmt = { kw_raise ~ expr? ~ (kw_from ~ expr)? }
+assert_stmt = { kw_assert ~ expr ~ ("," ~ expr)? }
+del_stmt = { kw_del ~ assign_target ~ ("," ~ assign_target)* }
+break_stmt = { kw_break ~ expr? }
+continue_stmt = { kw_continue }
+pass_stmt = { kw_pass }
 
 // Import statements: from/import and import
 import_stmt = _{ import_from | import_names }
-import_from = { "from" ~ import_from_module ~ "import" ~ import_from_items }
-import_names = { "import" ~ import_items }
+import_from = { kw_from ~ import_from_module ~ kw_import ~ import_from_items }
+import_names = { kw_import ~ import_items }
 import_from_module = { relative_module | dotted_name }
 relative_module = { relative_dots ~ dotted_name? }
 relative_dots = { "."+ }
@@ -110,7 +110,7 @@ import_from_items = { import_star | import_paren_items | import_items }
 import_items = { import_item ~ ("," ~ import_item)* }
 import_paren_items = { "(" ~ import_items ~ ","? ~ ")" }
 import_star = { "*" }
-import_item = { dotted_name ~ ("as" ~ identifier)? }
+import_item = { dotted_name ~ (kw_as ~ identifier)? }
 dotted_name = { identifier ~ ("." ~ identifier)* }
 
 // Assignment and expression statements
@@ -130,8 +130,8 @@ expr_stmt = { expr }
 // Expressions: precedence from lowest (aug assignment) to highest (power)
 expr = { aug_assign_expr | yield_expr | or_expr }
 
-yield_expr = { "yield" ~ (yield_from | yield_value)? }
-yield_from = { "from" ~ or_expr }
+yield_expr = { kw_yield ~ (yield_from | yield_value)? }
+yield_from = { kw_from ~ or_expr }
 yield_value = _{ or_expr }
 
 aug_assign_expr = { aug_target ~ aug_op ~ expr }
@@ -148,10 +148,9 @@ fallback_power = { fallback_postfix ~ (pow_op ~ fallback_postfix)* }
 fallback_postfix = { atom ~ postfix_base_op* }
 
 // Boolean operators
-or_expr = { and_expr ~ ("or" ~ and_expr)* }
-and_expr = { not_expr ~ ("and" ~ not_expr)* }
-not_expr = { (not_op ~ not_expr) | pipeline }
-not_op = @{ "not" ~ !ident_continue }
+or_expr = { and_expr ~ (kw_or ~ and_expr)* }
+and_expr = { not_expr ~ (kw_and ~ not_expr)* }
+not_expr = { (kw_not ~ not_expr) | pipeline }
 
 // Pipeline operator
 pipeline = { comparison ~ (pipe_op ~ comparison)* }
@@ -159,10 +158,7 @@ pipe_op = _{ "|" }
 
 // Comparisons
 comparison = { sum ~ (comp_op ~ sum)* }
-comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | comp_kw_not ~ comp_kw_in | comp_kw_is ~ comp_kw_not | comp_kw_in | comp_kw_is }
-comp_kw_not = @{ "not" ~ !ident_continue }
-comp_kw_in = @{ "in" ~ !ident_continue }
-comp_kw_is = @{ "is" ~ !ident_continue }
+comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" | kw_not ~ kw_in | kw_is ~ kw_not | kw_in | kw_is }
 
 // Arithmetic operators
 sum = { product ~ (add_op ~ product)* }
@@ -267,13 +263,13 @@ dict_literal = { "%{" ~ (dict_item ~ ("," ~ dict_item)*)? ~ "}" }
 dict_entry = { expr ~ ":" ~ expr }
 
 // Comprehension clauses
-comp_for = { "for" ~ identifier ~ "in" ~ expr ~ comp_if* }
-comp_if = { "if" ~ expr }
+comp_for = { kw_for ~ identifier ~ kw_in ~ expr ~ comp_if* }
+comp_if = { kw_if ~ expr }
 
 // Literals: numbers, strings, booleans, None
 literal = { number | string | boolean | none }
-boolean = { "True" | "False" }
-none = { "None" }
+boolean = { kw_true | kw_false }
+none = { kw_none }
 
 // Special variables: exception, AWK fields, map vars, injected vars
 exception_var = { "$e" ~ !ident_continue }
@@ -309,14 +305,47 @@ identifier = @{ !keyword ~ ident_start ~ ident_continue* }
 ident_start = { ASCII_ALPHA | "_" }
 ident_continue = { ASCII_ALPHANUMERIC | "_" }
 keyword = _{
-  ("if" | "else" | "elif" | "while" | "for" | "in" | "def" | "class"
-  | "return" | "break" | "continue" | "pass" | "raise" | "try" | "except"
-  | "finally" | "with" | "assert" | "del" | "and" | "or" | "not" | "import" | "from" | "as"
-  | "yield"
-  | "let"
-  | "awk" | "xargs"
-  | "True" | "False" | "None") ~ !ident_continue
+  kw_if | kw_else | kw_elif | kw_while | kw_for | kw_in | kw_def | kw_class
+  | kw_return | kw_break | kw_continue | kw_pass | kw_raise | kw_try | kw_except
+  | kw_finally | kw_with | kw_assert | kw_del | kw_and | kw_or | kw_not
+  | kw_import | kw_from | kw_as | kw_yield | kw_let | kw_awk | kw_xargs
+  | kw_true | kw_false | kw_none | kw_is
 }
+
+// Keyword rules: atomic to enforce word boundaries
+kw_if       = @{ "if" ~ !ident_continue }
+kw_else     = @{ "else" ~ !ident_continue }
+kw_elif     = @{ "elif" ~ !ident_continue }
+kw_while    = @{ "while" ~ !ident_continue }
+kw_for      = @{ "for" ~ !ident_continue }
+kw_in       = @{ "in" ~ !ident_continue }
+kw_def      = @{ "def" ~ !ident_continue }
+kw_class    = @{ "class" ~ !ident_continue }
+kw_return   = @{ "return" ~ !ident_continue }
+kw_break    = @{ "break" ~ !ident_continue }
+kw_continue = @{ "continue" ~ !ident_continue }
+kw_pass     = @{ "pass" ~ !ident_continue }
+kw_raise    = @{ "raise" ~ !ident_continue }
+kw_try      = @{ "try" ~ !ident_continue }
+kw_except   = @{ "except" ~ !ident_continue }
+kw_finally  = @{ "finally" ~ !ident_continue }
+kw_with     = @{ "with" ~ !ident_continue }
+kw_assert   = @{ "assert" ~ !ident_continue }
+kw_del      = @{ "del" ~ !ident_continue }
+kw_and      = @{ "and" ~ !ident_continue }
+kw_or       = @{ "or" ~ !ident_continue }
+kw_not      = @{ "not" ~ !ident_continue }
+kw_import   = @{ "import" ~ !ident_continue }
+kw_from     = @{ "from" ~ !ident_continue }
+kw_as       = @{ "as" ~ !ident_continue }
+kw_yield    = @{ "yield" ~ !ident_continue }
+kw_let      = @{ "let" ~ !ident_continue }
+kw_awk      = @{ "awk" ~ !ident_continue }
+kw_xargs    = @{ "xargs" ~ !ident_continue }
+kw_true     = @{ "True" ~ !ident_continue }
+kw_false    = @{ "False" ~ !ident_continue }
+kw_none     = @{ "None" ~ !ident_continue }
+kw_is       = @{ "is" ~ !ident_continue }
 
 // Lexical rules: whitespace and comments
 WHITESPACE = _{ " " | "\t" | "\r\n" | "\n" | "\r" }
