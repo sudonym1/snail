@@ -93,9 +93,13 @@ class TestBlockSyntax:
         result = translate("class Foo:\n    pass\n")
         assert "class Foo {" in result
 
-    def test_class_with_bases_unsupported(self) -> None:
-        with pytest.raises(Py2SnailError, match="inheritance"):
-            translate("class Foo(Bar, Baz):\n    pass\n")
+    def test_class_with_bases(self) -> None:
+        result = translate("class Foo(Bar):\n    pass\n")
+        assert "class Foo(Bar) {" in result
+
+    def test_class_with_multiple_bases(self) -> None:
+        result = translate("class Foo(Bar, Baz):\n    pass\n")
+        assert "class Foo(Bar, Baz) {" in result
 
     def test_try_except(self) -> None:
         result = translate(

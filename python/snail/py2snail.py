@@ -234,13 +234,14 @@ class SnailUnparser(ast.NodeVisitor):
         raise Py2SnailError("async functions are not supported by Snail")
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        if node.bases or node.keywords:
-            raise Py2SnailError(
-                "class inheritance/metaclasses are not supported by Snail"
-            )
+        if node.keywords:
+            raise Py2SnailError("metaclasses are not supported by Snail")
         if node.decorator_list:
             raise Py2SnailError("decorators are not supported by Snail")
-        self._write(f"{self._i()}class {_mangle(node.name)}")
+        bases = ""
+        if node.bases:
+            bases = "(" + ", ".join(self._expr(b) for b in node.bases) + ")"
+        self._write(f"{self._i()}class {_mangle(node.name)}{bases}")
         self._block(node.body)
 
     def visit_Return(self, node: ast.Return) -> None:
