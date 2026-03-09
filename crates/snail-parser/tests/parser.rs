@@ -2319,3 +2319,112 @@ fn lambda_is_now_valid_identifier() {
     let result = snail_parser::parse("lambda = 1");
     assert!(result.is_ok());
 }
+
+// ---- Class inheritance tests ----
+
+#[test]
+fn parses_class_single_base() {
+    let source = "class Dog(Animal) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Class {
+            name, bases, body, ..
+        } => {
+            assert_eq!(name, "Dog");
+            assert_eq!(bases.len(), 1);
+            expect_name(&bases[0], "Animal");
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected class, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_class_multiple_bases() {
+    let source = "class C(A, B) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Class {
+            name, bases, body, ..
+        } => {
+            assert_eq!(name, "C");
+            assert_eq!(bases.len(), 2);
+            expect_name(&bases[0], "A");
+            expect_name(&bases[1], "B");
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected class, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_class_empty_parens() {
+    let source = "class Foo() { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Class {
+            name, bases, body, ..
+        } => {
+            assert_eq!(name, "Foo");
+            assert!(bases.is_empty());
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected class, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_class_trailing_comma() {
+    let source = "class Foo(A, B,) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Class { bases, .. } => {
+            assert_eq!(bases.len(), 2);
+            expect_name(&bases[0], "A");
+            expect_name(&bases[1], "B");
+        }
+        other => panic!("Expected class, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_class_dotted_base() {
+    let source = "class Foo(mod.Bar) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Class { bases, .. } => {
+            assert_eq!(bases.len(), 1);
+            assert!(matches!(&bases[0], Expr::Attribute { .. }));
+        }
+        other => panic!("Expected class, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_class_no_bases_backward_compat() {
+    let source = "class Foo { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Class {
+            name, bases, body, ..
+        } => {
+            assert_eq!(name, "Foo");
+            assert!(bases.is_empty());
+            assert_eq!(body.len(), 1);
+        }
+        other => panic!("Expected class, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_class_function_call_as_base() {
+    let source = "class Foo(get_base()) { pass }";
+    let program = parse_ok(source);
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Class { bases, .. } => {
+            assert_eq!(bases.len(), 1);
+            assert!(matches!(&bases[0], Expr::Call { .. }));
+        }
+        other => panic!("Expected class, got {other:?}"),
+    }
+}

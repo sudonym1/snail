@@ -1005,10 +1005,20 @@ impl Desugarer {
                     }
                 }
             }
-            Expr::Class { name, body, span } => {
+            Expr::Class {
+                name,
+                bases,
+                body,
+                span,
+            } => {
+                let bases = bases
+                    .iter()
+                    .map(|b| self.desugar_expr(b, prelude))
+                    .collect();
                 let body = self.desugar_block(body);
                 Expr::Class {
                     name: name.clone(),
+                    bases,
                     body,
                     span: span.clone(),
                 }

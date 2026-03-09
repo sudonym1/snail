@@ -1847,9 +1847,14 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             span: span.clone(),
         },
         Expr::Class {
-            name, body, span, ..
+            name,
+            bases,
+            body,
+            span,
+            ..
         } => Expr::Class {
             name: name.clone(),
+            bases: bases.clone(),
             body: body.clone(),
             span: span.clone(),
         },
@@ -2092,16 +2097,21 @@ fn lower_def_stmt(
 fn lower_class_stmt(
     builder: &AstBuilder<'_>,
     name: &str,
+    bases: &[Expr],
     body: &[Stmt],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
+    let lowered_bases: Vec<PyObject> = bases
+        .iter()
+        .map(|b| lower_expr(builder, b))
+        .collect::<Result<Vec<_>, _>>()?;
     let body = lower_block(builder, body, span)?;
     let class_node = builder
         .call_node(
             "ClassDef",
             vec![
                 name.to_string().into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::new_bound(builder.py(), &lowered_bases).into_py(builder.py()),
                 PyList::empty_bound(builder.py()).into_py(builder.py()),
                 PyList::new_bound(builder.py(), body).into_py(builder.py()),
                 PyList::empty_bound(builder.py()).into_py(builder.py()),
@@ -2438,8 +2448,12 @@ pub(crate) fn lower_expr_as_stmt(
         } => lower_def_stmt(builder, name, params, body, span),
         Expr::Def { name: None, .. } => Err(LowerError::new("anonymous def was not desugared")),
         Expr::Class {
-            name, body, span, ..
-        } => lower_class_stmt(builder, name, body, span),
+            name,
+            bases,
+            body,
+            span,
+            ..
+        } => lower_class_stmt(builder, name, bases, body, span),
         Expr::Try {
             body,
             handlers,

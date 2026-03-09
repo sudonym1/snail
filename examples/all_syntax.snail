@@ -46,6 +46,50 @@ class SimpleCtx {
     }
 }
 
+# ---- Class inheritance ----
+class Animal {
+    def __init__(self, name) { self.name = name }
+    def speak(self) { return "..." }
+}
+class Dog(Animal) {
+    def speak(self) { return self.name + " says woof" }
+}
+class Cat(Animal) {
+    def speak(self) { return self.name + " says meow" }
+}
+
+# Multiple inheritance
+class Mixin {
+    def greet(self) { return "hello" }
+}
+class Fancy(Dog, Mixin) {
+    pass
+}
+
+# Empty parens (equivalent to no bases)
+class Plain() {
+    pass
+}
+
+# Works with arbitrary expressions
+def get_base_fails {
+    raise Exception()
+}
+
+def get_base_fallback() {
+    return Animal
+}
+
+class Pony(get_base_fails():get_base_fallback()?) {
+}
+
+d = Dog("Rex")
+assert d.speak() == "Rex says woof"
+assert isinstance(d, Animal)
+f = Fancy("Fifi")
+assert f.speak() == "Fifi says woof"
+assert f.greet() == "hello"
+
 # ---- Function definitions, implicit returns, and argument forms ----
 def compute(nums) {
     total = 0

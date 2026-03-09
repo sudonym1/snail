@@ -328,6 +328,7 @@ pub enum Expr {
     },
     Class {
         name: String,
+        bases: Vec<Expr>,
         body: Vec<Stmt>,
         span: SourceSpan,
     },
