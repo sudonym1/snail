@@ -430,6 +430,7 @@ class TestUnsupported:
         with pytest.raises(Py2SnailError, match="positional-only"):
             translate("def f(a, /, b):\n    pass\n")
 
+    @pytest.mark.skipif(sys.version_info < (3, 12), reason="type statement requires 3.12+")
     def test_type_alias(self) -> None:
         with pytest.raises(Py2SnailError, match="type alias"):
             translate("type Point = tuple[int, int]\n")

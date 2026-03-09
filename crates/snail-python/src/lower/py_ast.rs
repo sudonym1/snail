@@ -7,6 +7,7 @@ pub struct AstBuilder<'py> {
     py: Python<'py>,
     ast: Bound<'py, PyModule>,
     needs_index_wrapper: bool,
+    needs_constant_kind: bool,
 }
 
 impl<'py> AstBuilder<'py> {
@@ -15,10 +16,13 @@ impl<'py> AstBuilder<'py> {
         let major: u8 = version_info.get_item(0)?.extract()?;
         let minor: u8 = version_info.get_item(1)?.extract()?;
         let needs_index_wrapper = major == 3 && minor < 9;
+        // Python 3.8–3.11 require `kind` on ast.Constant; removed in 3.12
+        let needs_constant_kind = major == 3 && minor < 12;
         Ok(Self {
             py,
             ast: py.import_bound("_ast")?,
             needs_index_wrapper,
+            needs_constant_kind,
         })
     }
 
@@ -63,6 +67,10 @@ impl<'py> AstBuilder<'py> {
         let tuple = PyTuple::new_bound(self.py, args);
         let node = self.ast.getattr(name)?.call1(tuple)?;
         set_location(&node, span)?;
+        // Python 3.8–3.11 expect `kind` on Constant nodes
+        if self.needs_constant_kind && name == "Constant" {
+            node.setattr("kind", self.py.None())?;
+        }
         Ok(node.into_py(self.py))
     }
 

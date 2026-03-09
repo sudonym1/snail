@@ -605,7 +605,11 @@ class SnailUnparser(ast.NodeVisitor):
 
     def visit_Subscript(self, node: ast.Subscript) -> str:
         value = self._paren(node.value, _prec(node))
-        sl = self._expr(node.slice)
+        slice_node = node.slice
+        # Python 3.8 wraps subscript indices in ast.Index
+        if hasattr(ast, "Index") and isinstance(slice_node, ast.Index):
+            slice_node = slice_node.value  # type: ignore[attr-defined]
+        sl = self._expr(slice_node)
         return f"{value}[{sl}]"
 
     def visit_Starred(self, node: ast.Starred) -> str:
