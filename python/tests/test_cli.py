@@ -3984,6 +3984,26 @@ def test_generator_expr_any(capsys: pytest.CaptureFixture[str]) -> None:
     assert result == 0
     assert captured.out.strip() == "True"
 
+def test_starred_in_list(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["a = [1, 2]; print([*a, 3])"])
+    assert result == 0
+    assert captured.out.strip() == "[1, 2, 3]"
+
+def test_starred_in_tuple(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["a = (1,); print((*a, 2, 3))"])
+    assert result == 0
+    assert captured.out.strip() == "(1, 2, 3)"
+
+def test_starred_in_set(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["a = #{1}; b = #{2}; print(#{*a, *b})"])
+    assert result == 0
+    assert captured.out.strip() == "{1, 2}"
+
+def test_dict_unpacking(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, [r'a = %{"x": 1}; print(%{**a, "y": 2})'])
+    assert result == 0
+    assert captured.out.strip() == "{'x': 1, 'y': 2}"
+
 def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["""
                                         def { try { raise Exception() } except { for i in range(10) { if i==4 { break i} } }}()

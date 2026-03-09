@@ -1,5 +1,5 @@
 use pest::iterators::{Pair, Pairs};
-use snail_ast::{Expr, FStringPart, RegexPattern, SourceSpan, SubprocessKind};
+use snail_ast::{DictEntry, Expr, FStringPart, RegexPattern, SourceSpan, SubprocessKind};
 use snail_error::ParseError;
 
 use crate::Rule;
@@ -56,8 +56,22 @@ pub fn parse_set_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Par
 fn parse_collection_elements(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Expr>, ParseError> {
     let mut elements = Vec::new();
     for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::expr {
-            elements.push(crate::expr::parse_expr_pair(inner, source)?);
+        match inner.as_rule() {
+            Rule::expr => {
+                elements.push(crate::expr::parse_expr_pair(inner, source)?);
+            }
+            Rule::star_element => {
+                let span = span_from_pair(&inner, source);
+                let value_pair = inner.into_inner().next().ok_or_else(|| {
+                    error_with_span("missing starred value", span.clone(), source)
+                })?;
+                let value = crate::expr::parse_expr_pair(value_pair, source)?;
+                elements.push(Expr::Starred {
+                    value: Box::new(value),
+                    span,
+                });
+            }
+            _ => {}
         }
     }
     Ok(elements)
@@ -67,14 +81,28 @@ pub fn parse_dict_literal(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Pa
     let span = span_from_pair(&pair, source);
     let mut entries = Vec::new();
     for inner in pair.into_inner() {
-        if inner.as_rule() == Rule::dict_entry {
-            entries.push(parse_dict_entry(inner, source)?);
+        match inner.as_rule() {
+            Rule::dict_entry => {
+                entries.push(parse_dict_entry(inner, source)?);
+            }
+            Rule::dict_unpack => {
+                let entry_span = span_from_pair(&inner, source);
+                let value_pair = inner.into_inner().next().ok_or_else(|| {
+                    error_with_span("missing dict unpack value", entry_span.clone(), source)
+                })?;
+                let value = crate::expr::parse_expr_pair(value_pair, source)?;
+                entries.push(DictEntry::Unpack {
+                    value,
+                    span: entry_span,
+                });
+            }
+            _ => {}
         }
     }
     Ok(Expr::Dict { entries, span })
 }
 
-pub fn parse_dict_entry(pair: Pair<'_, Rule>, source: &str) -> Result<(Expr, Expr), ParseError> {
+pub fn parse_dict_entry(pair: Pair<'_, Rule>, source: &str) -> Result<DictEntry, ParseError> {
     let span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner();
     let key_pair = inner
@@ -85,7 +113,7 @@ pub fn parse_dict_entry(pair: Pair<'_, Rule>, source: &str) -> Result<(Expr, Exp
         .ok_or_else(|| error_with_span("missing dict value", span.clone(), source))?;
     let key = crate::expr::parse_expr_pair(key_pair, source)?;
     let value = crate::expr::parse_expr_pair(value_pair, source)?;
-    Ok((key, value))
+    Ok(DictEntry::KeyValue { key, value, span })
 }
 
 pub fn parse_list_comp(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {

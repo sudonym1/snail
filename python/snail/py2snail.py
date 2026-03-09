@@ -534,15 +534,14 @@ class SnailUnparser(ast.NodeVisitor):
         return f"if {test} {{ {body} }} else {{ {orelse} }}"
 
     def visit_Dict(self, node: ast.Dict) -> str:
-        if not node.keys:
+        if not node.keys and not node.values:
             return "%{}"
         pairs = []
         for k, v in zip(node.keys, node.values):
             if k is None:
-                raise Py2SnailError(
-                    "dict unpacking (**x) in dict literals is not supported by Snail"
-                )
-            pairs.append(f"{self._expr(k)}: {self._expr(v)}")
+                pairs.append(f"**{self._expr(v)}")
+            else:
+                pairs.append(f"{self._expr(k)}: {self._expr(v)}")
         return "%{" + ", ".join(pairs) + "}"
 
     def visit_Set(self, node: ast.Set) -> str:

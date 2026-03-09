@@ -1,7 +1,7 @@
 use pest::Parser;
 use pest_derive::Parser;
 
-use snail_ast::*;
+use snail_ast::{DictEntry, *};
 use snail_error::ParseError;
 
 mod expr;
@@ -349,6 +349,9 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
                 validate_expr_mode(value, source, mode)?;
             }
         }
+        Expr::Starred { value, .. } => {
+            validate_expr_mode(value, source, mode)?;
+        }
         Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
             validate_exprs_mode(elements, source, mode)?
         }
@@ -373,9 +376,16 @@ fn validate_expr_mode(expr: &Expr, source: &str, mode: ValidationMode) -> Result
             validate_expr_mode(index, source, mode)?;
         }
         Expr::Dict { entries, .. } => {
-            for (key, value) in entries {
-                validate_expr_mode(key, source, mode)?;
-                validate_expr_mode(value, source, mode)?;
+            for entry in entries {
+                match entry {
+                    DictEntry::KeyValue { key, value, .. } => {
+                        validate_expr_mode(key, source, mode)?;
+                        validate_expr_mode(value, source, mode)?;
+                    }
+                    DictEntry::Unpack { value, .. } => {
+                        validate_expr_mode(value, source, mode)?;
+                    }
+                }
             }
         }
         Expr::Slice { start, end, .. } => {

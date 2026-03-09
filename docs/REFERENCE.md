@@ -308,6 +308,10 @@ Explicit semicolons always separate statements regardless of these rules.
   `%{"a": 1}`, and sets `#{1, 2}`. The empty dict literal is `%{}` and the
   empty set literal is `#{}`.
   `{...}` is always a block, not a literal.
+- Starred unpacking (`*expr`) is supported in list, tuple, and set literals:
+  `[*a, b]`, `(*a, b)`, `#{*a, *b}`.
+- Double-starred unpacking (`**expr`) is supported in dict literals:
+  `%{**defaults, "key": val}`.
 
 ## Pipeline operator
 Snail repurposes the `|` operator for generic data pipelining through

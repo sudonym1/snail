@@ -1,7 +1,7 @@
 use pest::iterators::Pair;
 use snail_ast::{
-    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, ExceptHandler, Expr,
-    IncrOp, Stmt, UnaryOp,
+    Argument, AssignTarget, AugAssignOp, BinaryOp, CompareOp, Condition, DictEntry, ExceptHandler,
+    Expr, IncrOp, Stmt, UnaryOp,
 };
 use snail_error::ParseError;
 
@@ -817,14 +817,23 @@ fn replace_compact_try_exception_var(expr: Expr) -> Expr {
                 .collect(),
             span,
         },
+        Expr::Starred { value, span } => Expr::Starred {
+            value: Box::new(replace_compact_try_exception_var(*value)),
+            span,
+        },
         Expr::Dict { entries, span } => Expr::Dict {
             entries: entries
                 .into_iter()
-                .map(|(key, value)| {
-                    (
-                        replace_compact_try_exception_var(key),
-                        replace_compact_try_exception_var(value),
-                    )
+                .map(|entry| match entry {
+                    DictEntry::KeyValue { key, value, span } => DictEntry::KeyValue {
+                        key: replace_compact_try_exception_var(key),
+                        value: replace_compact_try_exception_var(value),
+                        span,
+                    },
+                    DictEntry::Unpack { value, span } => DictEntry::Unpack {
+                        value: replace_compact_try_exception_var(value),
+                        span,
+                    },
                 })
                 .collect(),
             span,

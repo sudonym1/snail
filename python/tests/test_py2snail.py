@@ -347,9 +347,9 @@ class TestStarArgs:
 
 
 class TestDictUnpacking:
-    def test_dict_unpack_unsupported(self) -> None:
-        with pytest.raises(Py2SnailError, match="dict unpacking"):
-            translate("x = {**a, **b}\n")
+    def test_dict_unpack(self) -> None:
+        result = translate("x = {**a, **b}\n")
+        assert "%{**a, **b}" in result
 
 
 class TestSlicing:
@@ -435,8 +435,8 @@ class TestUnsupported:
             translate("type Point = tuple[int, int]\n")
 
     def test_dict_unpacking_in_literal(self) -> None:
-        with pytest.raises(Py2SnailError, match="dict unpacking"):
-            translate("x = {**a, 'b': 2}\n")
+        result = translate("x = {**a, 'b': 2}\n")
+        assert "**a" in result
 
 
 # ---------------------------------------------------------------------------
@@ -952,3 +952,9 @@ class TestKeywordMangling:
 
     def test_roundtrip_bare_underscore(self) -> None:
         _roundtrip("_ = 99\nprint(_)\n")
+
+    def test_roundtrip_starred_in_list(self) -> None:
+        _roundtrip("print([*[1, 2], 3])\n")
+
+    def test_roundtrip_dict_unpacking(self) -> None:
+        _roundtrip("a = {'x': 1}\nprint({**a, 'y': 2})\n")

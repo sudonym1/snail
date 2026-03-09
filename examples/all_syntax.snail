@@ -192,6 +192,18 @@ gen_sum = sum(x for x in nums)
 gen_any = any(x > 3 for x in nums)
 gen_list = list((x * 2 for x in nums))
 
+# Starred/unpacking in collection literals
+spread_list = [*nums, 10, 11]
+assert spread_list == [1, 2, 3, 4, 10, 11]
+spread_tuple = (*single, 2, 3)
+assert spread_tuple == (1, 2, 3)
+spread_set = #{*ids, 4, 5}
+assert 4 in spread_set and 1 in spread_set
+defaults = %{"a": 1, "b": 2}
+merged = %{**defaults, "c": 3}
+assert merged == %{"a": 1, "b": 2, "c": 3}
+print("unpacking", spread_list, spread_tuple, merged)
+
 # Slicing
 first = data[0]
 mid = data[1:3]

@@ -244,16 +244,20 @@ structured_query_body = @{ structured_query_part* }
 structured_query_part = _{ "[" ~ structured_query_body ~ "]" | (!"[" ~ !"]" ~ ANY) }
 
 // Collection literals and comprehensions
+collection_element = _{ star_element | expr }
+star_element = { "*" ~ expr }
+dict_item = _{ dict_unpack | dict_entry }
+dict_unpack = { "**" ~ expr }
 generator_expr = { "(" ~ expr ~ comp_for ~ ")" }
 tuple_literal = {
   "(" ~ ")"
-  | "(" ~ expr ~ "," ~ (expr ~ ("," ~ expr)* ~ ","?)? ~ ")"
+  | "(" ~ collection_element ~ "," ~ (collection_element ~ ("," ~ collection_element)* ~ ","?)? ~ ")"
 }
 list_comp = { "[" ~ expr ~ comp_for ~ "]" }
-list_literal = { "[" ~ (expr ~ ("," ~ expr)*)? ~ "]" }
-set_literal = { "#{" ~ (expr ~ ("," ~ expr)*)? ~ "}" }
+list_literal = { "[" ~ (collection_element ~ ("," ~ collection_element)*)? ~ "]" }
+set_literal = { "#{" ~ (collection_element ~ ("," ~ collection_element)*)? ~ "}" }
 dict_comp = { "%{" ~ expr ~ ":" ~ expr ~ comp_for ~ "}" }
-dict_literal = { "%{" ~ (dict_entry ~ ("," ~ dict_entry)*)? ~ "}" }
+dict_literal = { "%{" ~ (dict_item ~ ("," ~ dict_item)*)? ~ "}" }
 dict_entry = { expr ~ ":" ~ expr }
 
 // Comprehension clauses

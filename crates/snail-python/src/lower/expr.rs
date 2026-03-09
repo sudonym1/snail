@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use snail_ast::*;
+use snail_ast::{DictEntry, *};
 use snail_error::LowerError;
 
 use super::constants::*;
@@ -915,9 +915,17 @@ pub(crate) fn lower_expr_with_exception(
         Expr::Dict { entries, span } => {
             let mut keys = Vec::with_capacity(entries.len());
             let mut values = Vec::with_capacity(entries.len());
-            for (key, value) in entries {
-                keys.push(lower_expr_with_exception(builder, key, exception_name)?);
-                values.push(lower_expr_with_exception(builder, value, exception_name)?);
+            for entry in entries {
+                match entry {
+                    DictEntry::KeyValue { key, value, .. } => {
+                        keys.push(lower_expr_with_exception(builder, key, exception_name)?);
+                        values.push(lower_expr_with_exception(builder, value, exception_name)?);
+                    }
+                    DictEntry::Unpack { value, .. } => {
+                        keys.push(builder.py().None().into_py(builder.py()));
+                        values.push(lower_expr_with_exception(builder, value, exception_name)?);
+                    }
+                }
             }
             builder
                 .call_node(
@@ -1076,6 +1084,16 @@ pub(crate) fn lower_expr_with_exception(
                         end.unwrap_or_else(|| builder.py().None().into_py(builder.py())),
                         builder.py().None().into_py(builder.py()),
                     ],
+                    span,
+                )
+                .map_err(py_err_to_lower)
+        }
+        Expr::Starred { value, span } => {
+            let value = lower_expr_with_exception(builder, value, exception_name)?;
+            builder
+                .call_node(
+                    "Starred",
+                    vec![value, builder.load_ctx().map_err(py_err_to_lower)?],
                     span,
                 )
                 .map_err(py_err_to_lower)
@@ -1521,15 +1539,23 @@ fn count_placeholders(expr: &Expr, info: &mut PlaceholderInfo) {
             count_placeholders(index, info);
         }
         Expr::Paren { expr, .. } => count_placeholders(expr, info),
+        Expr::Starred { value, .. } => count_placeholders(value, info),
         Expr::List { elements, .. } | Expr::Tuple { elements, .. } | Expr::Set { elements, .. } => {
             for expr in elements {
                 count_placeholders(expr, info);
             }
         }
         Expr::Dict { entries, .. } => {
-            for (key, value) in entries {
-                count_placeholders(key, info);
-                count_placeholders(value, info);
+            for entry in entries {
+                match entry {
+                    DictEntry::KeyValue { key, value, .. } => {
+                        count_placeholders(key, info);
+                        count_placeholders(value, info);
+                    }
+                    DictEntry::Unpack { value, .. } => {
+                        count_placeholders(value, info);
+                    }
+                }
             }
         }
         Expr::Slice { start, end, .. } => {
@@ -1808,14 +1834,23 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
                 .collect(),
             span: span.clone(),
         },
+        Expr::Starred { value, span } => Expr::Starred {
+            value: Box::new(substitute_placeholder(value, replacement)),
+            span: span.clone(),
+        },
         Expr::Dict { entries, span } => Expr::Dict {
             entries: entries
                 .iter()
-                .map(|(key, value)| {
-                    (
-                        substitute_placeholder(key, replacement),
-                        substitute_placeholder(value, replacement),
-                    )
+                .map(|entry| match entry {
+                    DictEntry::KeyValue { key, value, span } => DictEntry::KeyValue {
+                        key: substitute_placeholder(key, replacement),
+                        value: substitute_placeholder(value, replacement),
+                        span: span.clone(),
+                    },
+                    DictEntry::Unpack { value, span } => DictEntry::Unpack {
+                        value: substitute_placeholder(value, replacement),
+                        span: span.clone(),
+                    },
                 })
                 .collect(),
             span: span.clone(),

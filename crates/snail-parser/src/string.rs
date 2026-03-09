@@ -643,6 +643,10 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             }
             *span = shift_span(span, offset, source);
         }
+        Expr::Starred { value, span } => {
+            shift_expr_spans(value, offset, source);
+            *span = shift_span(span, offset, source);
+        }
         Expr::Block { span, .. }
         | Expr::If { span, .. }
         | Expr::While { span, .. }

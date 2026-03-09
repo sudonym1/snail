@@ -177,6 +177,7 @@ pub fn expr_span(expr: &snail_ast::Expr) -> &SourceSpan {
         | snail_ast::Expr::Class { span, .. }
         | snail_ast::Expr::Try { span, .. }
         | snail_ast::Expr::With { span, .. }
+        | snail_ast::Expr::Starred { span, .. }
         | snail_ast::Expr::Awk { span, .. }
         | snail_ast::Expr::Xargs { span, .. } => span,
     }

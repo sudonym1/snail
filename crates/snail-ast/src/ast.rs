@@ -273,7 +273,7 @@ pub enum Expr {
         span: SourceSpan,
     },
     Dict {
-        entries: Vec<(Expr, Expr)>,
+        entries: Vec<DictEntry>,
         span: SourceSpan,
     },
     Slice {
@@ -351,6 +351,10 @@ pub enum Expr {
         body: Vec<Stmt>,
         span: SourceSpan,
     },
+    Starred {
+        value: Box<Expr>,
+        span: SourceSpan,
+    },
     Awk {
         sources: Vec<Argument>,
         body: Vec<Stmt>,
@@ -359,6 +363,19 @@ pub enum Expr {
     Xargs {
         sources: Vec<Argument>,
         body: Vec<Stmt>,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DictEntry {
+    KeyValue {
+        key: Expr,
+        value: Expr,
+        span: SourceSpan,
+    },
+    Unpack {
+        value: Expr,
         span: SourceSpan,
     },
 }
