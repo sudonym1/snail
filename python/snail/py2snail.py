@@ -31,6 +31,11 @@ Lossy but semantics-preserving transformations
   conditions (block re-evaluates with stale bindings each iteration)
 - Ellipsis literal ... is emitted as the name Ellipsis
 - Step slices use slice() builtin (x[::2] -> x[slice(None, None, 2)])
+- Identifiers that collide with Snail-only keywords (let, awk, xargs) get a
+  trailing underscore (PEP 8 convention): awk -> awk_, let -> let_, etc.
+- Bare ``_`` is renamed to ``__`` (``_`` is Snail's pipeline placeholder)
+- Imports where a keyword appears in a grammar-parsed position are rewritten
+  using ``__import__`` / ``getattr`` to avoid parse failures
 
 Known Snail runtime issues
 --------------------------
@@ -46,6 +51,27 @@ import sys
 
 class Py2SnailError(Exception):
     """Raised when an unsupported Python construct is encountered."""
+
+
+# Keyword mangling ------------------------------------------------------------
+
+# Identifiers that are keywords in Snail but not in Python.
+# Bare "_" is also reserved (Snail pipeline placeholder).
+_SNAIL_ONLY_KEYWORDS = frozenset({"let", "awk", "xargs"})
+
+
+def _mangle(name: str) -> str:
+    """Append '_' to identifiers that collide with Snail keywords."""
+    if name in _SNAIL_ONLY_KEYWORDS:
+        return name + "_"
+    if name == "_":
+        return "__"
+    return name
+
+
+def _needs_import_rewrite(name: str) -> bool:
+    """Return True if *name* (or any dotted component) is a Snail keyword."""
+    return any(part in _SNAIL_ONLY_KEYWORDS or part == "_" for part in name.split("."))
 
 
 # Operator maps ---------------------------------------------------------------
@@ -201,7 +227,7 @@ class SnailUnparser(ast.NodeVisitor):
         if node.decorator_list:
             raise Py2SnailError("decorators are not supported by Snail")
         args = self._format_args(node.args)
-        self._write(f"{self._i()}def {node.name}({args})")
+        self._write(f"{self._i()}def {_mangle(node.name)}({args})")
         self._block(node.body)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
@@ -214,7 +240,7 @@ class SnailUnparser(ast.NodeVisitor):
             )
         if node.decorator_list:
             raise Py2SnailError("decorators are not supported by Snail")
-        self._write(f"{self._i()}class {node.name}")
+        self._write(f"{self._i()}class {_mangle(node.name)}")
         self._block(node.body)
 
     def visit_Return(self, node: ast.Return) -> None:
@@ -322,7 +348,7 @@ class SnailUnparser(ast.NodeVisitor):
                 self._write(f"{self._i()}except")
             elif handler.name:
                 self._write(
-                    f"{self._i()}except {self._expr(handler.type)} as {handler.name}"
+                    f"{self._i()}except {self._expr(handler.type)} as {_mangle(handler.name)}"
                 )
             else:
                 self._write(f"{self._i()}except {self._expr(handler.type)}")
@@ -343,27 +369,88 @@ class SnailUnparser(ast.NodeVisitor):
             self._line(f"assert {self._expr(node.test)}")
 
     def visit_Import(self, node: ast.Import) -> None:
-        parts = []
-        for alias in node.names:
-            if alias.asname:
-                parts.append(f"{alias.name} as {alias.asname}")
-            else:
-                parts.append(alias.name)
-        self._line(f"import {', '.join(parts)}")
+        # If any name needs rewriting, emit each alias on its own line
+        any_keyword = any(
+            _needs_import_rewrite(alias.name)
+            or (alias.asname and _needs_import_rewrite(alias.asname))
+            for alias in node.names
+        )
+        if any_keyword:
+            for alias in node.names:
+                if _needs_import_rewrite(alias.name):
+                    bound = _mangle(alias.asname or alias.name.split(".")[0])
+                    self._line(f'{bound} = __import__("{alias.name}")')
+                elif alias.asname:
+                    self._line(f"import {alias.name} as {_mangle(alias.asname)}")
+                else:
+                    self._line(f"import {alias.name}")
+        else:
+            parts = []
+            for alias in node.names:
+                if alias.asname:
+                    parts.append(f"{alias.name} as {_mangle(alias.asname)}")
+                else:
+                    parts.append(alias.name)
+            self._line(f"import {', '.join(parts)}")
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         module = node.module or ""
         prefix = "." * (node.level or 0)
+        full_module = f"{prefix}{module}"
+
+        # Check if the module path contains a Snail keyword
+        module_has_keyword = _needs_import_rewrite(module) if module else False
+
+        if module_has_keyword:
+            if node.level:
+                raise Py2SnailError(
+                    f"relative import from keyword module '{full_module}' "
+                    "cannot be mechanically rewritten"
+                )
+            for alias in node.names:
+                if alias.name == "*":
+                    raise Py2SnailError(
+                        f"star import from keyword module '{module}' "
+                        "cannot be mechanically rewritten"
+                    )
+                bound = _mangle(alias.asname or alias.name)
+                self._line(
+                    f'{bound} = getattr(__import__("{module}"), "{alias.name}")'
+                )
+            return
+
+        # Check if any imported names are Snail keywords
+        any_name_keyword = any(
+            _needs_import_rewrite(alias.name) for alias in node.names
+        )
+
+        if any_name_keyword:
+            # Must rewrite each name that conflicts
+            for alias in node.names:
+                if _needs_import_rewrite(alias.name):
+                    bound = _mangle(alias.asname or alias.name)
+                    self._line(
+                        f'{bound} = getattr(__import__("{module}"), "{alias.name}")'
+                    )
+                elif alias.asname:
+                    self._line(
+                        f"from {full_module} import {alias.name} as {_mangle(alias.asname)}"
+                    )
+                else:
+                    self._line(f"from {full_module} import {alias.name}")
+            return
+
+        # No keyword conflicts — normal import
         names = []
         for alias in node.names:
             if alias.asname:
-                names.append(f"{alias.name} as {alias.asname}")
+                names.append(f"{alias.name} as {_mangle(alias.asname)}")
             else:
                 names.append(alias.name)
         if len(names) == 1:
-            self._line(f"from {prefix}{module} import {names[0]}")
+            self._line(f"from {full_module} import {names[0]}")
         else:
-            self._line(f"from {prefix}{module} import ({', '.join(names)})")
+            self._line(f"from {full_module} import ({', '.join(names)})")
 
     def visit_Global(self, node: ast.Global) -> None:
         raise Py2SnailError("global statement is not supported by Snail")
@@ -528,7 +615,7 @@ class SnailUnparser(ast.NodeVisitor):
             if kw.arg is None:
                 args.append(f"**{self._expr(kw.value)}")
             else:
-                args.append(f"{kw.arg}={self._expr(kw.value)}")
+                args.append(f"{_mangle(kw.arg)}={self._expr(kw.value)}")
         return f"{func}({', '.join(args)})"
 
     def visit_FormattedValue(self, node: ast.FormattedValue) -> str:
@@ -601,7 +688,7 @@ class SnailUnparser(ast.NodeVisitor):
 
     def visit_Attribute(self, node: ast.Attribute) -> str:
         value = self._paren(node.value, _prec(node))
-        return f"{value}.{node.attr}"
+        return f"{value}.{_mangle(node.attr)}"
 
     def visit_Subscript(self, node: ast.Subscript) -> str:
         value = self._paren(node.value, _prec(node))
@@ -612,7 +699,7 @@ class SnailUnparser(ast.NodeVisitor):
         return f"*{self._expr(node.value)}"
 
     def visit_Name(self, node: ast.Name) -> str:
-        return node.id
+        return _mangle(node.id)
 
     def visit_List(self, node: ast.List) -> str:
         elts = ", ".join(self._expr(e) for e in node.elts)
@@ -656,26 +743,26 @@ class SnailUnparser(ast.NodeVisitor):
         default_offset = len(all_positional) - num_defaults
 
         for i, arg in enumerate(all_positional):
-            s = arg.arg
+            s = _mangle(arg.arg)
             di = i - default_offset
             if di >= 0 and di < len(args.defaults):
                 s += f"={self._expr(args.defaults[di])}"
             parts.append(s)
 
         if args.vararg:
-            parts.append(f"*{args.vararg.arg}")
+            parts.append(f"*{_mangle(args.vararg.arg)}")
         elif args.kwonlyargs:
             parts.append("*")
 
         for i, arg in enumerate(args.kwonlyargs):
-            s = arg.arg
+            s = _mangle(arg.arg)
             default = args.kw_defaults[i] if i < len(args.kw_defaults) else None
             if default is not None:
                 s += f"={self._expr(default)}"
             parts.append(s)
 
         if args.kwarg:
-            parts.append(f"**{args.kwarg.arg}")
+            parts.append(f"**{_mangle(args.kwarg.arg)}")
 
         return ", ".join(parts)
 

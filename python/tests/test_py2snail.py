@@ -813,3 +813,142 @@ class TestCompilationOnly:
         self._compiles(
             "try:\n    import ujson as json\nexcept ImportError:\n    import json\n"
         )
+
+
+# ---------------------------------------------------------------------------
+# Keyword mangling tests
+# ---------------------------------------------------------------------------
+
+
+class TestKeywordMangling:
+    """Test that Snail-only keywords are mangled in translated output."""
+
+    def test_variable_named_awk(self) -> None:
+        result = translate("awk = 1\nprint(awk)\n")
+        assert "awk_" in result
+        assert "awk_ = 1" in result
+        assert "print(awk_)" in result
+
+    def test_attribute_named_awk(self) -> None:
+        result = translate("self.awk = 1\n")
+        assert "self.awk_" in result
+
+    def test_function_named_let(self) -> None:
+        result = translate("def let():\n    pass\n")
+        assert "def let_(" in result
+
+    def test_parameter_named_xargs(self) -> None:
+        result = translate("def f(xargs):\n    pass\n")
+        assert "def f(xargs_)" in result
+
+    def test_keyword_argument_awk(self) -> None:
+        result = translate("f(awk=1)\n")
+        assert "awk_=1" in result
+
+    def test_class_named_let(self) -> None:
+        result = translate("class let:\n    pass\n")
+        assert "class let_" in result
+
+    def test_bare_underscore_renamed(self) -> None:
+        result = translate("_ = 1\nprint(_)\n")
+        assert "__ = 1" in result
+        assert "print(__)" in result
+
+    def test_except_handler_named_awk(self) -> None:
+        result = translate(
+            "try:\n    pass\nexcept Exception as awk:\n    print(awk)\n"
+        )
+        assert "as awk_" in result
+        assert "print(awk_)" in result
+
+    def test_vararg_named_awk(self) -> None:
+        result = translate("def f(*awk):\n    pass\n")
+        assert "*awk_" in result
+
+    def test_kwarg_named_let(self) -> None:
+        result = translate("def f(**let):\n    pass\n")
+        assert "**let_" in result
+
+    def test_kwonly_named_xargs(self) -> None:
+        result = translate("def f(*, xargs):\n    pass\n")
+        assert "xargs_" in result
+
+    # -- import rewrites -------------------------------------------------------
+
+    def test_import_keyword_module(self) -> None:
+        result = translate("import awk\n")
+        assert '__import__("awk")' in result
+        assert "awk_ =" in result
+
+    def test_import_keyword_module_as(self) -> None:
+        result = translate("import awk as x\n")
+        assert '__import__("awk")' in result
+        assert "x =" in result
+
+    def test_from_keyword_module_import(self) -> None:
+        result = translate("from awk import bar\n")
+        assert '__import__("awk")' in result
+        assert 'getattr(' in result
+        assert '"bar"' in result
+
+    def test_from_normal_module_import_keyword(self) -> None:
+        result = translate("from foo import awk\n")
+        assert 'getattr(__import__("foo"), "awk")' in result
+        assert "awk_ =" in result
+
+    def test_from_normal_module_import_keyword_as(self) -> None:
+        result = translate("from foo import awk as x\n")
+        assert 'getattr(__import__("foo"), "awk")' in result
+        assert "x =" in result
+
+    def test_from_keyword_module_star_raises(self) -> None:
+        with pytest.raises(Py2SnailError, match="star import"):
+            translate("from awk import *\n")
+
+    def test_import_asname_mangled(self) -> None:
+        result = translate("import foo as awk\n")
+        assert "import foo as awk_" in result
+
+    def test_from_import_asname_mangled(self) -> None:
+        result = translate("from foo import bar as awk\n")
+        assert "from foo import bar as awk_" in result
+
+    def test_normal_import_unchanged(self) -> None:
+        result = translate("import os\n")
+        assert "import os" in result
+
+    # -- compilation tests (verify translated code parses as Snail) ------------
+
+    def test_keyword_variable_compiles(self) -> None:
+        snail_source = translate("awk = 1\nprint(awk)\n")
+        snail.compile_ast(snail_source)
+
+    def test_keyword_attribute_compiles(self) -> None:
+        snail_source = translate(
+            "class Foo:\n"
+            "    def __init__(self):\n"
+            "        self.awk = 1\n"
+        )
+        snail.compile_ast(snail_source)
+
+    def test_keyword_function_compiles(self) -> None:
+        snail_source = translate("def let(x):\n    return x\n")
+        snail.compile_ast(snail_source)
+
+    # -- roundtrip tests -------------------------------------------------------
+
+    def test_roundtrip_keyword_variable(self) -> None:
+        _roundtrip("awk = 42\nprint(awk)\n")
+
+    def test_roundtrip_keyword_attribute(self) -> None:
+        _roundtrip(
+            "class Foo:\n"
+            "    def __init__(self):\n"
+            "        self.awk = 1\n"
+            "    def get(self):\n"
+            "        return self.awk\n"
+            "print(Foo().get())\n"
+        )
+
+    def test_roundtrip_bare_underscore(self) -> None:
+        _roundtrip("_ = 99\nprint(_)\n")
