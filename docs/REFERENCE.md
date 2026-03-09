@@ -556,7 +556,17 @@ with SimpleCtx() as message { ctx_msg = message }
 ```
 
 ## Exceptions and fallback expressions
-Snail mirrors Python's exception handling and adds compact fallbacks:
+Snail mirrors Python's exception handling. Multiple exception types can be
+caught with a parenthesized tuple, just like Python:
+```snail
+try { parse(data) }
+except (ValueError, TypeError) as e { print("bad input:", e) }
+
+try { lookup(key) }
+except (KeyError, IndexError) { print("missing") }
+```
+
+Snail also adds compact fallbacks:
 - `<expr>?` swallows an exception and yields `None`. If the exception provides a
   `__fallback__` method, it will be called instead.
 - `<expr>:<fallback>?` evaluates the fallback when `<expr>` raises, binding the

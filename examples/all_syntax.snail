@@ -469,6 +469,15 @@ finally { cleanup() }
 try { risky() }
 finally { cleanup() }
 
+# Multi-exception catching
+try { raise TypeError("oops") }
+except (ValueError, TypeError) as err { multi_handled = True }
+assert multi_handled
+
+try { raise KeyError("missing") }
+except (ValueError, TypeError, KeyError) { multi_caught = True }
+assert multi_caught
+
 try { raise ValueError("bad") }
 except ValueError as err {
         try { raise RuntimeError("wrapped") from err }

@@ -56,8 +56,10 @@ decorator = { "@" ~ expr ~ stmt_sep* }
 try_expr = { kw_try ~ block ~ (try_except_tail | try_finally_tail) }
 try_except_tail = _{ (stmt_sep* ~ except_clause)+ ~ (stmt_sep* ~ else_clause)? ~ (stmt_sep* ~ finally_clause)? }
 try_finally_tail = _{ stmt_sep* ~ finally_clause }
-except_clause = { kw_except ~ (except_type ~ (kw_as ~ identifier)?)? ~ block }
+except_clause = { kw_except ~ (except_types ~ (kw_as ~ identifier)?)? ~ block }
+except_types = { except_type_tuple | except_type }
 except_type = { identifier ~ ("." ~ identifier)* }
+except_type_tuple = { "(" ~ except_type ~ ("," ~ except_type)* ~ ","? ~ ")" }
 else_clause = { kw_else ~ block }
 finally_clause = { kw_finally ~ block }
 

@@ -210,6 +210,28 @@ pub(crate) fn parse_with_item(pair: Pair<'_, Rule>, source: &str) -> Result<With
     })
 }
 
+fn parse_single_except_type(pair: Pair<'_, Rule>, source: &str) -> Expr {
+    let type_span = span_from_pair(&pair, source);
+    let mut idents = pair.into_inner();
+    let first = idents.next().unwrap();
+    let mut expr = Expr::Name {
+        name: first.as_str().to_string(),
+        span: span_from_pair(&first, source),
+    };
+    for attr_ident in idents {
+        let attr_span = span_from_pair(&attr_ident, source);
+        expr = Expr::Attribute {
+            value: Box::new(expr),
+            attr: attr_ident.as_str().to_string(),
+            span: SourceSpan {
+                start: type_span.start.clone(),
+                end: attr_span.end.clone(),
+            },
+        };
+    }
+    expr
+}
+
 pub(crate) fn parse_except_clause(
     pair: Pair<'_, Rule>,
     source: &str,
@@ -226,26 +248,26 @@ pub(crate) fn parse_except_clause(
     #[allow(clippy::while_let_on_iterator)]
     while let Some(next) = inner.next() {
         match next.as_rule() {
-            Rule::except_type => {
-                let type_span = span_from_pair(&next, source);
-                let mut idents = next.into_inner();
-                let first = idents.next().unwrap();
-                let mut expr = Expr::Name {
-                    name: first.as_str().to_string(),
-                    span: span_from_pair(&first, source),
-                };
-                for attr_ident in idents {
-                    let attr_span = span_from_pair(&attr_ident, source);
-                    expr = Expr::Attribute {
-                        value: Box::new(expr),
-                        attr: attr_ident.as_str().to_string(),
-                        span: SourceSpan {
-                            start: type_span.start.clone(),
-                            end: attr_span.end.clone(),
-                        },
-                    };
+            Rule::except_types => {
+                let types_inner = next.into_inner().next().unwrap();
+                match types_inner.as_rule() {
+                    Rule::except_type => {
+                        type_name = Some(parse_single_except_type(types_inner, source));
+                    }
+                    Rule::except_type_tuple => {
+                        let tuple_span = span_from_pair(&types_inner, source);
+                        let elements: Vec<Expr> = types_inner
+                            .into_inner()
+                            .filter(|p| p.as_rule() == Rule::except_type)
+                            .map(|p| parse_single_except_type(p, source))
+                            .collect();
+                        type_name = Some(Expr::Tuple {
+                            elements,
+                            span: tuple_span,
+                        });
+                    }
+                    _ => {}
                 }
-                type_name = Some(expr);
                 if let Some(candidate) = inner.peek()
                     && candidate.as_rule() == Rule::identifier
                 {
