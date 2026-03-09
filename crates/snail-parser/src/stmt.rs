@@ -7,9 +7,10 @@ use snail_error::ParseError;
 
 use crate::Rule;
 use crate::expr::{
-    apply_attr_index_suffix, apply_postfix_ops, assign_target_from_expr, parse_expr_pair,
+    apply_attr_index_suffix, apply_postfix_ops, assign_target_from_expr, parse_call,
+    parse_expr_pair,
 };
-use crate::util::{error_with_span, span_from_pair};
+use crate::util::{error_with_span, expr_span, merge_span, span_from_pair};
 
 pub fn parse_stmt_list(pair: Pair<'_, Rule>, source: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut stmts = Vec::new();
@@ -472,7 +473,21 @@ pub(crate) fn parse_assign_target_ref_expr(
         .ok_or_else(|| error_with_span("missing assignment target", span.clone(), source))?;
     let mut expr = parse_assign_target_atom_expr(atom_pair, source)?;
     for suffix in inner {
-        expr = apply_attr_index_suffix(expr, suffix, source)?;
+        match suffix.as_rule() {
+            Rule::call => {
+                let suffix_span = span_from_pair(&suffix, source);
+                let args = parse_call(suffix, source)?;
+                let span = merge_span(expr_span(&expr), &suffix_span);
+                expr = Expr::Call {
+                    func: Box::new(expr),
+                    args,
+                    span,
+                };
+            }
+            _ => {
+                expr = apply_attr_index_suffix(expr, suffix, source)?;
+            }
+        }
     }
     Ok(expr)
 }
