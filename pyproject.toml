@@ -28,6 +28,7 @@ dev = [
 
 [project.scripts]
 snail = "snail.cli:main"
+py2snail = "snail.py2snail:main"
 
 [tool.maturin]
 bindings = "pyo3"
