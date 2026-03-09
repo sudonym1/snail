@@ -2851,3 +2851,58 @@ fn keyword_prefix_identifiers_work() {
     assert!(parse_program("formatting = 1").is_ok());
     assert!(parse_program("assertion = 1").is_ok());
 }
+
+#[test]
+fn keyword_with_suffix_is_valid_identifier() {
+    // Validates that keyword word-boundary enforcement works correctly:
+    // every keyword in the grammar (extracted from the kw_* rules in snail.pest)
+    // must be usable as a valid identifier when a letter is appended to it.
+    // For example, `if` is a keyword, but `ifx` should be a valid identifier
+    // that can appear in assignments like `ifx = 1`.
+    //
+    // This test dynamically extracts all keywords from the grammar file so it
+    // stays in sync as new keywords are added, rather than relying on a
+    // hard-coded list that could become stale.
+    let grammar = include_str!("../src/snail.pest");
+
+    // Each keyword is defined as a rule like: kw_if = @{ "if" ~ !ident_continue }
+    // Extract the quoted string from each kw_* rule.
+    let mut keywords = Vec::new();
+    for line in grammar.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("kw_") {
+            // Match lines like: kw_if = @{ "if" ~ !ident_continue }
+            if rest.contains("= @{") {
+                if let Some(open) = trimmed.find('"') {
+                    let after_open = &trimmed[open + 1..];
+                    if let Some(close) = after_open.find('"') {
+                        keywords.push(after_open[..close].to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        !keywords.is_empty(),
+        "should have extracted keywords from kw_* rules"
+    );
+
+    // Sanity-check that well-known keywords were actually extracted,
+    // guarding against the extraction logic silently breaking.
+    assert!(keywords.contains(&"if".to_string()), "expected 'if' in keywords");
+    assert!(
+        keywords.contains(&"return".to_string()),
+        "expected 'return' in keywords"
+    );
+
+    for kw in &keywords {
+        let source = format!("{kw}s = 1");
+        let result = parse_program(&source);
+        assert!(
+            result.is_ok(),
+            "'{kw}s' should be a valid identifier, but parsing `{source}` failed: {:?}",
+            result.unwrap_err()
+        );
+    }
+}
