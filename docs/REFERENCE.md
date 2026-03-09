@@ -657,7 +657,7 @@ stdin.
 ## Glob expansion
 
 The built-in `path()` function expands glob patterns and returns a `list[Path]`
-of matching files. It uses Python's `glob` module internally.
+of matching files. It uses Python's `pathlib` module internally.
 
 ```snail
 # Single pattern

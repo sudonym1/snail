@@ -3058,6 +3058,37 @@ def test_path_helper_partial_match_raises_without_fallback(
         main(["-P", script])
 
 
+def test_path_helper_absolute_glob(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "a.txt").write_text("a")
+    (tmp_path / "b.txt").write_text("b")
+    (tmp_path / "c.py").write_text("c")
+    script = f'print(sorted([p.name for p in path("{tmp_path.as_posix()}/*.txt")]))'
+    result, captured = run_cli(capsys, [script])
+    assert result == 0
+    assert captured.out.strip() == "['a.txt', 'b.txt']"
+
+
+def test_path_helper_absolute_no_match(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    script = f'print(path("{tmp_path.as_posix()}/*.nonexistent")?)'
+    result, captured = run_cli(capsys, [script])
+    assert result == 0
+    assert captured.out.strip() == "[]"
+
+
+def test_path_helper_literal_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "file.txt").write_text("hello")
+    script = f'print(path("{tmp_path.as_posix()}/file.txt"))'
+    result, captured = run_cli(capsys, [script])
+    assert result == 0
+    assert "file.txt" in captured.out.strip()
+
+
 # --- Tests for awk { } blocks ---
 
 
