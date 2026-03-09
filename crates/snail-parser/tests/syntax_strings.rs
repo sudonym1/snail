@@ -273,3 +273,77 @@ fn parses_fstring_nested_format_spec() {
         other => panic!("Expected FString, got {other:?}"),
     }
 }
+
+// ============================================================================
+// Escaped brace tests
+// ============================================================================
+
+#[test]
+fn parses_string_escaped_open_brace() {
+    let source = r#"x = "{{""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    expect_string(value, "{", false, StringDelimiter::Double);
+}
+
+#[test]
+fn parses_string_escaped_close_brace() {
+    let source = r#"x = "}}""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    expect_string(value, "}", false, StringDelimiter::Double);
+}
+
+#[test]
+fn parses_string_escaped_brace_pair() {
+    let source = r#"x = "{{}}""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    expect_string(value, "{}", false, StringDelimiter::Double);
+}
+
+#[test]
+fn parses_single_quoted_escaped_brace() {
+    let source = "x = '{{'";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    expect_string(value, "{", false, StringDelimiter::Single);
+}
+
+#[test]
+fn parses_fstring_with_escaped_braces() {
+    // "{{{y}}}" → text "{", expr y, text "}"
+    let source = r#"x = "{{{y}}}""#;
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::FString { parts, .. } => {
+            assert_eq!(parts.len(), 3);
+            match &parts[0] {
+                FStringPart::Text(text) => assert_eq!(text, "{"),
+                other => panic!("Expected text part, got {other:?}"),
+            }
+            match &parts[1] {
+                FStringPart::Expr(expr) => {
+                    expect_name(&expr.expr, "y");
+                }
+                other => panic!("Expected expression part, got {other:?}"),
+            }
+            match &parts[2] {
+                FStringPart::Text(text) => assert_eq!(text, "}"),
+                other => panic!("Expected text part, got {other:?}"),
+            }
+        }
+        other => panic!("Expected FString, got {other:?}"),
+    }
+}

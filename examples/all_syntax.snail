@@ -318,6 +318,7 @@ byte_interp = b"hello {byte_name}"
 user_name = "snail"
 greeting = "hello {user_name}"
 brace_text = "brace {{ok}}"
+brace_only = "{{"
 
 # ---- Subprocess and pipeline syntax ----
 cmd_name = "snail"

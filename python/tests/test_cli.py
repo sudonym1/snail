@@ -2271,6 +2271,18 @@ def test_fstring_nested_format_spec(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.rstrip("\n") == "  3.14"
 
 
+def test_fstring_escaped_braces(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main([r'print("{{")']) == 0
+    captured = capsys.readouterr()
+    assert captured.out.rstrip("\n") == "{"
+
+
+def test_fstring_escaped_brace_pair(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main([r'print("{{}}")']) == 0
+    captured = capsys.readouterr()
+    assert captured.out.rstrip("\n") == "{}"
+
+
 def test_fstring_invalid_conversion_reports_syntax_error() -> None:
     with pytest.raises(SyntaxError) as excinfo:
         main(['s = "{x!q}"'])
