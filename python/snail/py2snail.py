@@ -647,8 +647,8 @@ class SnailUnparser(ast.NodeVisitor):
         parts = []
         for v in node.values:
             if isinstance(v, ast.Constant) and isinstance(v.value, str):
-                # Literal text — escape backslashes and quotes, but NOT braces
-                # (Snail interpolation uses the same {expr} syntax)
+                # Literal text — escape backslashes, quotes, and braces
+                # (braces must be doubled so Snail doesn't interpolate them)
                 escaped = v.value.replace("\\", "\\\\").replace('"', '\\"')
                 # Newlines etc.
                 escaped = (
@@ -656,6 +656,7 @@ class SnailUnparser(ast.NodeVisitor):
                     .replace("\r", "\\r")
                     .replace("\t", "\\t")
                 )
+                escaped = escaped.replace("{", "{{").replace("}", "}}")
                 parts.append(escaped)
             elif isinstance(v, ast.FormattedValue):
                 parts.append(self.visit_FormattedValue(v))

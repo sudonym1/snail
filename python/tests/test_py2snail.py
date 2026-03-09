@@ -185,6 +185,18 @@ class TestStringHandling:
         assert '"hello {name}"' in result
         assert "f" not in result.split('"')[0]  # no 'f' prefix
 
+    def test_fstring_literal_braces(self) -> None:
+        result = translate('x = f"{{x}}"\n')
+        assert '"{{x}}"' in result
+
+    def test_fstring_literal_braces_and_interpolation(self) -> None:
+        result = translate('x = f"{{x}} {name}"\n')
+        assert '"{{x}} {name}"' in result
+
+    def test_fstring_braces_around_interpolation(self) -> None:
+        result = translate('x = f"{{{name}}}"\n')
+        assert '"{{{name}}}"' in result
+
     def test_fstring_with_format_spec(self) -> None:
         result = translate('x = f"{value:.2f}"\n')
         assert "{value:.2f}" in result
