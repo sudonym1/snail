@@ -1108,4 +1108,39 @@ mod tests {
         let result = pp(source);
         assert_eq!(result.len(), source.len());
     }
+
+    #[test]
+    fn decorator_injects_between_decorator_and_def() {
+        // @decorator is a StmtEnder (identifier ends it), so \x1e injected
+        // before `def` on the next line. def triggers header mode.
+        let result = pp("@my_dec\ndef foo() { 1 }");
+        // Should inject \x1e after the decorator identifier
+        assert!(has_rs(&result));
+        // The \x1e should appear between the decorator and def
+        let at_pos = result.find('@').unwrap();
+        let def_pos = result.find("def").unwrap();
+        let between = &result[at_pos..def_pos];
+        assert!(has_rs(between));
+    }
+
+    #[test]
+    fn decorator_injects_between_decorator_and_class() {
+        let result = pp("@my_dec\nclass Foo { pass }");
+        assert!(has_rs(&result));
+        let at_pos = result.find('@').unwrap();
+        let class_pos = result.find("class").unwrap();
+        let between = &result[at_pos..class_pos];
+        assert!(has_rs(between));
+    }
+
+    #[test]
+    fn multiple_decorators_inject_between_each() {
+        let result = pp("@dec1\n@dec2\ndef foo() { 1 }");
+        assert!(has_rs(&result));
+        // Should have \x1e after dec1 and after dec2
+        let first_at = result.find('@').unwrap();
+        let second_at = result[first_at + 1..].find('@').unwrap() + first_at + 1;
+        let between_decorators = &result[first_at..second_at];
+        assert!(has_rs(between_decorators));
+    }
 }

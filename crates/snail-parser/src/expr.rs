@@ -81,6 +81,7 @@ pub fn parse_expr_pair(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, Parse
         Rule::for_expr => parse_for_expr(pair, source),
         Rule::def_expr => parse_def_expr(pair, source),
         Rule::class_expr => parse_class_expr(pair, source),
+        Rule::decorated_expr => parse_decorated_expr(pair, source),
         Rule::try_expr => parse_try_expr(pair, source),
         Rule::with_expr => parse_with_expr(pair, source),
         Rule::awk_expr => parse_awk_expr(pair, source),
@@ -1061,6 +1062,7 @@ fn parse_atom(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
         Rule::for_expr => parse_for_expr(inner_pair, source),
         Rule::def_expr => parse_def_expr(inner_pair, source),
         Rule::class_expr => parse_class_expr(inner_pair, source),
+        Rule::decorated_expr => parse_decorated_expr(inner_pair, source),
         Rule::try_expr => parse_try_expr(inner_pair, source),
         Rule::with_expr => parse_with_expr(inner_pair, source),
         Rule::awk_expr => parse_awk_expr(inner_pair, source),
@@ -1298,6 +1300,7 @@ fn parse_def_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError
         name,
         params,
         body,
+        decorators: vec![],
         span,
     })
 }
@@ -1330,8 +1333,65 @@ fn parse_class_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseErr
         name,
         bases,
         body,
+        decorators: vec![],
         span,
     })
+}
+
+fn parse_decorated_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, source);
+    let mut decorators = Vec::new();
+    let mut inner_expr = None;
+
+    for child in pair.into_inner() {
+        match child.as_rule() {
+            Rule::decorator => {
+                // decorator = { "@" ~ expr ~ stmt_sep* }
+                // The inner children are the expr (stmt_sep is silent)
+                let expr_pair = child.into_inner().next().ok_or_else(|| {
+                    error_with_span("missing decorator expression", span.clone(), source)
+                })?;
+                decorators.push(parse_expr_pair(expr_pair, source)?);
+            }
+            Rule::def_expr => {
+                inner_expr = Some(parse_def_expr(child, source)?);
+            }
+            Rule::class_expr => {
+                inner_expr = Some(parse_class_expr(child, source)?);
+            }
+            _ => {}
+        }
+    }
+
+    let inner = inner_expr.ok_or_else(|| {
+        error_with_span(
+            "decorated expression must contain a def or class",
+            span.clone(),
+            source,
+        )
+    })?;
+
+    match inner {
+        Expr::Def {
+            name, params, body, ..
+        } => Ok(Expr::Def {
+            name,
+            params,
+            body,
+            decorators,
+            span,
+        }),
+        Expr::Class {
+            name, bases, body, ..
+        } => Ok(Expr::Class {
+            name,
+            bases,
+            body,
+            decorators,
+            span,
+        }),
+        _ => unreachable!("decorated expression must contain a def or class"),
+    }
 }
 
 fn parse_try_expr(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {

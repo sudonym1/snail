@@ -17,7 +17,7 @@ stmt = _{ simple_stmt | expr_stmt }
 // with compound keywords (if/while/for/class/try/with/awk/xargs) or
 // bare blocks. These don't require trailing separators.
 compound_expr_stmt = { compound_expr ~ postfix_op* }
-compound_expr = _{ if_expr | while_expr | for_expr | class_expr | try_expr | with_expr | awk_expr | xargs_expr | block }
+compound_expr = _{ decorated_expr | if_expr | while_expr | for_expr | class_expr | try_expr | with_expr | awk_expr | xargs_expr | block }
 
 simple_stmt = _{
   return_stmt
@@ -47,6 +47,10 @@ let_guard = { ";" ~ expr }
 def_expr = { "def" ~ (identifier ~ parameters? | parameters)? ~ block }
 class_expr = { "class" ~ identifier ~ class_bases? ~ block }
 class_bases = { "(" ~ (expr ~ ("," ~ expr)*)? ~ ","? ~ ")" }
+
+// Decorated definitions
+decorated_expr = { decorator+ ~ (def_expr | class_expr) }
+decorator = { "@" ~ expr ~ stmt_sep* }
 
 // Exception handling (now expression): try/except/else/finally
 try_expr = { "try" ~ block ~ (try_except_tail | try_finally_tail) }

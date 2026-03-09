@@ -995,16 +995,22 @@ impl Desugarer {
                 name,
                 params,
                 body,
+                decorators,
                 span,
             } => {
                 let params = self.desugar_params(params, prelude);
                 let body = self.desugar_block(body);
+                let decorators = decorators
+                    .iter()
+                    .map(|d| self.desugar_expr(d, prelude))
+                    .collect();
                 if name.is_some() {
                     // Named def: pass through. desugar_expr will hoist if in expression context.
                     Expr::Def {
                         name: name.clone(),
                         params,
                         body,
+                        decorators,
                         span: span.clone(),
                     }
                 } else {
@@ -1015,6 +1021,7 @@ impl Desugarer {
                             name: Some(gen_name.clone()),
                             params,
                             body,
+                            decorators,
                             span: span.clone(),
                         },
                         semicolon_terminated: false,
@@ -1030,6 +1037,7 @@ impl Desugarer {
                 name,
                 bases,
                 body,
+                decorators,
                 span,
             } => {
                 let bases = bases
@@ -1037,10 +1045,15 @@ impl Desugarer {
                     .map(|b| self.desugar_expr(b, prelude))
                     .collect();
                 let body = self.desugar_block(body);
+                let decorators = decorators
+                    .iter()
+                    .map(|d| self.desugar_expr(d, prelude))
+                    .collect();
                 Expr::Class {
                     name: name.clone(),
                     bases,
                     body,
+                    decorators,
                     span: span.clone(),
                 }
             }

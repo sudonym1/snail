@@ -366,6 +366,27 @@ the implicit return.
 Default values, variadic `*args`, and `**kwargs` work as in Python. Calls accept
 positional and keyword arguments interchangeably.
 
+### Decorators
+Decorators work the same as Python — place `@expression` before a `def` or
+`class`:
+```snail
+@my_decorator
+def foo() { 1 }
+
+@app.route("/")
+def index() { return "hello" }
+
+@dec1
+@dec2
+def bar() { 1 }
+
+@staticmethod
+def helper() { return 42 }
+```
+Decorator expressions can be any valid expression: names, attribute access,
+function calls, etc. Multiple decorators are applied bottom-up, matching Python
+semantics.
+
 ## Generators (`yield`)
 Snail supports Python-style generators. `yield` is an expression, so it can be
 used as a standalone statement or inside other expressions (use parentheses
@@ -447,6 +468,14 @@ Parentheses are optional — `class Foo { }` continues to work. Base expressions
 are full expressions, so function calls and compact try work:
 ```snail
 class Foo(get_base():FallbackBase?) { pass }
+```
+
+Decorators work on classes too:
+```snail
+@dataclass
+class Point {
+    pass
+}
 ```
 
 ## Control flow

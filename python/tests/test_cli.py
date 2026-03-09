@@ -4010,3 +4010,113 @@ def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
     """])
     assert result == 0
     assert captured.out.strip() == "4"
+
+
+def test_decorator_on_function(capsys):
+    code = '''
+def double_result(func) {
+    def wrapper(*args) {
+        return func(*args) * 2
+    }
+    return wrapper
+}
+
+@double_result
+def add(a, b) { a + b }
+
+assert add(1, 2) == 6
+print("ok")
+'''
+    assert main([code]) == 0
+    assert "ok" in capsys.readouterr().out
+
+
+def test_decorator_with_arguments(capsys):
+    code = '''
+def multiply_by(n) {
+    def decorator(func) {
+        def wrapper(*args) {
+            return func(*args) * n
+        }
+        return wrapper
+    }
+    return decorator
+}
+
+@multiply_by(3)
+def add(a, b) { a + b }
+
+assert add(1, 2) == 9
+print("ok")
+'''
+    assert main([code]) == 0
+    assert "ok" in capsys.readouterr().out
+
+
+def test_multiple_decorators(capsys):
+    code = '''
+results = []
+
+def dec1(func) {
+    def wrapper(*args) {
+        results.append("dec1")
+        return func(*args)
+    }
+    return wrapper
+}
+
+def dec2(func) {
+    def wrapper(*args) {
+        results.append("dec2")
+        return func(*args)
+    }
+    return wrapper
+}
+
+@dec1
+@dec2
+def hello() { return "hello" }
+
+hello()
+assert results == ["dec1", "dec2"]
+print("ok")
+'''
+    assert main([code]) == 0
+    assert "ok" in capsys.readouterr().out
+
+
+def test_decorator_on_class(capsys):
+    code = '''
+def add_greet(cls) {
+    cls.greet = def(self) { return "hello" }
+    return cls
+}
+
+@add_greet
+class MyClass {
+    pass
+}
+
+assert MyClass().greet() == "hello"
+print("ok")
+'''
+    assert main([code]) == 0
+    assert "ok" in capsys.readouterr().out
+
+
+def test_staticmethod_classmethod(capsys):
+    code = '''
+class MyClass {
+    @staticmethod
+    def static_method() { return "static" }
+
+    @classmethod
+    def class_method(cls) { return cls.__name__ }
+}
+
+assert MyClass.static_method() == "static"
+assert MyClass.class_method() == "MyClass"
+print("ok")
+'''
+    assert main([code]) == 0
+    assert "ok" in capsys.readouterr().out

@@ -1961,23 +1961,26 @@ fn substitute_placeholder(expr: &Expr, replacement: &Expr) -> Expr {
             name,
             params,
             body,
+            decorators,
             span,
         } => Expr::Def {
             name: name.clone(),
             params: params.clone(),
             body: body.clone(),
+            decorators: decorators.clone(),
             span: span.clone(),
         },
         Expr::Class {
             name,
             bases,
             body,
+            decorators,
             span,
-            ..
         } => Expr::Class {
             name: name.clone(),
             bases: bases.clone(),
             body: body.clone(),
+            decorators: decorators.clone(),
             span: span.clone(),
         },
         Expr::Try {
@@ -2180,11 +2183,16 @@ fn lower_def_stmt(
     name: &str,
     params: &[Parameter],
     body: &[Stmt],
+    decorators: &[Expr],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     let args = lower_parameters(builder, params, None, span)?;
     let body = lower_block_with_implicit_return(builder, body, span)?;
-    let decorator_list = PyList::empty_bound(builder.py()).into_py(builder.py());
+    let lowered_decorators: Vec<PyObject> = decorators
+        .iter()
+        .map(|d| lower_expr(builder, d))
+        .collect::<Result<Vec<_>, _>>()?;
+    let decorator_list = PyList::new_bound(builder.py(), &lowered_decorators).into_py(builder.py());
     let func_node = builder
         .call_node(
             "FunctionDef",
@@ -2206,11 +2214,16 @@ fn lower_class_stmt(
     name: &str,
     bases: &[Expr],
     body: &[Stmt],
+    decorators: &[Expr],
     span: &SourceSpan,
 ) -> Result<Vec<PyObject>, LowerError> {
     let lowered_bases: Vec<PyObject> = bases
         .iter()
         .map(|b| lower_expr(builder, b))
+        .collect::<Result<Vec<_>, _>>()?;
+    let lowered_decorators: Vec<PyObject> = decorators
+        .iter()
+        .map(|d| lower_expr(builder, d))
         .collect::<Result<Vec<_>, _>>()?;
     let body = lower_block(builder, body, span)?;
     let class_node = builder
@@ -2221,7 +2234,7 @@ fn lower_class_stmt(
                 PyList::new_bound(builder.py(), &lowered_bases).into_py(builder.py()),
                 PyList::empty_bound(builder.py()).into_py(builder.py()),
                 PyList::new_bound(builder.py(), body).into_py(builder.py()),
-                PyList::empty_bound(builder.py()).into_py(builder.py()),
+                PyList::new_bound(builder.py(), &lowered_decorators).into_py(builder.py()),
             ],
             span,
         )
@@ -2551,16 +2564,17 @@ pub(crate) fn lower_expr_as_stmt(
             name: Some(name),
             params,
             body,
+            decorators,
             span,
-        } => lower_def_stmt(builder, name, params, body, span),
+        } => lower_def_stmt(builder, name, params, body, decorators, span),
         Expr::Def { name: None, .. } => Err(LowerError::new("anonymous def was not desugared")),
         Expr::Class {
             name,
             bases,
             body,
+            decorators,
             span,
-            ..
-        } => lower_class_stmt(builder, name, bases, body, span),
+        } => lower_class_stmt(builder, name, bases, body, decorators, span),
         Expr::Try {
             body,
             handlers,

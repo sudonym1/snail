@@ -331,12 +331,14 @@ pub enum Expr {
         name: Option<String>,
         params: Vec<Parameter>,
         body: Vec<Stmt>,
+        decorators: Vec<Expr>,
         span: SourceSpan,
     },
     Class {
         name: String,
         bases: Vec<Expr>,
         body: Vec<Stmt>,
+        decorators: Vec<Expr>,
         span: SourceSpan,
     },
     Try {
