@@ -3626,6 +3626,37 @@ def test_try_expr_value(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "1"
 
 
+def test_multi_except_catches_first_type(capsys: pytest.CaptureFixture[str]) -> None:
+    """Multi-except tuple catches the first listed exception type."""
+    script = 'try { raise ValueError("v") } except (ValueError, TypeError) { print("caught") }'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "caught"
+
+
+def test_multi_except_catches_second_type(capsys: pytest.CaptureFixture[str]) -> None:
+    """Multi-except tuple catches the second listed exception type."""
+    script = 'try { raise TypeError("t") } except (ValueError, TypeError) { print("caught") }'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "caught"
+
+
+def test_multi_except_with_as(capsys: pytest.CaptureFixture[str]) -> None:
+    """Multi-except with 'as' binds the caught exception."""
+    script = 'try { raise TypeError("oops") } except (ValueError, TypeError) as e { print(e) }'
+    result, captured = run_cli(capsys, ["-P", script])
+    assert result == 0
+    assert captured.out.strip() == "oops"
+
+
+def test_multi_except_no_match_propagates(capsys: pytest.CaptureFixture[str]) -> None:
+    """Multi-except does not catch unmatched exception types."""
+    script = 'try { raise KeyError("k") } except (ValueError, TypeError) { print("caught") }'
+    with pytest.raises(KeyError):
+        run_cli(capsys, ["-P", script])
+
+
 def test_auto_print_snail_print_dunder(capsys: pytest.CaptureFixture[str]) -> None:
     """Objects with __snail_print__ control their own auto-print output."""
     script = "\n".join(

@@ -421,6 +421,120 @@ fn parses_except_as_with_newlines() {
 }
 
 #[test]
+fn parses_multi_except_tuple() {
+    let source = "try { pass } except (ValueError, TypeError) { pass }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Try { handlers, .. } => {
+            assert_eq!(handlers.len(), 1);
+            match &handlers[0].type_name {
+                Some(Expr::Tuple { elements, .. }) => {
+                    assert_eq!(elements.len(), 2);
+                    expect_name(&elements[0], "ValueError");
+                    expect_name(&elements[1], "TypeError");
+                }
+                other => panic!("Expected tuple type, got {other:?}"),
+            }
+            assert!(handlers[0].name.is_none());
+        }
+        other => panic!("Expected try statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_multi_except_with_as() {
+    let source = "try { pass } except (ValueError, TypeError) as e { pass }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Try { handlers, .. } => {
+            assert_eq!(handlers.len(), 1);
+            match &handlers[0].type_name {
+                Some(Expr::Tuple { elements, .. }) => {
+                    assert_eq!(elements.len(), 2);
+                    expect_name(&elements[0], "ValueError");
+                    expect_name(&elements[1], "TypeError");
+                }
+                other => panic!("Expected tuple type, got {other:?}"),
+            }
+            assert_eq!(handlers[0].name.as_deref(), Some("e"));
+        }
+        other => panic!("Expected try statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_multi_except_dotted() {
+    let source = "try { pass } except (ValueError, os.error) { pass }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Try { handlers, .. } => {
+            assert_eq!(handlers.len(), 1);
+            match &handlers[0].type_name {
+                Some(Expr::Tuple { elements, .. }) => {
+                    assert_eq!(elements.len(), 2);
+                    expect_name(&elements[0], "ValueError");
+                    match &elements[1] {
+                        Expr::Attribute { value, attr, .. } => {
+                            expect_name(value.as_ref(), "os");
+                            assert_eq!(attr, "error");
+                        }
+                        other => panic!("Expected attribute, got {other:?}"),
+                    }
+                }
+                other => panic!("Expected tuple type, got {other:?}"),
+            }
+        }
+        other => panic!("Expected try statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_multi_except_trailing_comma() {
+    let source = "try { pass } except (ValueError,) { pass }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Try { handlers, .. } => {
+            assert_eq!(handlers.len(), 1);
+            match &handlers[0].type_name {
+                Some(Expr::Tuple { elements, .. }) => {
+                    assert_eq!(elements.len(), 1);
+                    expect_name(&elements[0], "ValueError");
+                }
+                other => panic!("Expected tuple type, got {other:?}"),
+            }
+        }
+        other => panic!("Expected try statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_except_single_still_works() {
+    let source = "try { pass } except ValueError { pass }";
+    let program = parse_ok(source);
+    assert_eq!(program.stmts.len(), 1);
+
+    match unwrap_expr(&program.stmts[0]) {
+        Expr::Try { handlers, .. } => {
+            assert_eq!(handlers.len(), 1);
+            match &handlers[0].type_name {
+                Some(expr) => expect_name(expr, "ValueError"),
+                None => panic!("Expected exception type"),
+            }
+            assert!(handlers[0].name.is_none());
+        }
+        other => panic!("Expected try statement, got {other:?}"),
+    }
+}
+
+#[test]
 fn parses_multiline_assert_del_import_headers() {
     // Under Go-style rules: assert/del/import are Continuation keywords,
     // but their arguments may contain StmtEnders (e.g. True, os).
