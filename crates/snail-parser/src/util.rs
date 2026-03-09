@@ -101,7 +101,7 @@ pub fn line_col_from_offset(source: &str, offset: usize) -> (usize, usize) {
 
 pub fn parse_error_from_pest(err: pest::error::Error<Rule>, source: &str) -> ParseError {
     use pest::error::InputLocation;
-    let message = err.to_string();
+    let message = err.variant.message().into_owned();
     let span = match err.location {
         InputLocation::Pos(pos) => Some(span_from_offset(pos, pos, source)),
         InputLocation::Span((start, end)) => Some(span_from_offset(start, end, source)),
@@ -120,7 +120,7 @@ pub fn parse_error_from_pest_with_offset(
     offset: usize,
 ) -> ParseError {
     use pest::error::InputLocation;
-    let message = err.to_string();
+    let message = err.variant.message().into_owned();
     let span = match err.location {
         InputLocation::Pos(pos) => Some(span_from_offset(offset + pos, offset + pos, source)),
         InputLocation::Span((start, end)) => {

@@ -15,12 +15,31 @@ use pyo3::exceptions::{PyRuntimeError, PySyntaxError, PySystemExit};
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyModule};
 use snail_ast::{Expr, Stmt};
-use snail_error::{ParseError, format_snail_error};
+use snail_error::{ParseError, SnailError};
 use snail_parser::preprocess;
 use std::time::Instant;
 
-fn parse_error_to_syntax(err: ParseError, filename: &str) -> PyErr {
-    PySyntaxError::new_err(format_snail_error(&err.into(), filename))
+fn parse_error_to_py_syntax(err: &ParseError, filename: &str) -> PyErr {
+    if let Some(span) = &err.span {
+        PySyntaxError::new_err((
+            err.message.clone(),
+            (
+                filename.to_string(),
+                span.start.line,
+                span.start.column,
+                err.line_text.clone(),
+            ),
+        ))
+    } else {
+        PySyntaxError::new_err(err.message.clone())
+    }
+}
+
+fn snail_error_to_py_syntax(err: &SnailError, filename: &str) -> PyErr {
+    match err {
+        SnailError::Parse(e) => parse_error_to_py_syntax(e, filename),
+        SnailError::Lower(e) => PySyntaxError::new_err(e.to_string()),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -76,7 +95,7 @@ fn compile_source(
     let compile_start = Instant::now();
 
     let module = compiler::compile_source(py, source, auto_print, capture_last)
-        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+        .map_err(|err| snail_error_to_py_syntax(&err, filename))?;
 
     if profile {
         log_profile("compile_snail_source", compile_start.elapsed());
@@ -335,13 +354,13 @@ fn parse_ast_py(
         include_whitespace,
     )?;
     let program = compiler::parse_program(&wrapped)
-        .map_err(|err| PySyntaxError::new_err(format_snail_error(&err, filename)))?;
+        .map_err(|err| snail_error_to_py_syntax(&err, filename))?;
     Ok(format!("{:#?}", program))
 }
 
 #[pyfunction(name = "preprocess")]
 fn preprocess_py(source: &str) -> PyResult<String> {
-    preprocess::preprocess(source).map_err(|err| parse_error_to_syntax(err, "<snail>"))
+    preprocess::preprocess(source).map_err(|err| parse_error_to_py_syntax(&err, "<snail>"))
 }
 
 #[pyfunction(name = "parse")]
@@ -363,7 +382,7 @@ fn parse_py(
     )?;
     snail_parser::parse(&wrapped)
         .map(|_| ())
-        .map_err(|err| parse_error_to_syntax(err, filename))
+        .map_err(|err| parse_error_to_py_syntax(&err, filename))
 }
 
 /// Wrap source code based on mode. For awk mode, wraps in `awk { ... }`.
