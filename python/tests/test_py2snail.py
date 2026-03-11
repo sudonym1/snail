@@ -246,8 +246,8 @@ class TestAnnotations:
 
 class TestOperators:
     def test_augmented_assign(self) -> None:
-        result = translate("x += 1\n")
-        assert "x += 1" in result
+        result = translate("x += 2\n")
+        assert "x += 2" in result
 
     def test_boolean_ops(self) -> None:
         result = translate("x = a and b or c\n")
@@ -266,16 +266,16 @@ class TestOperators:
 
 class TestMiscStatements:
     def test_import(self) -> None:
-        result = translate("import os\n")
-        assert "import os" in result
+        result = translate("import json\n")
+        assert "import json" in result
 
     def test_from_import(self) -> None:
         result = translate("from os.path import join\n")
         assert "from os.path import join" in result
 
     def test_multi_import(self) -> None:
-        result = translate("import os, sys\n")
-        assert "import os, sys" in result
+        result = translate("import json, re\n")
+        assert "import json, re" in result
 
     def test_import_as(self) -> None:
         result = translate("import numpy as np\n")
@@ -1001,8 +1001,8 @@ class TestKeywordMangling:
         assert "from foo import bar as awk_" in result
 
     def test_normal_import_unchanged(self) -> None:
-        result = translate("import os\n")
-        assert "import os" in result
+        result = translate("import json\n")
+        assert "import json" in result
 
     # -- compilation tests (verify translated code parses as Snail) ------------
 
@@ -1045,3 +1045,199 @@ class TestKeywordMangling:
 
     def test_roundtrip_dict_unpacking(self) -> None:
         _roundtrip("a = {'x': 1}\nprint({**a, 'y': 2})\n")
+
+
+# ---------------------------------------------------------------------------
+# Idiomatic transform tests
+# ---------------------------------------------------------------------------
+
+
+class TestIdiomatic:
+    """Tests for idiomatic Snail transforms (++/--, auto-import elision, compact try)."""
+
+    # -- Postfix increment/decrement ------------------------------------------
+
+    def test_increment(self) -> None:
+        result = translate("x += 1\n")
+        assert "x++" in result
+
+    def test_decrement(self) -> None:
+        result = translate("x -= 1\n")
+        assert "x--" in result
+
+    def test_increment_mechanical(self) -> None:
+        result = translate("x += 1\n", idiomatic=False)
+        assert "x += 1" in result
+
+    def test_decrement_mechanical(self) -> None:
+        result = translate("x -= 1\n", idiomatic=False)
+        assert "x -= 1" in result
+
+    def test_no_increment_for_non_one(self) -> None:
+        result = translate("x += 2\n")
+        assert "x += 2" in result
+
+    def test_no_increment_for_attribute(self) -> None:
+        result = translate("self.x += 1\n")
+        assert "self.x += 1" in result
+
+    def test_no_increment_for_subscript(self) -> None:
+        result = translate("x[0] += 1\n")
+        assert "x[0] += 1" in result
+
+    def test_no_increment_for_float(self) -> None:
+        result = translate("x += 1.0\n")
+        assert "x += 1.0" in result
+
+    def test_no_increment_for_bool(self) -> None:
+        result = translate("x += True\n")
+        assert "x += True" in result
+
+    def test_increment_keyword_mangled(self) -> None:
+        result = translate("awk += 1\n")
+        assert "awk_++" in result
+
+    def test_increment_roundtrip(self) -> None:
+        _roundtrip("x = 0\nx += 1\nprint(x)\n")
+
+    def test_decrement_roundtrip(self) -> None:
+        _roundtrip("x = 5\nx -= 1\nprint(x)\n")
+
+    # -- Auto-import elision --------------------------------------------------
+
+    def test_elide_import_os(self) -> None:
+        result = translate("import os\n")
+        assert result.strip() == ""
+
+    def test_elide_import_sys(self) -> None:
+        result = translate("import sys\n")
+        assert result.strip() == ""
+
+    def test_no_elide_import_with_alias(self) -> None:
+        result = translate("import os as operating_system\n")
+        assert "import os as operating_system" in result
+
+    def test_elide_from_pathlib_path(self) -> None:
+        result = translate("from pathlib import Path\n")
+        assert result.strip() == ""
+
+    def test_elide_from_time_sleep(self) -> None:
+        result = translate("from time import sleep\n")
+        assert result.strip() == ""
+
+    def test_elide_from_pprint_pprint(self) -> None:
+        result = translate("from pprint import pprint\n")
+        assert result.strip() == ""
+
+    def test_elide_from_collections_defaultdict(self) -> None:
+        result = translate("from collections import defaultdict\n")
+        assert result.strip() == ""
+
+    def test_no_elide_from_import_with_alias(self) -> None:
+        result = translate("from pathlib import Path as P\n")
+        assert "from pathlib import Path as P" in result
+
+    def test_no_elide_partial_from_import(self) -> None:
+        result = translate("from pathlib import Path, PurePath\n")
+        assert "from pathlib import" in result
+        assert "PurePath" in result
+
+    def test_elide_mixed_import(self) -> None:
+        result = translate("import os, json\n")
+        assert result.strip() == "import json"
+
+    def test_import_mechanical(self) -> None:
+        result = translate("import os\n", idiomatic=False)
+        assert "import os" in result
+
+    def test_from_import_mechanical(self) -> None:
+        result = translate("from pathlib import Path\n", idiomatic=False)
+        assert "from pathlib import Path" in result
+
+    def test_no_elide_relative_import(self) -> None:
+        result = translate("from . import utils\n")
+        assert "from . import utils" in result
+
+    # -- Compact try (?) ------------------------------------------------------
+
+    def test_compact_try_none_fallback(self) -> None:
+        py = "try:\n    x = int('bad')\nexcept:\n    x = None\n"
+        result = translate(py)
+        assert 'x = int("bad")?' in result
+        assert "try" not in result
+
+    def test_compact_try_value_fallback(self) -> None:
+        py = "try:\n    x = int('bad')\nexcept:\n    x = 0\n"
+        result = translate(py)
+        assert 'x = int("bad"):0?' in result
+
+    def test_compact_try_swallow(self) -> None:
+        py = "try:\n    something()\nexcept:\n    pass\n"
+        result = translate(py)
+        assert "something()?" in result
+        assert "try" not in result
+
+    def test_compact_try_except_exception(self) -> None:
+        py = "try:\n    x = int('bad')\nexcept Exception:\n    x = None\n"
+        result = translate(py)
+        assert 'x = int("bad")?' in result
+
+    def test_no_compact_try_specific_exception(self) -> None:
+        py = "try:\n    x = int('bad')\nexcept ValueError:\n    x = None\n"
+        result = translate(py)
+        assert "try {" in result
+
+    def test_no_compact_try_with_else(self) -> None:
+        py = "try:\n    x = 1\nexcept:\n    x = None\nelse:\n    print('ok')\n"
+        result = translate(py)
+        assert "try {" in result
+
+    def test_no_compact_try_with_finally(self) -> None:
+        py = (
+            "try:\n    x = 1\nexcept:\n    x = None\n"
+            "finally:\n    print('done')\n"
+        )
+        result = translate(py)
+        assert "try {" in result
+
+    def test_no_compact_try_multiple_handlers(self) -> None:
+        py = (
+            "try:\n    x = 1\n"
+            "except TypeError:\n    x = None\n"
+            "except ValueError:\n    x = None\n"
+        )
+        result = translate(py)
+        assert "try {" in result
+
+    def test_no_compact_try_multi_statement_body(self) -> None:
+        py = "try:\n    x = 1\n    y = 2\nexcept:\n    x = None\n"
+        result = translate(py)
+        assert "try {" in result
+
+    def test_no_compact_try_different_targets(self) -> None:
+        py = "try:\n    x = int('bad')\nexcept:\n    y = None\n"
+        result = translate(py)
+        assert "try {" in result
+
+    def test_compact_try_mechanical(self) -> None:
+        py = "try:\n    x = int('bad')\nexcept:\n    x = None\n"
+        result = translate(py, idiomatic=False)
+        assert "try {" in result
+
+    def test_compact_try_roundtrip_none(self) -> None:
+        _roundtrip(
+            "try:\n    x = int('bad')\nexcept:\n    x = None\n"
+            "print(x)\n"
+        )
+
+    def test_compact_try_roundtrip_value(self) -> None:
+        _roundtrip(
+            "try:\n    x = int('bad')\nexcept:\n    x = 0\n"
+            "print(x)\n"
+        )
+
+    def test_compact_try_roundtrip_swallow(self) -> None:
+        _roundtrip(
+            "try:\n    int('bad')\nexcept:\n    pass\n"
+            "print('ok')\n"
+        )

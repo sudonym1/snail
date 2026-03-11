@@ -1,9 +1,10 @@
 """Translate Python source code to equivalent Snail source code.
 
 Uses Python's ``ast`` module to parse the input and an ``ast.NodeVisitor``
-subclass to emit Snail syntax.  The translation is intentionally mechanical
-(no idiomatic Snail shortcuts like ``?`` or ``++``) so that round-trip
-semantics are preserved.
+subclass to emit Snail syntax.  By default, idiomatic Snail transforms are
+applied (``++``/``--``, compact try ``?``, auto-import elision).  Pass
+``idiomatic=False`` (or use the ``--mechanical`` CLI flag) for a purely
+mechanical translation that preserves round-trip semantics without shortcuts.
 
 Unsupported Python features (raise Py2SnailError)
 --------------------------------------------------
@@ -72,6 +73,17 @@ def _needs_import_rewrite(name: str) -> bool:
     """Return True if *name* (or any dotted component) is a Snail keyword."""
     return any(part in _SNAIL_ONLY_KEYWORDS or part == "_" for part in name.split("."))
 
+
+# Auto-import tables (must match snail.runtime.AUTO_IMPORT_NAMES) -------------
+# Whole-module imports that Snail auto-imports: import X
+_AUTO_IMPORT_MODULES = frozenset({"sys", "os"})
+# Attribute imports that Snail auto-imports: from M import X  →  name → module
+_AUTO_IMPORT_ATTRS: dict[str, str] = {
+    "Path": "pathlib",
+    "sleep": "time",
+    "pprint": "pprint",
+    "defaultdict": "collections",
+}
 
 # Operator maps ---------------------------------------------------------------
 
@@ -174,9 +186,10 @@ def _prec(node: ast.expr) -> int:
 class SnailUnparser(ast.NodeVisitor):
     """AST visitor that emits Snail source text."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, idiomatic: bool = True) -> None:
         self._indent = 0
         self._result: list[str] = []
+        self._idiomatic = idiomatic
 
     # -- helpers --------------------------------------------------------------
 
@@ -272,6 +285,19 @@ class SnailUnparser(ast.NodeVisitor):
                 self._line(ln)
 
     def visit_AugAssign(self, node: ast.AugAssign) -> None:
+        # Idiomatic: x += 1 → x++, x -= 1 → x--
+        if self._idiomatic and isinstance(node.target, ast.Name):
+            if (
+                isinstance(node.value, ast.Constant)
+                and type(node.value.value) is int
+                and node.value.value == 1
+            ):
+                if isinstance(node.op, ast.Add):
+                    self._line(f"{_mangle(node.target.id)}++")
+                    return
+                if isinstance(node.op, ast.Sub):
+                    self._line(f"{_mangle(node.target.id)}--")
+                    return
         op = _AUGOP.get(type(node.op))
         if op is None:
             raise Py2SnailError(
@@ -342,7 +368,51 @@ class SnailUnparser(ast.NodeVisitor):
         else:
             self._line(f"raise {self._expr(node.exc)}")
 
+    def _try_compact_try(self, node: ast.Try) -> bool:
+        """Attempt to emit a compact try expression. Returns True if emitted."""
+        # Must have exactly 1 handler, no else/finally
+        if len(node.handlers) != 1 or node.orelse or node.finalbody:
+            return False
+        handler = node.handlers[0]
+        # Handler must be bare except or except Exception (not specific types)
+        if handler.type is not None:
+            if not (isinstance(handler.type, ast.Name) and handler.type.id == "Exception"):
+                return False
+        # Try and handler bodies must each have exactly 1 statement
+        if len(node.body) != 1 or len(handler.body) != 1:
+            return False
+        try_stmt = node.body[0]
+        except_stmt = handler.body[0]
+        # Pattern C: try { expr } except { pass }
+        if isinstance(try_stmt, ast.Expr) and isinstance(except_stmt, ast.Pass):
+            self._line(f"{self._expr(try_stmt.value)}?")
+            return True
+        # Pattern A/B: try { x = expr } except { x = fallback }
+        if (
+            isinstance(try_stmt, ast.Assign)
+            and len(try_stmt.targets) == 1
+            and isinstance(except_stmt, ast.Assign)
+            and len(except_stmt.targets) == 1
+        ):
+            try_target = self._expr(try_stmt.targets[0])
+            except_target = self._expr(except_stmt.targets[0])
+            if try_target != except_target:
+                return False
+            expr = self._expr(try_stmt.value)
+            fallback_value = except_stmt.value
+            # Pattern A: fallback is None
+            if isinstance(fallback_value, ast.Constant) and fallback_value.value is None:
+                self._line(f"{try_target} = {expr}?")
+                return True
+            # Pattern B: fallback is any other expression
+            fallback = self._expr(fallback_value)
+            self._line(f"{try_target} = {expr}:{fallback}?")
+            return True
+        return False
+
     def visit_Try(self, node: ast.Try) -> None:
+        if self._idiomatic and self._try_compact_try(node):
+            return
         self._write(f"{self._i()}try")
         self._block(node.body)
         for handler in node.handlers:
@@ -371,14 +441,23 @@ class SnailUnparser(ast.NodeVisitor):
             self._line(f"assert {self._expr(node.test)}")
 
     def visit_Import(self, node: ast.Import) -> None:
+        aliases = list(node.names)
+        # Idiomatic: elide auto-imported modules (only bare imports, no alias)
+        if self._idiomatic:
+            aliases = [
+                a for a in aliases
+                if not (a.asname is None and a.name in _AUTO_IMPORT_MODULES)
+            ]
+            if not aliases:
+                return
         # If any name needs rewriting, emit each alias on its own line
         any_keyword = any(
             _needs_import_rewrite(alias.name)
             or (alias.asname and _needs_import_rewrite(alias.asname))
-            for alias in node.names
+            for alias in aliases
         )
         if any_keyword:
-            for alias in node.names:
+            for alias in aliases:
                 if _needs_import_rewrite(alias.name):
                     bound = _mangle(alias.asname or alias.name.split(".")[0])
                     self._line(f'{bound} = __import__("{alias.name}")')
@@ -388,7 +467,7 @@ class SnailUnparser(ast.NodeVisitor):
                     self._line(f"import {alias.name}")
         else:
             parts = []
-            for alias in node.names:
+            for alias in aliases:
                 if alias.asname:
                     parts.append(f"{alias.name} as {_mangle(alias.asname)}")
                 else:
@@ -399,6 +478,17 @@ class SnailUnparser(ast.NodeVisitor):
         module = node.module or ""
         prefix = "." * (node.level or 0)
         full_module = f"{prefix}{module}"
+
+        # Idiomatic: elide if ALL names are auto-imports from this module
+        if self._idiomatic and not node.level and node.names:
+            all_auto = all(
+                alias.asname is None
+                and alias.name in _AUTO_IMPORT_ATTRS
+                and _AUTO_IMPORT_ATTRS[alias.name] == module
+                for alias in node.names
+            )
+            if all_auto:
+                return
 
         # Check if the module path contains a Snail keyword
         module_has_keyword = _needs_import_rewrite(module) if module else False
@@ -778,9 +868,9 @@ class SnailUnparser(ast.NodeVisitor):
         return "".join(self._result)
 
 
-def translate(python_source: str) -> str:
+def translate(python_source: str, *, idiomatic: bool = True) -> str:
     """Translate Python source code to Snail source code."""
-    return SnailUnparser().unparse(python_source)
+    return SnailUnparser(idiomatic=idiomatic).unparse(python_source)
 
 
 def main() -> None:
@@ -795,6 +885,12 @@ def main() -> None:
         nargs="?",
         help="Python source file (reads stdin if omitted)",
     )
+    parser.add_argument(
+        "-m",
+        "--mechanical",
+        action="store_true",
+        help="Disable idiomatic Snail transforms (no ++, ?, auto-import elision)",
+    )
     args = parser.parse_args()
 
     if args.file:
@@ -804,7 +900,7 @@ def main() -> None:
         source = sys.stdin.read()
 
     try:
-        result = translate(source)
+        result = translate(source, idiomatic=not args.mechanical)
     except Py2SnailError as e:
         print(f"py2snail error: {e}", file=sys.stderr)
         sys.exit(1)
