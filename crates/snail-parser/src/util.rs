@@ -4,6 +4,46 @@ use snail_error::ParseError;
 
 use crate::Rule;
 
+/// Precomputed index mapping byte offsets to line/column positions.
+/// Replaces the O(n) `line_col_from_offset` scan with an O(log n) binary search.
+pub struct LineIndex<'a> {
+    source: &'a str,
+    /// Byte offset of the start of each line (0-indexed internally).
+    /// `line_starts[0]` is always 0.
+    line_starts: Vec<usize>,
+}
+
+impl<'a> LineIndex<'a> {
+    pub fn new(source: &'a str) -> Self {
+        let mut line_starts = vec![0usize];
+        for (i, b) in source.bytes().enumerate() {
+            if b == b'\n' {
+                line_starts.push(i + 1);
+            }
+        }
+        Self {
+            source,
+            line_starts,
+        }
+    }
+
+    /// Convert a byte offset to a 1-based (line, column) pair.
+    pub fn line_col(&self, offset: usize) -> (usize, usize) {
+        // Binary search: find the last line_start <= offset
+        let line_idx = match self.line_starts.binary_search(&offset) {
+            Ok(i) => i,
+            Err(i) => i.saturating_sub(1),
+        };
+        let line = line_idx + 1; // 1-based
+        let col = offset - self.line_starts[line_idx] + 1; // 1-based
+        (line, col)
+    }
+
+    pub fn source(&self) -> &'a str {
+        self.source
+    }
+}
+
 pub fn is_keyword_rule(rule: Rule) -> bool {
     matches!(
         rule,
@@ -43,9 +83,9 @@ pub fn is_keyword_rule(rule: Rule) -> bool {
     )
 }
 
-pub fn full_span(source: &str) -> SourceSpan {
-    let end_offset = source.len();
-    let (end_line, end_col) = line_col_from_offset(source, end_offset);
+pub fn full_span(lx: &LineIndex<'_>) -> SourceSpan {
+    let end_offset = lx.source().len();
+    let (end_line, end_col) = lx.line_col(end_offset);
     SourceSpan {
         start: SourcePos {
             offset: 0,
@@ -60,15 +100,15 @@ pub fn full_span(source: &str) -> SourceSpan {
     }
 }
 
-pub fn span_from_pair(pair: &Pair<'_, Rule>, source: &str) -> SourceSpan {
-    span_from_span(pair.as_span(), source)
+pub fn span_from_pair(pair: &Pair<'_, Rule>, lx: &LineIndex<'_>) -> SourceSpan {
+    span_from_span(pair.as_span(), lx)
 }
 
-pub fn span_from_span(span: pest::Span<'_>, source: &str) -> SourceSpan {
+pub fn span_from_span(span: pest::Span<'_>, lx: &LineIndex<'_>) -> SourceSpan {
     let start_offset = span.start();
     let end_offset = span.end();
-    let (start_line, start_col) = line_col_from_offset(source, start_offset);
-    let (end_line, end_col) = line_col_from_offset(source, end_offset);
+    let (start_line, start_col) = lx.line_col(start_offset);
+    let (end_line, end_col) = lx.line_col(end_offset);
     SourceSpan {
         start: SourcePos {
             offset: start_offset,
@@ -90,9 +130,9 @@ pub fn merge_span(left: &SourceSpan, right: &SourceSpan) -> SourceSpan {
     }
 }
 
-pub fn span_from_offset(start: usize, end: usize, source: &str) -> SourceSpan {
-    let (start_line, start_col) = line_col_from_offset(source, start);
-    let (end_line, end_col) = line_col_from_offset(source, end);
+pub fn span_from_offset(start: usize, end: usize, lx: &LineIndex<'_>) -> SourceSpan {
+    let (start_line, start_col) = lx.line_col(start);
+    let (end_line, end_col) = lx.line_col(end);
     SourceSpan {
         start: SourcePos {
             offset: start,
@@ -107,9 +147,13 @@ pub fn span_from_offset(start: usize, end: usize, source: &str) -> SourceSpan {
     }
 }
 
-pub fn error_with_span(message: impl Into<String>, span: SourceSpan, source: &str) -> ParseError {
+pub fn error_with_span(
+    message: impl Into<String>,
+    span: SourceSpan,
+    lx: &LineIndex<'_>,
+) -> ParseError {
     let mut err = ParseError::new(message);
-    err.line_text = line_text(source, span.start.line);
+    err.line_text = line_text(lx.source(), span.start.line);
     err.span = Some(span);
     err
 }
@@ -121,33 +165,16 @@ pub fn line_text(source: &str, line: usize) -> Option<String> {
     source.lines().nth(line - 1).map(|s| s.to_string())
 }
 
-pub fn line_col_from_offset(source: &str, offset: usize) -> (usize, usize) {
-    let mut line = 1usize;
-    let mut col = 1usize;
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 1;
-        } else {
-            col += 1;
-        }
-    }
-    (line, col)
-}
-
-pub fn parse_error_from_pest(err: pest::error::Error<Rule>, source: &str) -> ParseError {
+pub fn parse_error_from_pest(err: pest::error::Error<Rule>, lx: &LineIndex<'_>) -> ParseError {
     use pest::error::InputLocation;
     let message = err.variant.message().into_owned();
     let span = match err.location {
-        InputLocation::Pos(pos) => Some(span_from_offset(pos, pos, source)),
-        InputLocation::Span((start, end)) => Some(span_from_offset(start, end, source)),
+        InputLocation::Pos(pos) => Some(span_from_offset(pos, pos, lx)),
+        InputLocation::Span((start, end)) => Some(span_from_offset(start, end, lx)),
     };
     let mut error = ParseError::new(message);
     if let Some(span) = span {
-        error.line_text = line_text(source, span.start.line);
+        error.line_text = line_text(lx.source(), span.start.line);
         error.span = Some(span);
     }
     error
@@ -155,20 +182,20 @@ pub fn parse_error_from_pest(err: pest::error::Error<Rule>, source: &str) -> Par
 
 pub fn parse_error_from_pest_with_offset(
     err: pest::error::Error<Rule>,
-    source: &str,
+    lx: &LineIndex<'_>,
     offset: usize,
 ) -> ParseError {
     use pest::error::InputLocation;
     let message = err.variant.message().into_owned();
     let span = match err.location {
-        InputLocation::Pos(pos) => Some(span_from_offset(offset + pos, offset + pos, source)),
+        InputLocation::Pos(pos) => Some(span_from_offset(offset + pos, offset + pos, lx)),
         InputLocation::Span((start, end)) => {
-            Some(span_from_offset(offset + start, offset + end, source))
+            Some(span_from_offset(offset + start, offset + end, lx))
         }
     };
     let mut error = ParseError::new(message);
     if let Some(span) = span {
-        error.line_text = line_text(source, span.start.line);
+        error.line_text = line_text(lx.source(), span.start.line);
         error.span = Some(span);
     }
     error

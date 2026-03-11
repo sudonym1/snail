@@ -15,3 +15,6 @@ warnings = "deny"
 
 [workspace.lints.clippy]
 all = "deny"
+
+[profile.release]
+debug = true

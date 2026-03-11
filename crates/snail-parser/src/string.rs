@@ -7,12 +7,15 @@ use snail_ast::{
 use snail_error::ParseError;
 
 use crate::util::{
-    error_with_span, parse_error_from_pest_with_offset, span_from_offset, span_from_pair,
+    LineIndex, error_with_span, parse_error_from_pest_with_offset, span_from_offset, span_from_pair,
 };
 use crate::{Rule, SnailParser};
 
-pub fn parse_string_or_fstring(pair: Pair<'_, Rule>, source: &str) -> Result<Expr, ParseError> {
-    let span = span_from_pair(&pair, source);
+pub fn parse_string_or_fstring(
+    pair: Pair<'_, Rule>,
+    lx: &LineIndex<'_>,
+) -> Result<Expr, ParseError> {
+    let span = span_from_pair(&pair, lx);
     let parsed = parse_string_literal(pair)?;
 
     // Raw strings should not have f-string interpolation
@@ -26,7 +29,7 @@ pub fn parse_string_or_fstring(pair: Pair<'_, Rule>, source: &str) -> Result<Exp
         });
     }
 
-    let parts = parse_fstring_parts(&parsed.content, parsed.content_offset, source)?;
+    let parts = parse_fstring_parts(&parsed.content, parsed.content_offset, lx)?;
     let has_expr = parts
         .iter()
         .any(|part| matches!(part, FStringPart::Expr(_)));
@@ -99,7 +102,7 @@ pub fn parse_string_literal(pair: Pair<'_, Rule>) -> Result<ParsedStringLiteral,
 pub fn parse_fstring_parts(
     content: &str,
     content_offset: usize,
-    source: &str,
+    lx: &LineIndex<'_>,
 ) -> Result<Vec<FStringPart>, ParseError> {
     let bytes = content.as_bytes();
     let mut parts = Vec::new();
@@ -119,19 +122,19 @@ pub fn parse_fstring_parts(
                 let expr_end = find_fstring_expr_end(content, expr_start).ok_or_else(|| {
                     error_with_span(
                         "unterminated f-string expression",
-                        span_from_offset(content_offset + i, content_offset + i + 1, source),
-                        source,
+                        span_from_offset(content_offset + i, content_offset + i + 1, lx),
+                        lx,
                     )
                 })?;
                 let expr_text = &content[expr_start..expr_end];
                 if expr_text.trim().is_empty() {
                     return Err(error_with_span(
                         "empty f-string expression",
-                        span_from_offset(content_offset + i, content_offset + expr_end + 1, source),
-                        source,
+                        span_from_offset(content_offset + i, content_offset + expr_end + 1, lx),
+                        lx,
                     ));
                 }
-                let expr = parse_fstring_expr(expr_text, content_offset + expr_start, source)?;
+                let expr = parse_fstring_expr(expr_text, content_offset + expr_start, lx)?;
                 parts.push(FStringPart::Expr(expr));
                 i = expr_end + 1;
                 text_start = i;
@@ -143,8 +146,8 @@ pub fn parse_fstring_parts(
                 }
                 return Err(error_with_span(
                     "unmatched '}' in f-string",
-                    span_from_offset(content_offset + i, content_offset + i + 1, source),
-                    source,
+                    span_from_offset(content_offset + i, content_offset + i + 1, lx),
+                    lx,
                 ));
             }
             _ => i += 1,
@@ -164,10 +167,10 @@ pub fn parse_fstring_parts(
 pub fn parse_inline_expr(
     expr_text: &str,
     expr_offset: usize,
-    source: &str,
+    lx: &LineIndex<'_>,
 ) -> Result<Expr, ParseError> {
     let mut pairs = SnailParser::parse(Rule::expr, expr_text)
-        .map_err(|err| parse_error_from_pest_with_offset(err, source, expr_offset))?;
+        .map_err(|err| parse_error_from_pest_with_offset(err, lx, expr_offset))?;
     let pair = pairs
         .next()
         .ok_or_else(|| ParseError::new("missing f-string expression"))?;
@@ -183,28 +186,27 @@ pub fn parse_inline_expr(
                 "unexpected characters in f-string expression: {:?}",
                 unconsumed_text
             ),
-            span_from_offset(unconsumed_start, unconsumed_end, source),
-            source,
+            span_from_offset(unconsumed_start, unconsumed_end, lx),
+            lx,
         ));
     }
 
-    let mut expr = crate::expr::parse_expr_pair(pair, expr_text)?;
-    shift_expr_spans(&mut expr, expr_offset, source);
+    let expr_lx = LineIndex::new(expr_text);
+    let mut expr = crate::expr::parse_expr_pair(pair, &expr_lx)?;
+    shift_expr_spans(&mut expr, expr_offset, lx);
     Ok(expr)
 }
 
 pub fn parse_fstring_expr(
     expr_text: &str,
     expr_offset: usize,
-    source: &str,
+    lx: &LineIndex<'_>,
 ) -> Result<FStringExpr, ParseError> {
     let (expr_text, expr_offset, conversion, format_spec) =
-        split_fstring_expr(expr_text, expr_offset, source)?;
-    let expr = parse_inline_expr(expr_text, expr_offset, source)?;
+        split_fstring_expr(expr_text, expr_offset, lx)?;
+    let expr = parse_inline_expr(expr_text, expr_offset, lx)?;
     let format_spec = match format_spec {
-        Some((spec_text, spec_offset)) => {
-            Some(parse_fstring_parts(spec_text, spec_offset, source)?)
-        }
+        Some((spec_text, spec_offset)) => Some(parse_fstring_parts(spec_text, spec_offset, lx)?),
         None => None,
     };
     Ok(FStringExpr {
@@ -268,7 +270,7 @@ fn update_delimiter_depth(depth: &mut DelimiterDepth, byte: u8) {
 fn split_fstring_expr<'a>(
     expr_text: &'a str,
     expr_offset: usize,
-    source: &str,
+    lx: &LineIndex<'_>,
 ) -> Result<FStringExprParts<'a>, ParseError> {
     let bytes = expr_text.as_bytes();
     let mut i = 0usize;
@@ -295,9 +297,9 @@ fn split_fstring_expr<'a>(
                         span_from_offset(
                             expr_offset + i,
                             expr_offset + (i + 1).min(expr_text.len()),
-                            source,
+                            lx,
                         ),
-                        source,
+                        lx,
                     ));
                 }
             };
@@ -319,8 +321,8 @@ fn split_fstring_expr<'a>(
             }
             return Err(error_with_span(
                 "unterminated string in f-string expression",
-                span_from_offset(expr_offset + i, expr_offset + i + 1, source),
-                source,
+                span_from_offset(expr_offset + i, expr_offset + i + 1, lx),
+                lx,
             ));
         }
         update_delimiter_depth(&mut depth, bytes[i]);
@@ -340,12 +342,8 @@ fn split_fstring_expr<'a>(
         } else {
             return Err(error_with_span(
                 "unexpected characters after f-string conversion",
-                span_from_offset(
-                    tail_offset + trim_start,
-                    expr_offset + expr_text.len(),
-                    source,
-                ),
-                source,
+                span_from_offset(tail_offset + trim_start, expr_offset + expr_text.len(), lx),
+                lx,
             ));
         }
     }
@@ -357,8 +355,8 @@ fn split_fstring_expr<'a>(
     if trimmed_len == 0 {
         return Err(error_with_span(
             "empty f-string expression",
-            span_from_offset(expr_offset, expr_offset + expr_text.len(), source),
-            source,
+            span_from_offset(expr_offset, expr_offset + expr_text.len(), lx),
+            lx,
         ));
     }
     let trimmed_expr = &expr_slice[trim_start..trim_start + trimmed_len];
@@ -503,7 +501,7 @@ pub fn join_fstring_text(parts: Vec<FStringPart>) -> String {
     text
 }
 
-pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
+pub fn shift_expr_spans(expr: &mut Expr, offset: usize, lx: &LineIndex<'_>) {
     match expr {
         Expr::Name { span, .. }
         | Expr::Placeholder { span, .. }
@@ -519,36 +517,36 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
         | Expr::Set { span, .. }
         | Expr::Dict { span, .. }
         | Expr::Slice { span, .. } => {
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         Expr::FString { parts, span, .. } => {
             for part in parts {
-                shift_fstring_part_spans(part, offset, source);
+                shift_fstring_part_spans(part, offset, lx);
             }
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Regex { pattern, span } => {
             if let snail_ast::RegexPattern::Interpolated(parts) = pattern {
                 for part in parts {
-                    shift_fstring_part_spans(part, offset, source);
+                    shift_fstring_part_spans(part, offset, lx);
                 }
             }
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         Expr::RegexMatch { value, span, .. } => {
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Unary { expr, span, .. } => {
-            shift_expr_spans(expr, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(expr, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Binary {
             left, right, span, ..
         } => {
-            shift_expr_spans(left, offset, source);
-            shift_expr_spans(right, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(left, offset, lx);
+            shift_expr_spans(right, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::AugAssign {
             target,
@@ -556,13 +554,13 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             span,
             ..
         } => {
-            shift_assign_target_spans(target, offset, source);
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_assign_target_spans(target, offset, lx);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::PrefixIncr { target, span, .. } | Expr::PostfixIncr { target, span, .. } => {
-            shift_assign_target_spans(target, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_assign_target_spans(target, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Compare {
             left,
@@ -570,41 +568,41 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             span,
             ..
         } => {
-            shift_expr_spans(left, offset, source);
+            shift_expr_spans(left, offset, lx);
             for expr in comparators {
-                shift_expr_spans(expr, offset, source);
+                shift_expr_spans(expr, offset, lx);
             }
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Yield { value, span } => {
             if let Some(value) = value {
-                shift_expr_spans(value, offset, source);
+                shift_expr_spans(value, offset, lx);
             }
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         Expr::YieldFrom { expr, span } => {
-            shift_expr_spans(expr, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(expr, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Call { func, args, span } => {
-            shift_expr_spans(func, offset, source);
+            shift_expr_spans(func, offset, lx);
             for arg in args {
-                shift_argument_spans(arg, offset, source);
+                shift_argument_spans(arg, offset, lx);
             }
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Attribute { value, span, .. } => {
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Index { value, index, span } => {
-            shift_expr_spans(value, offset, source);
-            shift_expr_spans(index, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            shift_expr_spans(index, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Paren { expr, span } => {
-            shift_expr_spans(expr, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(expr, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::ListComp {
             element,
@@ -620,12 +618,12 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             span,
             ..
         } => {
-            shift_expr_spans(element, offset, source);
-            shift_expr_spans(iter, offset, source);
+            shift_expr_spans(element, offset, lx);
+            shift_expr_spans(iter, offset, lx);
             for cond in ifs {
-                shift_expr_spans(cond, offset, source);
+                shift_expr_spans(cond, offset, lx);
             }
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         Expr::DictComp {
             key,
@@ -635,17 +633,17 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
             span,
             ..
         } => {
-            shift_expr_spans(key, offset, source);
-            shift_expr_spans(value, offset, source);
-            shift_expr_spans(iter, offset, source);
+            shift_expr_spans(key, offset, lx);
+            shift_expr_spans(value, offset, lx);
+            shift_expr_spans(iter, offset, lx);
             for cond in ifs {
-                shift_expr_spans(cond, offset, source);
+                shift_expr_spans(cond, offset, lx);
             }
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Starred { value, span } => {
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Expr::Block { span, .. }
         | Expr::If { span, .. }
@@ -657,70 +655,70 @@ pub fn shift_expr_spans(expr: &mut Expr, offset: usize, source: &str) {
         | Expr::With { span, .. }
         | Expr::Awk { span, .. }
         | Expr::Xargs { span, .. } => {
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
     }
 }
 
-fn shift_fstring_part_spans(part: &mut FStringPart, offset: usize, source: &str) {
+fn shift_fstring_part_spans(part: &mut FStringPart, offset: usize, lx: &LineIndex<'_>) {
     if let FStringPart::Expr(expr) = part {
-        shift_expr_spans(&mut expr.expr, offset, source);
+        shift_expr_spans(&mut expr.expr, offset, lx);
         if let Some(spec) = &mut expr.format_spec {
             for spec_part in spec {
-                shift_fstring_part_spans(spec_part, offset, source);
+                shift_fstring_part_spans(spec_part, offset, lx);
             }
         }
     }
 }
 
-fn shift_assign_target_spans(target: &mut AssignTarget, offset: usize, source: &str) {
+fn shift_assign_target_spans(target: &mut AssignTarget, offset: usize, lx: &LineIndex<'_>) {
     match target {
         AssignTarget::Name { span, .. } => {
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
         AssignTarget::Attribute { value, span, .. } => {
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         AssignTarget::Index { value, index, span } => {
-            shift_expr_spans(value, offset, source);
-            shift_expr_spans(index, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            shift_expr_spans(index, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         AssignTarget::Starred { target, span } => {
-            shift_assign_target_spans(target, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_assign_target_spans(target, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         AssignTarget::Tuple { elements, span } | AssignTarget::List { elements, span } => {
             for element in elements {
-                shift_assign_target_spans(element, offset, source);
+                shift_assign_target_spans(element, offset, lx);
             }
-            *span = shift_span(span, offset, source);
+            *span = shift_span(span, offset, lx);
         }
     }
 }
 
-fn shift_argument_spans(arg: &mut Argument, offset: usize, source: &str) {
+fn shift_argument_spans(arg: &mut Argument, offset: usize, lx: &LineIndex<'_>) {
     match arg {
         Argument::Positional { value, span } => {
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Argument::Keyword { value, span, .. } => {
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Argument::Star { value, span } => {
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
         Argument::KwStar { value, span } => {
-            shift_expr_spans(value, offset, source);
-            *span = shift_span(span, offset, source);
+            shift_expr_spans(value, offset, lx);
+            *span = shift_span(span, offset, lx);
         }
     }
 }
 
-fn shift_span(span: &SourceSpan, offset: usize, source: &str) -> SourceSpan {
-    span_from_offset(span.start.offset + offset, span.end.offset + offset, source)
+fn shift_span(span: &SourceSpan, offset: usize, lx: &LineIndex<'_>) -> SourceSpan {
+    span_from_offset(span.start.offset + offset, span.end.offset + offset, lx)
 }
