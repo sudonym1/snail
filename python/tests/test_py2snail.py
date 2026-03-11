@@ -834,7 +834,8 @@ class TestRoundTrip:
     def test_is_and_in(self) -> None:
         _roundtrip(
             "print(None is None)\n"
-            "print(1 is not None)\n"
+            "x = 1\n"
+            "print(x is not None)\n"
             "print(1 in [1, 2])\n"
             "print(3 not in [1, 2])\n"
         )
