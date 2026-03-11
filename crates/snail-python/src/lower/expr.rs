@@ -946,12 +946,7 @@ pub(crate) fn lower_expr_with_exception(
             span,
         } => {
             let element = lower_expr_with_exception(builder, element, exception_name)?;
-            let target = name_expr(
-                builder,
-                target,
-                span,
-                builder.store_ctx().map_err(py_err_to_lower)?,
-            )?;
+            let target = lower_assign_target(builder, target)?;
             let iter = lower_expr_with_exception(builder, iter, exception_name)?;
             let mut lowered_ifs = Vec::with_capacity(ifs.len());
             for cond in ifs {
@@ -990,12 +985,7 @@ pub(crate) fn lower_expr_with_exception(
         } => {
             let key = lower_expr_with_exception(builder, key, exception_name)?;
             let value = lower_expr_with_exception(builder, value, exception_name)?;
-            let target = name_expr(
-                builder,
-                target,
-                span,
-                builder.store_ctx().map_err(py_err_to_lower)?,
-            )?;
+            let target = lower_assign_target(builder, target)?;
             let iter = lower_expr_with_exception(builder, iter, exception_name)?;
             let mut lowered_ifs = Vec::with_capacity(ifs.len());
             for cond in ifs {
@@ -1033,12 +1023,7 @@ pub(crate) fn lower_expr_with_exception(
             span,
         } => {
             let element = lower_expr_with_exception(builder, element, exception_name)?;
-            let target = name_expr(
-                builder,
-                target,
-                span,
-                builder.store_ctx().map_err(py_err_to_lower)?,
-            )?;
+            let target = lower_assign_target(builder, target)?;
             let iter = lower_expr_with_exception(builder, iter, exception_name)?;
             let mut lowered_ifs = Vec::with_capacity(ifs.len());
             for cond in ifs {

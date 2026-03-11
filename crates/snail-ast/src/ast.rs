@@ -283,7 +283,7 @@ pub enum Expr {
     },
     ListComp {
         element: Box<Expr>,
-        target: String,
+        target: AssignTarget,
         iter: Box<Expr>,
         ifs: Vec<Expr>,
         span: SourceSpan,
@@ -291,14 +291,14 @@ pub enum Expr {
     DictComp {
         key: Box<Expr>,
         value: Box<Expr>,
-        target: String,
+        target: AssignTarget,
         iter: Box<Expr>,
         ifs: Vec<Expr>,
         span: SourceSpan,
     },
     GeneratorExpr {
         element: Box<Expr>,
-        target: String,
+        target: AssignTarget,
         iter: Box<Expr>,
         ifs: Vec<Expr>,
         span: SourceSpan,

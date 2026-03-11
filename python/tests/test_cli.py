@@ -4248,3 +4248,27 @@ def test_aug_assign_to_call_result_subscript(capsys: pytest.CaptureFixture[str])
     code = 'globals()["foo"] = 10\nglobals()["foo"] += 5\nprint(foo)'
     assert main(["-P", code]) == 0
     assert "15" in capsys.readouterr().out
+
+
+def test_list_comp_destructuring(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["[x+y for x,y in [(1,2),(3,4)]]"])
+    assert result == 0
+    assert captured.out.strip() == "[3, 7]"
+
+
+def test_dict_comp_destructuring(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ['%{k:v for k,v in [("a",1),("b",2)]}'])
+    assert result == 0
+    assert captured.out.strip() == "{'a': 1, 'b': 2}"
+
+
+def test_generator_destructuring(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["sum(x for x,y in [(1,2),(3,4)])"])
+    assert result == 0
+    assert captured.out.strip() == "4"
+
+
+def test_list_comp_starred_destructuring(capsys: pytest.CaptureFixture[str]) -> None:
+    result, captured = run_cli(capsys, ["[first for first, *rest in [(1,2,3),(4,5,6)]]"])
+    assert result == 0
+    assert captured.out.strip() == "[1, 4]"

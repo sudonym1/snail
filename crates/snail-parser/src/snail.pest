@@ -265,7 +265,7 @@ dict_literal = { "%{" ~ (dict_item ~ ("," ~ dict_item)*)? ~ "}" }
 dict_entry = { expr ~ ":" ~ expr }
 
 // Comprehension clauses
-comp_for = { kw_for ~ identifier ~ kw_in ~ expr ~ comp_if* }
+comp_for = { kw_for ~ assign_target_list ~ kw_in ~ expr ~ comp_if* }
 comp_if = { kw_if ~ expr }
 
 // Literals: numbers, strings, booleans, None

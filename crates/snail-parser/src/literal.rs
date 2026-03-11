@@ -1,5 +1,7 @@
 use pest::iterators::{Pair, Pairs};
-use snail_ast::{DictEntry, Expr, FStringPart, RegexPattern, SourceSpan, SubprocessKind};
+use snail_ast::{
+    AssignTarget, DictEntry, Expr, FStringPart, RegexPattern, SourceSpan, SubprocessKind,
+};
 use snail_error::ParseError;
 
 use crate::Rule;
@@ -165,7 +167,7 @@ fn parse_required_comp_for(
     span: &SourceSpan,
     source: &str,
     missing_message: &str,
-) -> Result<(String, Expr, Vec<Expr>), ParseError> {
+) -> Result<(AssignTarget, Expr, Vec<Expr>), ParseError> {
     let comp_pair = inner
         .next()
         .ok_or_else(|| error_with_span(missing_message, span.clone(), source))?;
@@ -175,7 +177,7 @@ fn parse_required_comp_for(
 pub fn parse_comp_for(
     pair: Pair<'_, Rule>,
     source: &str,
-) -> Result<(String, Expr, Vec<Expr>), ParseError> {
+) -> Result<(AssignTarget, Expr, Vec<Expr>), ParseError> {
     let pair_span = span_from_pair(&pair, source);
     let mut inner = pair.into_inner().filter(|p| !is_keyword_rule(p.as_rule()));
     let target_pair = inner
@@ -184,7 +186,7 @@ pub fn parse_comp_for(
     let iter_pair = inner
         .next()
         .ok_or_else(|| error_with_span("missing comp iter", pair_span.clone(), source))?;
-    let target = target_pair.as_str().to_string();
+    let target = crate::stmt::parse_assign_target_list(target_pair, source)?;
     let iter = crate::expr::parse_expr_pair(iter_pair, source)?;
     let mut ifs = Vec::new();
     for next in inner {

@@ -1372,7 +1372,10 @@ fn parses_list_and_dict_literals_and_comprehensions() {
             ..
         } => {
             expect_name(element.as_ref(), "n");
-            assert_eq!(target, "n");
+            match target {
+                AssignTarget::Name { name, .. } => assert_eq!(name, "n"),
+                other => panic!("Expected Name target, got {other:?}"),
+            }
             expect_name(iter.as_ref(), "nums");
             assert_eq!(ifs.len(), 1);
         }
@@ -1394,7 +1397,10 @@ fn parses_list_and_dict_literals_and_comprehensions() {
                 Expr::Binary { op, .. } => assert!(matches!(op, BinaryOp::Mul)),
                 other => panic!("Expected multiplication, got {other:?}"),
             }
-            assert_eq!(target, "n");
+            match target {
+                AssignTarget::Name { name, .. } => assert_eq!(name, "n"),
+                other => panic!("Expected Name target, got {other:?}"),
+            }
             expect_name(iter.as_ref(), "nums");
             assert_eq!(ifs.len(), 1);
         }
@@ -2567,7 +2573,10 @@ fn parses_standalone_generator_expr() {
             ..
         } => {
             expect_name(element.as_ref(), "x");
-            assert_eq!(target, "x");
+            match target {
+                AssignTarget::Name { name, .. } => assert_eq!(name, "x"),
+                other => panic!("Expected Name target, got {other:?}"),
+            }
             expect_name(iter.as_ref(), "nums");
             assert!(ifs.is_empty());
         }
@@ -3021,5 +3030,108 @@ fn keyword_with_suffix_is_valid_identifier() {
             "'{kw}s' should be a valid identifier, but parsing `{source}` failed: {:?}",
             result.unwrap_err()
         );
+    }
+}
+
+#[test]
+fn parses_list_comp_with_tuple_destructuring() {
+    let source = "r = [x + y for x, y in pairs]";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::ListComp { target, .. } => match target {
+            AssignTarget::Tuple { elements, .. } => {
+                assert_eq!(elements.len(), 2);
+                assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "x"));
+                assert!(matches!(&elements[1], AssignTarget::Name { name, .. } if name == "y"));
+            }
+            other => panic!("Expected Tuple target, got {other:?}"),
+        },
+        other => panic!("Expected ListComp, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_list_comp_with_parenthesized_tuple_destructuring() {
+    let source = "r = [x for (x, y) in pairs]";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::ListComp { target, .. } => match target {
+            AssignTarget::Tuple { elements, .. } => {
+                assert_eq!(elements.len(), 2);
+                assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "x"));
+                assert!(matches!(&elements[1], AssignTarget::Name { name, .. } if name == "y"));
+            }
+            other => panic!("Expected Tuple target, got {other:?}"),
+        },
+        other => panic!("Expected ListComp, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_list_comp_with_starred_destructuring() {
+    let source = "r = [first for first, *rest in groups]";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::ListComp { target, .. } => match target {
+            AssignTarget::Tuple { elements, .. } => {
+                assert_eq!(elements.len(), 2);
+                assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "first"));
+                assert!(matches!(&elements[1], AssignTarget::Starred { .. }));
+            }
+            other => panic!("Expected Tuple target, got {other:?}"),
+        },
+        other => panic!("Expected ListComp, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_dict_comp_with_destructuring() {
+    let source = "r = %{k: v for k, v in items}";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::DictComp { target, .. } => match target {
+            AssignTarget::Tuple { elements, .. } => {
+                assert_eq!(elements.len(), 2);
+                assert!(matches!(&elements[0], AssignTarget::Name { name, .. } if name == "k"));
+                assert!(matches!(&elements[1], AssignTarget::Name { name, .. } if name == "v"));
+            }
+            other => panic!("Expected Tuple target, got {other:?}"),
+        },
+        other => panic!("Expected DictComp, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_generator_with_destructuring() {
+    let source = "r = sum(x for x, y in pairs)";
+    let program = parse_ok(source);
+    let (_, value) = expect_assign(&program.stmts[0]);
+    match value {
+        Expr::Call { args, .. } => {
+            assert_eq!(args.len(), 1);
+            match &args[0] {
+                Argument::Positional { value, .. } => match value {
+                    Expr::GeneratorExpr { target, .. } => match target {
+                        AssignTarget::Tuple { elements, .. } => {
+                            assert_eq!(elements.len(), 2);
+                            assert!(
+                                matches!(&elements[0], AssignTarget::Name { name, .. } if name == "x")
+                            );
+                            assert!(
+                                matches!(&elements[1], AssignTarget::Name { name, .. } if name == "y")
+                            );
+                        }
+                        other => panic!("Expected Tuple target, got {other:?}"),
+                    },
+                    other => panic!("Expected GeneratorExpr, got {other:?}"),
+                },
+                other => panic!("Expected Positional arg, got {other:?}"),
+            }
+        }
+        other => panic!("Expected Call, got {other:?}"),
     }
 }

@@ -280,6 +280,17 @@ gen_sum = sum(x for x in nums)
 gen_any = any(x > 3 for x in nums)
 gen_list = list((x * 2 for x in nums))
 
+# Destructuring in comprehensions
+pairs = [(1, 2), (3, 4)]
+sums = [x + y for x, y in pairs]
+assert sums == [3, 7]
+pair_dict = %{k: v for k, v in [("a", 1), ("b", 2)]}
+assert pair_dict == %{"a": 1, "b": 2}
+first_elems = [first for first, *rest in [(1, 2, 3), (4, 5, 6)]]
+assert first_elems == [1, 4]
+total = sum(x for x, y in pairs)
+assert total == 4
+
 # Starred/unpacking in collection literals
 spread_list = [*nums, 10, 11]
 assert spread_list == [1, 2, 3, 4, 10, 11]

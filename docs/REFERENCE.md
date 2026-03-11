@@ -533,6 +533,15 @@ total = sum(x for x in nums)
 doubled = list((x * 2 for x in nums))
 ```
 
+Comprehension targets support full destructuring, just like for loops and
+assignments:
+```snail
+sums = [x + y for x, y in pairs]
+pair_dict = %{k: v for k, v in items}
+first_elems = [first for first, *rest in groups]
+total = sum(x for x, y in pairs)
+```
+
 ## Strings
 Single-line, raw, and triple-quoted strings are available. Raw strings keep
 backslashes intact, and triple-quoted strings preserve newlines. Byte strings
