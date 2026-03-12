@@ -362,9 +362,7 @@ class SnailUnparser(ast.NodeVisitor):
         if node.exc is None:
             self._line("raise")
         elif node.cause is not None:
-            self._line(
-                f"raise {self._expr(node.exc)} from {self._expr(node.cause)}"
-            )
+            self._line(f"raise {self._expr(node.exc)} from {self._expr(node.cause)}")
         else:
             self._line(f"raise {self._expr(node.exc)}")
 
@@ -376,7 +374,9 @@ class SnailUnparser(ast.NodeVisitor):
         handler = node.handlers[0]
         # Handler must be bare except or except Exception (not specific types)
         if handler.type is not None:
-            if not (isinstance(handler.type, ast.Name) and handler.type.id == "Exception"):
+            if not (
+                isinstance(handler.type, ast.Name) and handler.type.id == "Exception"
+            ):
                 return False
         # Try and handler bodies must each have exactly 1 statement
         if len(node.body) != 1 or len(handler.body) != 1:
@@ -401,7 +401,10 @@ class SnailUnparser(ast.NodeVisitor):
             expr = self._expr(try_stmt.value)
             fallback_value = except_stmt.value
             # Pattern A: fallback is None
-            if isinstance(fallback_value, ast.Constant) and fallback_value.value is None:
+            if (
+                isinstance(fallback_value, ast.Constant)
+                and fallback_value.value is None
+            ):
                 self._line(f"{try_target} = {expr}?")
                 return True
             # Pattern B: fallback is any other expression
@@ -434,9 +437,7 @@ class SnailUnparser(ast.NodeVisitor):
 
     def visit_Assert(self, node: ast.Assert) -> None:
         if node.msg is not None:
-            self._line(
-                f"assert {self._expr(node.test)}, {self._expr(node.msg)}"
-            )
+            self._line(f"assert {self._expr(node.test)}, {self._expr(node.msg)}")
         else:
             self._line(f"assert {self._expr(node.test)}")
 
@@ -445,7 +446,8 @@ class SnailUnparser(ast.NodeVisitor):
         # Idiomatic: elide auto-imported modules (only bare imports, no alias)
         if self._idiomatic:
             aliases = [
-                a for a in aliases
+                a
+                for a in aliases
                 if not (a.asname is None and a.name in _AUTO_IMPORT_MODULES)
             ]
             if not aliases:
@@ -506,9 +508,7 @@ class SnailUnparser(ast.NodeVisitor):
                         "cannot be mechanically rewritten"
                     )
                 bound = _mangle(alias.asname or alias.name)
-                self._line(
-                    f'{bound} = getattr(__import__("{module}"), "{alias.name}")'
-                )
+                self._line(f'{bound} = getattr(__import__("{module}"), "{alias.name}")')
             return
 
         # Check if any imported names are Snail keywords
@@ -690,9 +690,7 @@ class SnailUnparser(ast.NodeVisitor):
         for op, comparator in zip(node.ops, node.comparators):
             op_str = _CMPOP.get(type(op))
             if op_str is None:
-                raise Py2SnailError(
-                    f"Unsupported comparison: {op.__class__.__name__}"
-                )
+                raise Py2SnailError(f"Unsupported comparison: {op.__class__.__name__}")
             parts.append(op_str)
             parts.append(self._paren(comparator, _prec(node) + 1))
         return " ".join(parts)
@@ -759,9 +757,7 @@ class SnailUnparser(ast.NodeVisitor):
             # Escape literal braces for Snail (non-f-string)
             escaped = node.value.replace("\\", "\\\\").replace('"', '\\"')
             escaped = (
-                escaped.replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t")
+                escaped.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
             )
             # Escape braces so Snail doesn't treat them as interpolation
             escaped = escaped.replace("{", "{{").replace("}", "}}")
@@ -877,9 +873,7 @@ def main() -> None:
     """CLI entry point: reads Python from stdin or file, writes Snail to stdout."""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Translate Python source to Snail"
-    )
+    parser = argparse.ArgumentParser(description="Translate Python source to Snail")
     parser.add_argument(
         "file",
         nargs="?",

@@ -102,9 +102,7 @@ class TestBlockSyntax:
         assert "class Foo(Bar, Baz) {" in result
 
     def test_try_except(self) -> None:
-        result = translate(
-            "try:\n    pass\nexcept ValueError as e:\n    pass\n"
-        )
+        result = translate("try:\n    pass\nexcept ValueError as e:\n    pass\n")
         assert "try {" in result
         assert "except ValueError as e {" in result
 
@@ -155,7 +153,10 @@ class TestComprehensions:
 
     def test_dict_comp(self) -> None:
         result = translate("x = {k: v for k, v in items}\n")
-        assert "%{k: v for (k, v) in items}" in result or "%{k: v for k, v in items}" in result
+        assert (
+            "%{k: v for (k, v) in items}" in result
+            or "%{k: v for k, v in items}" in result
+        )
 
     def test_set_comp(self) -> None:
         result = translate("x = {i for i in range(5)}\n")
@@ -470,10 +471,7 @@ class TestWalrusOperator:
         assert "{ x = 5; x }" in result
 
     def test_walrus_roundtrip(self) -> None:
-        _roundtrip(
-            "if (n := 10) > 5:\n"
-            "    print('big', n)\n"
-        )
+        _roundtrip("if (n := 10) > 5:\n" "    print('big', n)\n")
 
     def test_walrus_in_assignment_roundtrip(self) -> None:
         _roundtrip(
@@ -515,7 +513,9 @@ class TestUnsupported:
         result = translate("def f(a, /, b):\n    pass\n")
         assert "a, /, b" in result
 
-    @pytest.mark.skipif(sys.version_info < (3, 12), reason="type statement requires 3.12+")
+    @pytest.mark.skipif(
+        sys.version_info < (3, 12), reason="type statement requires 3.12+"
+    )
     def test_type_alias(self) -> None:
         with pytest.raises(Py2SnailError, match="type alias"):
             translate("type Point = tuple[int, int]\n")
@@ -541,9 +541,7 @@ class TestRoundTrip:
         _roundtrip("x = 42\ny = x + 8\nprint(x, y)\n")
 
     def test_if_else(self) -> None:
-        _roundtrip(
-            "x = 10\nif x > 5:\n    print('big')\nelse:\n    print('small')\n"
-        )
+        _roundtrip("x = 10\nif x > 5:\n    print('big')\nelse:\n    print('small')\n")
 
     def test_elif(self) -> None:
         _roundtrip(
@@ -559,9 +557,7 @@ class TestRoundTrip:
         _roundtrip("x = 3\nwhile x > 0:\n    print(x)\n    x -= 1\n")
 
     def test_function(self) -> None:
-        _roundtrip(
-            "def add(a, b):\n    return a + b\nprint(add(3, 4))\n"
-        )
+        _roundtrip("def add(a, b):\n    return a + b\nprint(add(3, 4))\n")
 
     def test_function_default_args(self) -> None:
         _roundtrip(
@@ -600,9 +596,7 @@ class TestRoundTrip:
         )
 
     def test_set_operations(self) -> None:
-        _roundtrip(
-            "s = {1, 2, 3}\nprint(1 in s)\nprint(4 in s)\nprint(sorted(s))\n"
-        )
+        _roundtrip("s = {1, 2, 3}\nprint(1 in s)\nprint(4 in s)\nprint(sorted(s))\n")
 
     def test_list_comprehension(self) -> None:
         _roundtrip("print([x * 2 for x in range(5)])\n")
@@ -648,9 +642,7 @@ class TestRoundTrip:
         )
 
     def test_string_interpolation(self) -> None:
-        _roundtrip(
-            "name = 'world'\nprint(f'hello {name}')\n"
-        )
+        _roundtrip("name = 'world'\nprint(f'hello {name}')\n")
 
     def test_fstring_format_spec(self) -> None:
         _roundtrip("x = 3.14159\nprint(f'{x:.2f}')\n")
@@ -677,40 +669,26 @@ class TestRoundTrip:
         )
 
     def test_lambda(self) -> None:
-        _roundtrip(
-            "double = lambda x: x * 2\nprint(double(5))\n"
-        )
+        _roundtrip("double = lambda x: x * 2\nprint(double(5))\n")
 
     def test_ternary(self) -> None:
-        _roundtrip(
-            "x = 10\nprint('big' if x > 5 else 'small')\n"
-        )
+        _roundtrip("x = 10\nprint('big' if x > 5 else 'small')\n")
 
     def test_nested_collections(self) -> None:
-        _roundtrip(
-            "x = {'a': [1, 2], 'b': (3, 4)}\nprint(x['a'])\nprint(x['b'])\n"
-        )
+        _roundtrip("x = {'a': [1, 2], 'b': (3, 4)}\nprint(x['a'])\nprint(x['b'])\n")
 
     def test_chained_comparison(self) -> None:
-        _roundtrip(
-            "x = 5\nprint(1 < x < 10)\nprint(10 < x < 20)\n"
-        )
+        _roundtrip("x = 5\nprint(1 < x < 10)\nprint(10 < x < 20)\n")
 
     def test_boolean_operators(self) -> None:
-        _roundtrip(
-            "print(True and False)\nprint(True or False)\nprint(not True)\n"
-        )
+        _roundtrip("print(True and False)\nprint(True or False)\nprint(not True)\n")
 
     def test_augmented_assignment(self) -> None:
-        _roundtrip(
-            "x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)\n"
-        )
+        _roundtrip("x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)\n")
 
     def test_with_statement(self) -> None:
         _roundtrip(
-            "import io\n"
-            "with io.StringIO('hello') as f:\n"
-            "    print(f.read())\n"
+            "import io\n" "with io.StringIO('hello') as f:\n" "    print(f.read())\n"
         )
 
     def test_for_else(self) -> None:
@@ -744,9 +722,7 @@ class TestRoundTrip:
         )
 
     def test_del_statement(self) -> None:
-        _roundtrip(
-            "x = [1, 2, 3]\ndel x[1]\nprint(x)\n"
-        )
+        _roundtrip("x = [1, 2, 3]\ndel x[1]\nprint(x)\n")
 
     def test_assert_pass(self) -> None:
         _roundtrip("assert 1 + 1 == 2\nprint('ok')\n")
@@ -790,9 +766,7 @@ class TestRoundTrip:
         )
 
     def test_empty_collections(self) -> None:
-        _roundtrip(
-            "print([])\nprint({})\nprint(())\n"
-        )
+        _roundtrip("print([])\nprint({})\nprint(())\n")
 
     def test_slicing(self) -> None:
         _roundtrip(
@@ -803,9 +777,7 @@ class TestRoundTrip:
         )
 
     def test_multiline_string_value(self) -> None:
-        _roundtrip(
-            "x = 'line1\\nline2'\nprint(x)\n"
-        )
+        _roundtrip("x = 'line1\\nline2'\nprint(x)\n")
 
     def test_none_true_false(self) -> None:
         _roundtrip("print(None)\nprint(True)\nprint(False)\n")
@@ -842,11 +814,7 @@ class TestRoundTrip:
 
     def test_while_else(self) -> None:
         _roundtrip(
-            "i = 0\n"
-            "while i < 3:\n"
-            "    i += 1\n"
-            "else:\n"
-            "    print('done', i)\n"
+            "i = 0\n" "while i < 3:\n" "    i += 1\n" "else:\n" "    print('done', i)\n"
         )
 
 
@@ -879,19 +847,13 @@ class TestCompilationOnly:
         )
 
     def test_complex_defaults(self) -> None:
-        self._compiles(
-            "def f(x=[1,2], y={'a': 1}, z=(1,)):\n    pass\n"
-        )
+        self._compiles("def f(x=[1,2], y={'a': 1}, z=(1,)):\n    pass\n")
 
     def test_multiline_dict(self) -> None:
-        self._compiles(
-            "x = {\n    'a': 1,\n    'b': 2,\n    'c': 3,\n}\n"
-        )
+        self._compiles("x = {\n    'a': 1,\n    'b': 2,\n    'c': 3,\n}\n")
 
     def test_chained_calls(self) -> None:
-        self._compiles(
-            '"hello world".split().pop()\n'
-        )
+        self._compiles('"hello world".split().pop()\n')
 
     def test_starred_assignment(self) -> None:
         self._compiles("first, *rest = [1, 2, 3, 4]\n")
@@ -942,9 +904,7 @@ class TestKeywordMangling:
         assert "print(__)" in result
 
     def test_except_handler_named_awk(self) -> None:
-        result = translate(
-            "try:\n    pass\nexcept Exception as awk:\n    print(awk)\n"
-        )
+        result = translate("try:\n    pass\nexcept Exception as awk:\n    print(awk)\n")
         assert "as awk_" in result
         assert "print(awk_)" in result
 
@@ -975,7 +935,7 @@ class TestKeywordMangling:
     def test_from_keyword_module_import(self) -> None:
         result = translate("from awk import bar\n")
         assert '__import__("awk")' in result
-        assert 'getattr(' in result
+        assert "getattr(" in result
         assert '"bar"' in result
 
     def test_from_normal_module_import_keyword(self) -> None:
@@ -1012,9 +972,7 @@ class TestKeywordMangling:
 
     def test_keyword_attribute_compiles(self) -> None:
         snail_source = translate(
-            "class Foo:\n"
-            "    def __init__(self):\n"
-            "        self.awk = 1\n"
+            "class Foo:\n" "    def __init__(self):\n" "        self.awk = 1\n"
         )
         snail.compile_ast(snail_source)
 
@@ -1193,10 +1151,7 @@ class TestIdiomatic:
         assert "try {" in result
 
     def test_no_compact_try_with_finally(self) -> None:
-        py = (
-            "try:\n    x = 1\nexcept:\n    x = None\n"
-            "finally:\n    print('done')\n"
-        )
+        py = "try:\n    x = 1\nexcept:\n    x = None\n" "finally:\n    print('done')\n"
         result = translate(py)
         assert "try {" in result
 
@@ -1225,19 +1180,10 @@ class TestIdiomatic:
         assert "try {" in result
 
     def test_compact_try_roundtrip_none(self) -> None:
-        _roundtrip(
-            "try:\n    x = int('bad')\nexcept:\n    x = None\n"
-            "print(x)\n"
-        )
+        _roundtrip("try:\n    x = int('bad')\nexcept:\n    x = None\n" "print(x)\n")
 
     def test_compact_try_roundtrip_value(self) -> None:
-        _roundtrip(
-            "try:\n    x = int('bad')\nexcept:\n    x = 0\n"
-            "print(x)\n"
-        )
+        _roundtrip("try:\n    x = int('bad')\nexcept:\n    x = 0\n" "print(x)\n")
 
     def test_compact_try_roundtrip_swallow(self) -> None:
-        _roundtrip(
-            "try:\n    int('bad')\nexcept:\n    pass\n"
-            "print('ok')\n"
-        )
+        _roundtrip("try:\n    int('bad')\nexcept:\n    pass\n" "print('ok')\n")

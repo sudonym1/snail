@@ -24,9 +24,7 @@ def _expand_pattern(pat: str) -> list[Path]:
     p = Path(pat)
     if p.is_absolute():
         parts = p.parts
-        glob_start = next(
-            i for i, part in enumerate(parts) if _has_glob_chars(part)
-        )
+        glob_start = next(i for i, part in enumerate(parts) if _has_glob_chars(part))
         base = Path(*parts[:glob_start])
         relative = str(Path(*parts[glob_start:]))
         return list(base.glob(relative))

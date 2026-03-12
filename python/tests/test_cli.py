@@ -592,7 +592,9 @@ def test_compact_try_block_no_fallback(capsys: pytest.CaptureFixture[str]) -> No
     assert captured.out.strip() == "None"
 
 
-def test_compact_try_bare_compound_no_parens(capsys: pytest.CaptureFixture[str]) -> None:
+def test_compact_try_bare_compound_no_parens(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     assert main(["-P", "print(if True { raise Exception() }?)"]) == 0
     captured = capsys.readouterr()
     assert captured.out.strip() == "None"
@@ -618,7 +620,9 @@ def test_compact_try_compound_dollar_e(capsys: pytest.CaptureFixture[str]) -> No
     assert captured.out.strip() == "oops"
 
 
-def test_compact_try_compound_dunder_fallback(capsys: pytest.CaptureFixture[str]) -> None:
+def test_compact_try_compound_dunder_fallback(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     script = "\n".join(
         [
             "def fallback_handler() { return 'dunder' }",
@@ -3695,7 +3699,9 @@ def test_multi_except_with_as(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_multi_except_no_match_propagates(capsys: pytest.CaptureFixture[str]) -> None:
     """Multi-except does not catch unmatched exception types."""
-    script = 'try { raise KeyError("k") } except (ValueError, TypeError) { print("caught") }'
+    script = (
+        'try { raise KeyError("k") } except (ValueError, TypeError) { print("caught") }'
+    )
     with pytest.raises(KeyError):
         run_cli(capsys, ["-P", script])
 
@@ -3788,7 +3794,9 @@ def test_try_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
     assert captured.out.strip() == "caught"
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="/dev/null not available on Windows")
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="/dev/null not available on Windows"
+)
 def test_with_auto_print_at_tail(capsys: pytest.CaptureFixture[str]) -> None:
     """With statement at program tail prints its body's value."""
     result, captured = run_cli(capsys, ['with open("/dev/null") as f { "ok" }'])
@@ -3854,7 +3862,9 @@ def test_for_implicit_return_from_function(capsys: pytest.CaptureFixture[str]) -
     assert captured.out.strip() == "6"
 
 
-def test_while_implicit_return_from_function(capsys: pytest.CaptureFixture[str]) -> None:
+def test_while_implicit_return_from_function(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """While loop at function tail provides implicit return value."""
     script = "def f() { i = 0; while i < 3 { i += 1; i } }; print(f())"
     result, captured = run_cli(capsys, ["-P", script])
@@ -3889,7 +3899,9 @@ def test_semicolon_terminated_compound_no_capture(
 
 def test_break_with_value_while(capsys: pytest.CaptureFixture[str]) -> None:
     """break expr in while returns the value."""
-    result, captured = run_cli(capsys, ['x = while { break "found" }; assert x == "found"'])
+    result, captured = run_cli(
+        capsys, ['x = while { break "found" }; assert x == "found"']
+    )
     assert result == 0
 
 
@@ -3939,25 +3951,32 @@ def test_break_with_value_auto_print(capsys: pytest.CaptureFixture[str]) -> None
     assert result == 0
     assert captured.out.strip() == "42"
 
+
 def test_ast_module_not_imported_at_runtime() -> None:
     """Ensure the ast module is not imported during normal execution."""
     result = subprocess.run(
         [
-            sys.executable, "-c",
+            sys.executable,
+            "-c",
             "from snail.cli import main; main([\"'ast' not in __import__('sys').modules\"])",
         ],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0
-    assert result.stdout.strip() == "True", (
-        f"ast module was imported during snail execution: {result.stderr}"
-    )
+    assert (
+        result.stdout.strip() == "True"
+    ), f"ast module was imported during snail execution: {result.stderr}"
+
 
 # ---- Class inheritance tests ----
 
+
 def test_class_single_inheritance(capsys: pytest.CaptureFixture[str]) -> None:
-    result, captured = run_cli(capsys, ["""
+    result, captured = run_cli(
+        capsys,
+        [
+            """
 class Animal {
     def __init__(self, name) { self.name = name }
     def speak(self) { return "..." }
@@ -3968,14 +3987,20 @@ class Dog(Animal) {
 d = Dog("Rex")
 print(d.speak())
 print(isinstance(d, Animal))
-    """])
+    """
+        ],
+    )
     assert result == 0
     lines = captured.out.strip().splitlines()
     assert lines[0] == "Rex says woof"
     assert lines[1] == "True"
 
+
 def test_class_multiple_inheritance(capsys: pytest.CaptureFixture[str]) -> None:
-    result, captured = run_cli(capsys, ["""
+    result, captured = run_cli(
+        capsys,
+        [
+            """
 class A {
     def greet(self) { return "hello" }
 }
@@ -3987,12 +4012,18 @@ class C(A, B) {
 }
 c = C()
 print(c.greet(), c.farewell())
-    """])
+    """
+        ],
+    )
     assert result == 0
     assert captured.out.strip() == "hello bye"
 
+
 def test_class_super_call(capsys: pytest.CaptureFixture[str]) -> None:
-    result, captured = run_cli(capsys, ["""
+    result, captured = run_cli(
+        capsys,
+        [
+            """
 class Base {
     def __init__(self, x) { self.x = x }
 }
@@ -4004,33 +4035,51 @@ class Child(Base) {
 }
 c = Child(1, 2)
 print(c.x, c.y)
-    """])
+    """
+        ],
+    )
     assert result == 0
     assert captured.out.strip() == "1 2"
 
+
 def test_class_empty_parens(capsys: pytest.CaptureFixture[str]) -> None:
-    result, captured = run_cli(capsys, ["""
+    result, captured = run_cli(
+        capsys,
+        [
+            """
 class Foo() {
     def bar(self) { return 42 }
 }
 print(Foo().bar())
-    """])
+    """
+        ],
+    )
     assert result == 0
     assert captured.out.strip() == "42"
 
+
 def test_class_no_bases_backward_compat(capsys: pytest.CaptureFixture[str]) -> None:
-    result, captured = run_cli(capsys, ["""
+    result, captured = run_cli(
+        capsys,
+        [
+            """
 class Foo {
     def bar(self) { return 99 }
 }
 print(Foo().bar())
-    """])
+    """
+        ],
+    )
     assert result == 0
     assert captured.out.strip() == "99"
 
+
 def test_class_compact_try_base(capsys: pytest.CaptureFixture[str]) -> None:
     """Compact try as a base class expression."""
-    result, captured = run_cli(capsys, ["""
+    result, captured = run_cli(
+        capsys,
+        [
+            """
 class Fallback {
     def val(self) { return "fallback" }
 }
@@ -4039,55 +4088,70 @@ class Foo(get_base():Fallback?) {
     pass
 }
 print(Foo().val())
-    """])
+    """
+        ],
+    )
     assert result == 0
     assert captured.out.strip() == "fallback"
+
 
 def test_generator_expr_sum(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["sum(x for x in [1,2,3])"])
     assert result == 0
     assert captured.out.strip() == "6"
 
+
 def test_generator_expr_list(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["list((x * 2 for x in [1,2,3]))"])
     assert result == 0
     assert captured.out.strip() == "[2, 4, 6]"
+
 
 def test_generator_expr_any(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["any(x > 2 for x in [1,2,3])"])
     assert result == 0
     assert captured.out.strip() == "True"
 
+
 def test_starred_in_list(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["a = [1, 2]; print([*a, 3])"])
     assert result == 0
     assert captured.out.strip() == "[1, 2, 3]"
+
 
 def test_starred_in_tuple(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["a = (1,); print((*a, 2, 3))"])
     assert result == 0
     assert captured.out.strip() == "(1, 2, 3)"
 
+
 def test_starred_in_set(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, ["a = #{1}; b = #{2}; print(#{*a, *b})"])
     assert result == 0
     assert captured.out.strip() == "{1, 2}"
+
 
 def test_dict_unpacking(capsys: pytest.CaptureFixture[str]) -> None:
     result, captured = run_cli(capsys, [r'a = %{"x": 1}; print(%{**a, "y": 2})'])
     assert result == 0
     assert captured.out.strip() == "{'x': 1, 'y': 2}"
 
+
 def test_hoist_by_the_petard(capsys: pytest.CaptureFixture[str]) -> None:
-    result, captured = run_cli(capsys, ["""
+    result, captured = run_cli(
+        capsys,
+        [
+            """
                                         def { try { raise Exception() } except { for i in range(10) { if i==4 { break i} } }}()
-    """])
+    """
+        ],
+    )
     assert result == 0
     assert captured.out.strip() == "4"
 
 
 def test_decorator_on_function(capsys):
-    code = '''
+    code = """
 def double_result(func) {
     def wrapper(*args) {
         return func(*args) * 2
@@ -4100,13 +4164,13 @@ def add(a, b) { a + b }
 
 assert add(1, 2) == 6
 print("ok")
-'''
+"""
     assert main([code]) == 0
     assert "ok" in capsys.readouterr().out
 
 
 def test_decorator_with_arguments(capsys):
-    code = '''
+    code = """
 def multiply_by(n) {
     def decorator(func) {
         def wrapper(*args) {
@@ -4122,13 +4186,13 @@ def add(a, b) { a + b }
 
 assert add(1, 2) == 9
 print("ok")
-'''
+"""
     assert main([code]) == 0
     assert "ok" in capsys.readouterr().out
 
 
 def test_multiple_decorators(capsys):
-    code = '''
+    code = """
 results = []
 
 def dec1(func) {
@@ -4154,13 +4218,13 @@ def hello() { return "hello" }
 hello()
 assert results == ["dec1", "dec2"]
 print("ok")
-'''
+"""
     assert main([code]) == 0
     assert "ok" in capsys.readouterr().out
 
 
 def test_decorator_on_class(capsys):
-    code = '''
+    code = """
 def add_greet(cls) {
     cls.greet = def(self) { return "hello" }
     return cls
@@ -4173,13 +4237,13 @@ class MyClass {
 
 assert MyClass().greet() == "hello"
 print("ok")
-'''
+"""
     assert main([code]) == 0
     assert "ok" in capsys.readouterr().out
 
 
 def test_staticmethod_classmethod(capsys):
-    code = '''
+    code = """
 class MyClass {
     @staticmethod
     def static_method() { return "static" }
@@ -4191,49 +4255,49 @@ class MyClass {
 assert MyClass.static_method() == "static"
 assert MyClass.class_method() == "MyClass"
 print("ok")
-'''
+"""
     assert main([code]) == 0
     assert "ok" in capsys.readouterr().out
 
 
 def test_positional_only_params(capsys: pytest.CaptureFixture[str]) -> None:
-    code = 'def f(a, b, /, c) { return (a, b, c) }\nprint(f(1, 2, c=3))'
+    code = "def f(a, b, /, c) { return (a, b, c) }\nprint(f(1, 2, c=3))"
     assert main(["-P", code]) == 0
     assert "(1, 2, 3)" in capsys.readouterr().out
 
 
 def test_positional_only_rejects_keyword() -> None:
-    code = 'def f(a, /) { return a }\nf(a=1)'
+    code = "def f(a, /) { return a }\nf(a=1)"
     with pytest.raises(TypeError, match="positional-only"):
         main(["-P", code])
 
 
 def test_keyword_only_params(capsys: pytest.CaptureFixture[str]) -> None:
-    code = 'def f(a, *, b) { return (a, b) }\nprint(f(1, b=2))'
+    code = "def f(a, *, b) { return (a, b) }\nprint(f(1, b=2))"
     assert main(["-P", code]) == 0
     assert "(1, 2)" in capsys.readouterr().out
 
 
 def test_keyword_only_rejects_positional() -> None:
-    code = 'def f(a, *, b) { return (a, b) }\nf(1, 2)'
+    code = "def f(a, *, b) { return (a, b) }\nf(1, 2)"
     with pytest.raises(TypeError, match="positional argument"):
         main(["-P", code])
 
 
 def test_combined_posonly_kwonly(capsys: pytest.CaptureFixture[str]) -> None:
-    code = 'def f(a, /, b, *, c) { return (a, b, c) }\nprint(f(1, 2, c=3))'
+    code = "def f(a, /, b, *, c) { return (a, b, c) }\nprint(f(1, 2, c=3))"
     assert main(["-P", code]) == 0
     assert "(1, 2, 3)" in capsys.readouterr().out
 
 
 def test_posonly_with_defaults(capsys: pytest.CaptureFixture[str]) -> None:
-    code = 'def f(a, b=10, /, c=20) { return (a, b, c) }\nprint(f(1))'
+    code = "def f(a, b=10, /, c=20) { return (a, b, c) }\nprint(f(1))"
     assert main(["-P", code]) == 0
     assert "(1, 10, 20)" in capsys.readouterr().out
 
 
 def test_star_args_makes_following_kwonly(capsys: pytest.CaptureFixture[str]) -> None:
-    code = 'def f(a, *args, b) { return (a, args, b) }\nprint(f(1, 2, 3, b=4))'
+    code = "def f(a, *args, b) { return (a, args, b) }\nprint(f(1, 2, 3, b=4))"
     assert main(["-P", code]) == 0
     assert "(1, (2, 3), 4)" in capsys.readouterr().out
 
@@ -4244,7 +4308,9 @@ def test_assign_to_call_result_subscript(capsys: pytest.CaptureFixture[str]) -> 
     assert "42" in capsys.readouterr().out
 
 
-def test_aug_assign_to_call_result_subscript(capsys: pytest.CaptureFixture[str]) -> None:
+def test_aug_assign_to_call_result_subscript(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     code = 'globals()["foo"] = 10\nglobals()["foo"] += 5\nprint(foo)'
     assert main(["-P", code]) == 0
     assert "15" in capsys.readouterr().out
@@ -4269,6 +4335,8 @@ def test_generator_destructuring(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_list_comp_starred_destructuring(capsys: pytest.CaptureFixture[str]) -> None:
-    result, captured = run_cli(capsys, ["[first for first, *rest in [(1,2,3),(4,5,6)]]"])
+    result, captured = run_cli(
+        capsys, ["[first for first, *rest in [(1,2,3),(4,5,6)]]"]
+    )
     assert result == 0
     assert captured.out.strip() == "[1, 4]"
