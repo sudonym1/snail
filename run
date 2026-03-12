@@ -1,2 +1,2 @@
-#!/usr/bin/env bash
-exec uv run -- snail "$@"
+#!/usr/bin/env -S snail -f
+os.execvp("uv", ["uv", "run", "--", "snail"] + sys.argv[1:])
