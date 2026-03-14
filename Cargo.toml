@@ -17,4 +17,7 @@ warnings = "deny"
 all = "deny"
 
 [profile.release]
-debug = true
+debug = false
+lto = "thin"
+codegen-units = 1
+strip = true
